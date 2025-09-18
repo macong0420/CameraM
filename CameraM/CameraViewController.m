@@ -194,7 +194,28 @@
 - (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation {
     // 更新UI布局适配
     [self.controlsView updateLayoutForOrientation:orientation];
+    
+    // 重要：更新预览层frame以适应新布局
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updatePreviewLayerFrame];
+    });
+    
     NSLog(@"设备方向变化，UI适配: %ld", (long)orientation);
+}
+
+// 新增方法：更新预览层frame
+- (void)updatePreviewLayerFrame {
+    CGRect newFrame = self.controlsView.previewContainer.bounds;
+    
+    if (!CGRectIsEmpty(newFrame)) {
+        // 使用CATransaction确保frame和方向同步更新
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        self.businessController.cameraManager.previewLayer.frame = newFrame;
+        [CATransaction commit];
+        
+        NSLog(@"📐 预览层frame已更新: %@", NSStringFromCGRect(newFrame));
+    }
 }
 
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {

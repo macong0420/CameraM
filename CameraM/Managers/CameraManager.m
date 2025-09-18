@@ -267,12 +267,62 @@
         
         NSLog(@"设备方向变化: %ld", (long)newOrientation);
         
+        // 立即更新预览层方向
+        [self updatePreviewLayerOrientation];
+        
         // 通知代理
         dispatch_async(dispatch_get_main_queue(), ^{
             if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeDeviceOrientation:)]) {
                 [self.delegate cameraManager:self didChangeDeviceOrientation:newOrientation];
             }
         });
+    }
+}
+
+// 新增方法：更新预览层方向
+- (void)updatePreviewLayerOrientation {
+    if (!self.previewLayer || !self.previewLayer.connection) {
+        return;
+    }
+    
+    AVCaptureVideoOrientation videoOrientation = [self currentVideoOrientation];
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.previewLayer.connection.isVideoOrientationSupported) {
+            // 使用CATransaction确保同步更新
+            [CATransaction begin];
+            [CATransaction setDisableActions:YES]; // 禁用隐式动画
+            self.previewLayer.connection.videoOrientation = videoOrientation;
+            [CATransaction commit];
+            
+            NSLog(@"🔄 预览层方向已更新: %ld, frame: %@", (long)videoOrientation, NSStringFromCGRect(self.previewLayer.frame));
+        }
+    });
+}
+
+// 新增方法：获取当前视频方向
+- (AVCaptureVideoOrientation)currentVideoOrientation {
+    UIInterfaceOrientation interfaceOrientation = UIInterfaceOrientationPortrait;
+    
+    // 获取当前界面方向
+    if (@available(iOS 13.0, *)) {
+        UIWindowScene *windowScene = (UIWindowScene *)[UIApplication sharedApplication].connectedScenes.anyObject;
+        if (windowScene) {
+            interfaceOrientation = windowScene.interfaceOrientation;
+        }
+    }
+    
+    switch (interfaceOrientation) {
+        case UIInterfaceOrientationPortrait:
+            return AVCaptureVideoOrientationPortrait;
+        case UIInterfaceOrientationPortraitUpsideDown:
+            return AVCaptureVideoOrientationPortraitUpsideDown;
+        case UIInterfaceOrientationLandscapeLeft:
+            return AVCaptureVideoOrientationLandscapeLeft;
+        case UIInterfaceOrientationLandscapeRight:
+            return AVCaptureVideoOrientationLandscapeRight;
+        default:
+            return AVCaptureVideoOrientationPortrait;
     }
 }
 
@@ -541,6 +591,11 @@
     self.previewLayer.frame = view.bounds;
     self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
     [view.layer insertSublayer:self.previewLayer atIndex:0];
+    
+    // 设置初始方向
+    [self updatePreviewLayerOrientation];
+    
+    NSLog(@"📱 预览层初始化完成，frame: %@", NSStringFromCGRect(self.previewLayer.frame));
 }
 
 - (AVCaptureDevice *)cameraWithPosition:(CameraPosition)position {
