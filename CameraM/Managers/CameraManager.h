@@ -29,6 +29,13 @@ typedef NS_ENUM(NSInteger, CameraPosition) {
     CameraPositionFront
 };
 
+// 闪光灯模式
+typedef NS_ENUM(NSInteger, FlashMode) {
+    FlashModeAuto,
+    FlashModeOn,
+    FlashModeOff
+};
+
 // 4800万像素模式
 typedef NS_ENUM(NSInteger, CameraResolutionMode) {
     CameraResolutionModeStandard,    // 标准分辨率
@@ -43,6 +50,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)cameraManager:(CameraManager *)manager didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata;
 - (void)cameraManager:(CameraManager *)manager didFailWithError:(NSError *)error;
 - (void)cameraManager:(CameraManager *)manager didChangeResolutionMode:(CameraResolutionMode)mode;
+- (void)cameraManager:(CameraManager *)manager didChangeFlashMode:(FlashMode)mode;
 
 @end
 
@@ -59,10 +67,11 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 @property (nonatomic, readonly) CameraState currentState;
 @property (nonatomic, readonly) CameraPosition currentPosition;
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
+@property (nonatomic, readonly) FlashMode currentFlashMode;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 
 // 预览层 - 弱引用，避免循环引用
-@property (nonatomic, readonly, weak) AVCaptureVideoPreviewLayer *previewLayer;
+@property (nonatomic, readonly, strong) AVCaptureVideoPreviewLayer *previewLayer;
 
 // 核心方法 - 职责单一
 - (void)setupCameraWithPreviewView:(UIView *)previewView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
@@ -71,6 +80,9 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)capturePhoto;
 - (void)switchCamera;
 - (void)switchResolutionMode:(CameraResolutionMode)mode;
+- (void)switchFlashMode:(FlashMode)mode;
+- (void)focusAtPoint:(CGPoint)point;
+- (void)setExposureCompensation:(float)value;
 
 // 内存管理
 - (void)cleanup;

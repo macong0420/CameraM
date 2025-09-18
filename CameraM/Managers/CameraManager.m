@@ -21,6 +21,7 @@
 @property (nonatomic, readwrite) CameraState currentState;
 @property (nonatomic, readwrite) CameraPosition currentPosition;
 @property (nonatomic, readwrite) CameraResolutionMode currentResolutionMode;
+@property (nonatomic, readwrite) FlashMode currentFlashMode;
 
 // 性能优化 - 队列管理
 @property (nonatomic, strong) dispatch_queue_t sessionQueue;
@@ -53,6 +54,7 @@
     _currentState = CameraStateIdle;
     _currentPosition = CameraPositionBack;
     _currentResolutionMode = CameraResolutionModeStandard;
+    _currentFlashMode = FlashModeAuto;
     
     // 创建专用队列 - 避免主线程阻塞
     _sessionQueue = dispatch_queue_create("com.cameram.session", DISPATCH_QUEUE_SERIAL);
@@ -178,6 +180,68 @@
     });
 }
 
+- (void)switchFlashMode:(FlashMode)mode {
+    // 现代闪光灯控制通过PhotoSettings实现，这里只保存状态
+    self.currentFlashMode = mode;
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeFlashMode:)]) {
+            [self.delegate cameraManager:self didChangeFlashMode:mode];
+        }
+    });
+}
+
+- (void)focusAtPoint:(CGPoint)point {
+    dispatch_async(self.sessionQueue, ^{
+        if (self.currentDevice && [self.currentDevice isFocusModeSupported:AVCaptureFocusModeAutoFocus]) {
+            NSError *error = nil;
+            
+            if ([self.currentDevice lockForConfiguration:&error]) {
+                // 设置对焦点
+                if ([self.currentDevice isFocusPointOfInterestSupported]) {
+                    self.currentDevice.focusPointOfInterest = point;
+                    self.currentDevice.focusMode = AVCaptureFocusModeAutoFocus;
+                }
+                
+                // 设置曝光点
+                if ([self.currentDevice isExposurePointOfInterestSupported]) {
+                    self.currentDevice.exposurePointOfInterest = point;
+                    self.currentDevice.exposureMode = AVCaptureExposureModeAutoExpose;
+                }
+                
+                [self.currentDevice unlockForConfiguration];
+                
+                NSLog(@"对焦设置成功: (%.2f, %.2f)", point.x, point.y);
+            } else {
+                NSLog(@"对焦设置失败: %@", error.localizedDescription);
+            }
+        }
+    });
+}
+
+- (void)setExposureCompensation:(float)value {
+    dispatch_async(self.sessionQueue, ^{
+        if (self.currentDevice) {
+            NSError *error = nil;
+            
+            if ([self.currentDevice lockForConfiguration:&error]) {
+                // 限制曝光补偿范围
+                float minEV = self.currentDevice.minExposureTargetBias;
+                float maxEV = self.currentDevice.maxExposureTargetBias;
+                float clampedValue = MAX(minEV, MIN(maxEV, value));
+                
+                [self.currentDevice setExposureTargetBias:clampedValue completionHandler:^(CMTime syncTime) {
+                    NSLog(@"曝光补偿设置成功: %.1f", clampedValue);
+                }];
+                
+                [self.currentDevice unlockForConfiguration];
+            } else {
+                NSLog(@"曝光补偿设置失败: %@", error.localizedDescription);
+            }
+        }
+    });
+}
+
 #pragma mark - 私有方法
 
 - (BOOL)performCameraSetup:(NSError **)error {
@@ -285,9 +349,46 @@
         }
     }
     
+    // 应用闪光灯设置
+    if (self.currentDevice && [self.currentDevice hasFlash]) {
+        switch (self.currentFlashMode) {
+            case FlashModeAuto:
+                settings.flashMode = AVCaptureFlashModeAuto;
+                break;
+            case FlashModeOn:
+                settings.flashMode = AVCaptureFlashModeOn;
+                break;
+            case FlashModeOff:
+                settings.flashMode = AVCaptureFlashModeOff;
+                break;
+        }
+    }
+    
     // 启用高质量拍摄
     if ([self.photoOutput.availablePhotoCodecTypes containsObject:AVVideoCodecTypeHEVC]) {
         settings = [AVCapturePhotoSettings photoSettingsWithFormat:@{AVVideoCodecKey: AVVideoCodecTypeHEVC}];
+        
+        // 重新应用闪光灯设置
+        if (self.currentDevice && [self.currentDevice hasFlash]) {
+            switch (self.currentFlashMode) {
+                case FlashModeAuto:
+                    settings.flashMode = AVCaptureFlashModeAuto;
+                    break;
+                case FlashModeOn:
+                    settings.flashMode = AVCaptureFlashModeOn;
+                    break;
+                case FlashModeOff:
+                    settings.flashMode = AVCaptureFlashModeOff;
+                    break;
+            }
+        }
+        
+        // 重新应用分辨率设置
+        if (self.currentResolutionMode == CameraResolutionModeUltraHigh && self.isUltraHighResolutionSupported) {
+            if (@available(iOS 16.0, *)) {
+                settings.photoQualityPrioritization = AVCapturePhotoQualityPrioritizationQuality;
+            }
+        }
     }
     
     return settings;
