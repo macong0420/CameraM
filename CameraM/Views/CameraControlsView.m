@@ -42,7 +42,8 @@
 @property (nonatomic, strong) UIView *focusIndicator;
 
 // 比例相关
-@property (nonatomic, strong) UIView *aspectRatioSelector;
+@property (nonatomic, strong) UIButton *aspectRatioButton;
+@property (nonatomic, strong) UIView *aspectRatioPopover;
 @property (nonatomic, strong) CAShapeLayer *aspectRatioMaskLayer;
 
 @end
@@ -69,7 +70,7 @@
     [self setupStatusIndicators];
     [self setupGridLines];
     [self setupFocusIndicator];
-    [self setupAspectRatioSelector];
+    [self setupAspectRatioButton];
     [self setupAspectRatioMask];
     [self setupConstraints];
 }
@@ -100,12 +101,24 @@
     // 创建控制按钮
     self.flashButton = [self createControlButtonWithImageName:@"bolt.fill" action:@selector(flashButtonTapped:)];
     self.gridButton = [self createControlButtonWithImageName:@"grid" action:@selector(gridButtonTapped:)];
+    
+    // 比例按钮（显示当前比例文字）
+    self.aspectRatioButton = [[UIButton alloc] init];
+    [self.aspectRatioButton setTitle:@"4:3" forState:UIControlStateNormal];
+    [self.aspectRatioButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.aspectRatioButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.aspectRatioButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
+    self.aspectRatioButton.layer.cornerRadius = 6;
+    [self.aspectRatioButton addTarget:self action:@selector(aspectRatioButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    self.aspectRatioButton.translatesAutoresizingMaskIntoConstraints = NO;
+    
     self.switchCameraButton = [self createControlButtonWithImageName:@"arrow.triangle.2.circlepath.camera" action:@selector(switchCameraButtonTapped:)];
     self.frameWatermarkButton = [self createControlButtonWithImageName:@"photo.on.rectangle" action:@selector(frameWatermarkButtonTapped:)];
     self.settingsButton = [self createControlButtonWithImageName:@"ellipsis" action:@selector(settingsButtonTapped:)];
     
     [self.topControlsView addSubview:self.flashButton];
     [self.topControlsView addSubview:self.gridButton];
+    [self.topControlsView addSubview:self.aspectRatioButton];
     [self.topControlsView addSubview:self.switchCameraButton];
     [self.topControlsView addSubview:self.frameWatermarkButton];
     [self.topControlsView addSubview:self.settingsButton];
@@ -234,44 +247,93 @@
     [self.previewContainer addSubview:self.focusIndicator];
 }
 
-- (void)setupAspectRatioSelector {
-    // 创建比例选择器
-    self.aspectRatioSelector = [[UIView alloc] init];
-    self.aspectRatioSelector.backgroundColor = [UIColor clearColor];
-    self.aspectRatioSelector.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.bottomControlsView addSubview:self.aspectRatioSelector];
+- (void)setupAspectRatioButton {
+    // 比例按钮已在setupTopControls中创建
+    // 这里创建弹层
+    [self setupAspectRatioPopover];
+}
+
+- (void)setupAspectRatioPopover {
+    self.aspectRatioPopover = [[UIView alloc] init];
+    self.aspectRatioPopover.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+    self.aspectRatioPopover.layer.cornerRadius = 12;
+    self.aspectRatioPopover.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.aspectRatioPopover.layer.shadowOffset = CGSizeMake(0, 4);
+    self.aspectRatioPopover.layer.shadowOpacity = 0.3;
+    self.aspectRatioPopover.layer.shadowRadius = 8;
+    self.aspectRatioPopover.hidden = YES;
+    self.aspectRatioPopover.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:self.aspectRatioPopover];
     
-    // 创建比例按钮
-    NSArray *ratios = @[@"4:3", @"1:1", @"Xpan"];
-    CGFloat buttonWidth = 50;
+    // 创建弹层内容
+    NSArray *ratioData = @[
+        @{@"title": @"4:3", @"subtitle": @"传统相机", @"tag": @(CameraAspectRatio4to3)},
+        @{@"title": @"1:1", @"subtitle": @"正方形", @"tag": @(CameraAspectRatio1to1)},
+        @{@"title": @"Xpan", @"subtitle": @"超宽", @"tag": @(CameraAspectRatioXpan)}
+    ];
     
-    for (NSInteger i = 0; i < ratios.count; i++) {
-        UIButton *ratioButton = [[UIButton alloc] init];
-        [ratioButton setTitle:ratios[i] forState:UIControlStateNormal];
-        [ratioButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        [ratioButton setTitleColor:[UIColor systemYellowColor] forState:UIControlStateSelected];
-        ratioButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-        ratioButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
-        ratioButton.layer.cornerRadius = 6;
-        ratioButton.tag = i; // 对应CameraAspectRatio枚举值
-        [ratioButton addTarget:self action:@selector(aspectRatioButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-        ratioButton.translatesAutoresizingMaskIntoConstraints = NO;
+    for (NSInteger i = 0; i < ratioData.count; i++) {
+        NSDictionary *data = ratioData[i];
         
-        // 默认选中4:3
-        if (i == 0) {
-            ratioButton.selected = YES;
-            ratioButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.3];
-        }
+        UIButton *optionButton = [[UIButton alloc] init];
+        optionButton.backgroundColor = [UIColor clearColor];
+        optionButton.tag = [data[@"tag"] integerValue];
+        [optionButton addTarget:self action:@selector(aspectRatioOptionTapped:) forControlEvents:UIControlEventTouchUpInside];
+        optionButton.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.aspectRatioPopover addSubview:optionButton];
         
-        [self.aspectRatioSelector addSubview:ratioButton];
+        // 主标题
+        UILabel *titleLabel = [[UILabel alloc] init];
+        titleLabel.text = data[@"title"];
+        titleLabel.textColor = [UIColor whiteColor];
+        titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+        titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        [optionButton addSubview:titleLabel];
         
+        // 副标题
+        UILabel *subtitleLabel = [[UILabel alloc] init];
+        subtitleLabel.text = data[@"subtitle"];
+        subtitleLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+        subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        [optionButton addSubview:subtitleLabel];
+        
+        // 选中标记
+        UIImageView *checkmark = [[UIImageView alloc] init];
+        checkmark.image = [UIImage systemImageNamed:@"checkmark"];
+        checkmark.tintColor = [UIColor systemYellowColor];
+        checkmark.hidden = (i != 0); // 默认4:3选中
+        checkmark.tag = 1000 + i; // 特殊tag用于查找
+        checkmark.translatesAutoresizingMaskIntoConstraints = NO;
+        [optionButton addSubview:checkmark];
+        
+        // 按钮约束
         [NSLayoutConstraint activateConstraints:@[
-            [ratioButton.widthAnchor constraintEqualToConstant:buttonWidth],
-            [ratioButton.heightAnchor constraintEqualToConstant:25],
-            [ratioButton.centerYAnchor constraintEqualToAnchor:self.aspectRatioSelector.centerYAnchor],
-            [ratioButton.leadingAnchor constraintEqualToAnchor:self.aspectRatioSelector.leadingAnchor constant:i * (buttonWidth + 10)]
+            [optionButton.leadingAnchor constraintEqualToAnchor:self.aspectRatioPopover.leadingAnchor],
+            [optionButton.trailingAnchor constraintEqualToAnchor:self.aspectRatioPopover.trailingAnchor],
+            [optionButton.topAnchor constraintEqualToAnchor:self.aspectRatioPopover.topAnchor constant:i * 50],
+            [optionButton.heightAnchor constraintEqualToConstant:50],
+            
+            [titleLabel.leadingAnchor constraintEqualToAnchor:optionButton.leadingAnchor constant:20],
+            [titleLabel.topAnchor constraintEqualToAnchor:optionButton.topAnchor constant:8],
+            
+            [subtitleLabel.leadingAnchor constraintEqualToAnchor:optionButton.leadingAnchor constant:20],
+            [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:2],
+            
+            [checkmark.trailingAnchor constraintEqualToAnchor:optionButton.trailingAnchor constant:-20],
+            [checkmark.centerYAnchor constraintEqualToAnchor:optionButton.centerYAnchor],
+            [checkmark.widthAnchor constraintEqualToConstant:20],
+            [checkmark.heightAnchor constraintEqualToConstant:20]
         ]];
     }
+    
+    // 弹层约束
+    [NSLayoutConstraint activateConstraints:@[
+        [self.aspectRatioPopover.topAnchor constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor constant:10],
+        [self.aspectRatioPopover.centerXAnchor constraintEqualToAnchor:self.aspectRatioButton.centerXAnchor],
+        [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
+        [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
+    ]];
 }
 
 - (void)setupAspectRatioMask {
@@ -308,22 +370,28 @@
         [self.flashButton.widthAnchor constraintEqualToConstant:40],
         [self.flashButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.gridButton.leadingAnchor constraintEqualToAnchor:self.flashButton.trailingAnchor constant:20],
+        [self.gridButton.leadingAnchor constraintEqualToAnchor:self.flashButton.trailingAnchor constant:15],
         [self.gridButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.gridButton.widthAnchor constraintEqualToConstant:40],
         [self.gridButton.heightAnchor constraintEqualToConstant:40],
+        
+        // 比例按钮
+        [self.aspectRatioButton.leadingAnchor constraintEqualToAnchor:self.gridButton.trailingAnchor constant:15],
+        [self.aspectRatioButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.aspectRatioButton.widthAnchor constraintEqualToConstant:45],
+        [self.aspectRatioButton.heightAnchor constraintEqualToConstant:30],
         
         [self.settingsButton.trailingAnchor constraintEqualToAnchor:self.topControlsView.trailingAnchor constant:-20],
         [self.settingsButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.settingsButton.widthAnchor constraintEqualToConstant:40],
         [self.settingsButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.switchCameraButton.trailingAnchor constraintEqualToAnchor:self.settingsButton.leadingAnchor constant:-20],
+        [self.switchCameraButton.trailingAnchor constraintEqualToAnchor:self.settingsButton.leadingAnchor constant:-15],
         [self.switchCameraButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
         [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.frameWatermarkButton.trailingAnchor constraintEqualToAnchor:self.switchCameraButton.leadingAnchor constant:-20],
+        [self.frameWatermarkButton.trailingAnchor constraintEqualToAnchor:self.switchCameraButton.leadingAnchor constant:-15],
         [self.frameWatermarkButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
         [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40]
@@ -495,23 +563,47 @@
 }
 
 - (void)aspectRatioButtonTapped:(UIButton *)sender {
-    // 更新比例选择状态
-    for (UIView *subview in self.aspectRatioSelector.subviews) {
-        if ([subview isKindOfClass:[UIButton class]]) {
-            UIButton *button = (UIButton *)subview;
-            button.selected = NO;
-            button.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
-        }
-    }
+    // 显示/隐藏弹层
+    BOOL isCurrentlyVisible = !self.aspectRatioPopover.hidden;
     
-    sender.selected = YES;
-    sender.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.3];
+    if (isCurrentlyVisible) {
+        [self hideAspectRatioPopover];
+    } else {
+        [self showAspectRatioPopover];
+    }
+}
+
+- (void)aspectRatioOptionTapped:(UIButton *)sender {
+    CameraAspectRatio selectedRatio = (CameraAspectRatio)sender.tag;
+    
+    // 隐藏弹层
+    [self hideAspectRatioPopover];
     
     // 转发事件
-    CameraAspectRatio ratio = (CameraAspectRatio)sender.tag;
     if ([self.delegate respondsToSelector:@selector(didSelectAspectRatio:)]) {
-        [self.delegate didSelectAspectRatio:ratio];
+        [self.delegate didSelectAspectRatio:selectedRatio];
     }
+}
+
+- (void)showAspectRatioPopover {
+    self.aspectRatioPopover.hidden = NO;
+    self.aspectRatioPopover.alpha = 0.0;
+    self.aspectRatioPopover.transform = CGAffineTransformMakeScale(0.8, 0.8);
+    
+    [UIView animateWithDuration:0.2 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.aspectRatioPopover.alpha = 1.0;
+        self.aspectRatioPopover.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+- (void)hideAspectRatioPopover {
+    [UIView animateWithDuration:0.15 animations:^{
+        self.aspectRatioPopover.alpha = 0.0;
+        self.aspectRatioPopover.transform = CGAffineTransformMakeScale(0.9, 0.9);
+    } completion:^(BOOL finished) {
+        self.aspectRatioPopover.hidden = YES;
+        self.aspectRatioPopover.transform = CGAffineTransformIdentity;
+    }];
 }
 
 - (void)exposureSliderChanged:(UISlider *)sender {
@@ -521,6 +613,13 @@
 }
 
 - (void)previewTapped:(UITapGestureRecognizer *)gesture {
+    // 如果弹层显示，先关闭弹层
+    if (!self.aspectRatioPopover.hidden) {
+        [self hideAspectRatioPopover];
+        return;
+    }
+    
+    // 否则执行对焦
     CGPoint location = [gesture locationInView:self.previewContainer];
     if ([self.delegate respondsToSelector:@selector(didTapPreviewAtPoint:)]) {
         [self.delegate didTapPreviewAtPoint:location];
@@ -639,16 +738,31 @@
 }
 
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio {
-    // 更新比例选择器的UI状态
-    for (UIView *subview in self.aspectRatioSelector.subviews) {
+    // 更新顶部按钮显示
+    NSString *ratioText;
+    switch (ratio) {
+        case CameraAspectRatio4to3:
+            ratioText = @"4:3";
+            break;
+        case CameraAspectRatio1to1:
+            ratioText = @"1:1";
+            break;
+        case CameraAspectRatioXpan:
+            ratioText = @"Xpan";
+            break;
+    }
+    [self.aspectRatioButton setTitle:ratioText forState:UIControlStateNormal];
+    
+    // 更新弹层中的选中状态
+    for (UIView *subview in self.aspectRatioPopover.subviews) {
         if ([subview isKindOfClass:[UIButton class]]) {
-            UIButton *button = (UIButton *)subview;
-            if (button.tag == ratio) {
-                button.selected = YES;
-                button.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.3];
-            } else {
-                button.selected = NO;
-                button.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
+            UIButton *optionButton = (UIButton *)subview;
+            
+            // 查找checkmark
+            for (UIView *child in optionButton.subviews) {
+                if ([child isKindOfClass:[UIImageView class]] && child.tag >= 1000) {
+                    child.hidden = (optionButton.tag != ratio);
+                }
             }
         }
     }
