@@ -209,43 +209,58 @@
     CGFloat imageWidth = imageSize.width;
     CGFloat imageHeight = imageSize.height;
     
+    // iOS相机图像通常是竖屏的，需要考虑这个特点
     CGRect cropRect;
     
     switch (ratio) {
         case CameraAspectRatio4to3: {
-            // 4:3 比例
+            // 4:3 比例 - 在竖屏图像中保持4:3（宽:高）
+            CGFloat targetWidth = imageWidth;
             CGFloat targetHeight = imageWidth * 4.0 / 3.0;
+            
             if (targetHeight <= imageHeight) {
-                // 基于宽度计算高度
+                // 基于宽度计算高度，居中裁剪
                 CGFloat yOffset = (imageHeight - targetHeight) / 2.0;
-                cropRect = CGRectMake(0, yOffset, imageWidth, targetHeight);
+                cropRect = CGRectMake(0, yOffset, targetWidth, targetHeight);
             } else {
-                // 基于高度计算宽度
-                CGFloat targetWidth = imageHeight * 3.0 / 4.0;
+                // 如果计算高度超出，基于高度计算宽度
+                targetHeight = imageHeight;
+                targetWidth = imageHeight * 3.0 / 4.0;
                 CGFloat xOffset = (imageWidth - targetWidth) / 2.0;
-                cropRect = CGRectMake(xOffset, 0, targetWidth, imageHeight);
+                cropRect = CGRectMake(xOffset, 0, targetWidth, targetHeight);
             }
             break;
         }
         case CameraAspectRatio1to1: {
-            // 1:1 正方形比例
+            // 1:1 正方形比例 - 确保完全正方形
             CGFloat sideLength = MIN(imageWidth, imageHeight);
             CGFloat xOffset = (imageWidth - sideLength) / 2.0;
             CGFloat yOffset = (imageHeight - sideLength) / 2.0;
             cropRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
+            
+            NSLog(@"1:1裁剪区域: (%.0f, %.0f, %.0f, %.0f), 原图尺寸: (%.0f, %.0f)", 
+                  cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height,
+                  imageWidth, imageHeight);
             break;
         }
         case CameraAspectRatioXpan: {
-            // Xpan 超宽比例 (65:24 ≈ 2.7:1)
-            CGFloat targetHeight = imageWidth / 2.7;
+            // Xpan 超宽比例 (65:24 ≈ 2.7:1) - 在竖屏图像中创建横向超宽条
+            CGFloat targetWidth = imageWidth; // 使用全宽
+            CGFloat targetHeight = imageWidth / 2.7; // 根据2.7:1计算高度
+            
             if (targetHeight <= imageHeight) {
                 CGFloat yOffset = (imageHeight - targetHeight) / 2.0;
-                cropRect = CGRectMake(0, yOffset, imageWidth, targetHeight);
+                cropRect = CGRectMake(0, yOffset, targetWidth, targetHeight);
+                
+                NSLog(@"Xpan裁剪区域: (%.0f, %.0f, %.0f, %.0f), 比例: %.2f:1, 原图尺寸: (%.0f, %.0f)", 
+                      cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height,
+                      targetWidth/targetHeight, imageWidth, imageHeight);
             } else {
-                // 如果图像太窄，基于高度计算
-                CGFloat targetWidth = imageHeight * 2.7;
+                // 如果计算高度超出（极少情况），使用全高
+                targetHeight = imageHeight;
+                targetWidth = imageHeight * 2.7;
                 CGFloat xOffset = (imageWidth - targetWidth) / 2.0;
-                cropRect = CGRectMake(xOffset, 0, targetWidth, imageHeight);
+                cropRect = CGRectMake(xOffset, 0, targetWidth, targetHeight);
             }
             break;
         }
@@ -257,14 +272,34 @@
 - (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio {
     if (!image) return nil;
     
-    CGRect cropRect = [self cropRectForAspectRatio:ratio inImageSize:image.size];
+    // 获取图像的实际尺寸（考虑方向）
+    CGSize imageSize = image.size;
+    CGFloat imageWidth = imageSize.width;
+    CGFloat imageHeight = imageSize.height;
+    
+    NSLog(@"原始图像信息 - 尺寸: (%.0fx%.0f), 方向: %ld, 比例目标: %ld", 
+          imageWidth, imageHeight, (long)image.imageOrientation, (long)ratio);
+    
+    CGRect cropRect = [self cropRectForAspectRatio:ratio inImageSize:imageSize];
+    
+    // 验证裁剪区域
+    NSLog(@"计算的裁剪区域: (%.0f, %.0f, %.0f, %.0f)", 
+          cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height);
     
     // 高性能裁剪 - 使用Core Graphics
     CGImageRef croppedCGImage = CGImageCreateWithImageInRect(image.CGImage, cropRect);
-    if (!croppedCGImage) return image;
+    if (!croppedCGImage) {
+        NSLog(@"裁剪失败，返回原图");
+        return image;
+    }
     
     UIImage *croppedImage = [UIImage imageWithCGImage:croppedCGImage scale:image.scale orientation:image.imageOrientation];
     CGImageRelease(croppedCGImage); // 及时释放内存
+    
+    // 验证结果
+    NSLog(@"裁剪结果 - 尺寸: (%.0fx%.0f), 实际比例: %.2f:1", 
+          croppedImage.size.width, croppedImage.size.height, 
+          croppedImage.size.width / croppedImage.size.height);
     
     return croppedImage;
 }
