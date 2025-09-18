@@ -38,6 +38,7 @@
 }
 
 - (void)dealloc {
+    [self.businessController stopOrientationMonitoring]; // 停止方向监听
     [self.businessController cleanup];
 }
 
@@ -68,6 +69,9 @@
         if (success) {
             NSLog(@"相机设置成功");
             [self updateUIState];
+            
+            // 启动方向监听
+            [self.businessController startOrientationMonitoring];
         } else {
             NSLog(@"相机设置失败: %@", error.localizedDescription);
             [self showErrorAlert:error.localizedDescription];
@@ -185,6 +189,12 @@
     [self.controlsView updateAspectRatioMask:ratio];
     [self.controlsView updateAspectRatioSelection:ratio];
     NSLog(@"比例变化通知: %ld", (long)ratio);
+}
+
+- (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation {
+    // 更新UI布局适配
+    [self.controlsView updateLayoutForOrientation:orientation];
+    NSLog(@"设备方向变化，UI适配: %ld", (long)orientation);
 }
 
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {

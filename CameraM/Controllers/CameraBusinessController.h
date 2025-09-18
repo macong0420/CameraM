@@ -19,6 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)didChangeResolutionMode:(CameraResolutionMode)mode;
 - (void)didChangeFlashMode:(FlashMode)mode;
 - (void)didChangeAspectRatio:(CameraAspectRatio)ratio;
+- (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation;
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata;
 - (void)didFailWithError:(NSError *)error;
 
@@ -36,6 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readonly) FlashMode currentFlashMode;
 @property (nonatomic, readonly) CameraAspectRatio currentAspectRatio;
+@property (nonatomic, readonly) CameraDeviceOrientation currentDeviceOrientation;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 @property (nonatomic, readonly) UIImage * _Nullable latestCapturedImage;
 
@@ -47,6 +49,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)startSession;
 - (void)stopSession;
 - (void)cleanup;
+
+// 方向监听控制
+- (void)startOrientationMonitoring;
+- (void)stopOrientationMonitoring;
 
 // 拍摄控制
 - (void)capturePhoto;

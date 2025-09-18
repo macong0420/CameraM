@@ -38,6 +38,9 @@ typedef NS_ENUM(NSInteger, CameraAspectRatio);
 - (void)didTapPreviewAtPoint:(CGPoint)point;
 - (void)didDoubleTapPreview;
 
+// 设备方向变化
+- (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation;
+
 @end
 
 @interface CameraControlsView : UIView
@@ -59,6 +62,9 @@ typedef NS_ENUM(NSInteger, CameraAspectRatio);
 - (void)showFocusIndicatorAtPoint:(CGPoint)point;
 - (void)updateAspectRatioMask:(CameraAspectRatio)ratio;
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;
+
+// 横屏适配接口
+- (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation;
 
 @end
 

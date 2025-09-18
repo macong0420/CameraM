@@ -36,6 +36,13 @@ typedef NS_ENUM(NSInteger, FlashMode) {
     FlashModeOff
 };
 
+// 设备方向枚举
+typedef NS_ENUM(NSInteger, CameraDeviceOrientation) {
+    CameraDeviceOrientationPortrait,           // 竖屏
+    CameraDeviceOrientationLandscapeLeft,      // 向左横屏
+    CameraDeviceOrientationLandscapeRight      // 向右横屏
+};
+
 // 拍照比例枚举
 typedef NS_ENUM(NSInteger, CameraAspectRatio) {
     CameraAspectRatio4to3,    // 4:3 传统相机比例
@@ -59,6 +66,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)cameraManager:(CameraManager *)manager didChangeResolutionMode:(CameraResolutionMode)mode;
 - (void)cameraManager:(CameraManager *)manager didChangeFlashMode:(FlashMode)mode;
 - (void)cameraManager:(CameraManager *)manager didChangeAspectRatio:(CameraAspectRatio)ratio;
+- (void)cameraManager:(CameraManager *)manager didChangeDeviceOrientation:(CameraDeviceOrientation)orientation;
 
 @end
 
@@ -77,6 +85,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readonly) FlashMode currentFlashMode;
 @property (nonatomic, readonly) CameraAspectRatio currentAspectRatio;
+@property (nonatomic, readonly) CameraDeviceOrientation currentDeviceOrientation;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 
 // 预览层 - 弱引用，避免循环引用
@@ -93,6 +102,11 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)switchAspectRatio:(CameraAspectRatio)ratio;
 - (void)focusAtPoint:(CGPoint)point;
 - (void)setExposureCompensation:(float)value;
+
+// 设备方向相关
+- (void)startDeviceOrientationMonitoring;
+- (void)stopDeviceOrientationMonitoring;
+- (void)updateDeviceOrientation:(UIDeviceOrientation)deviceOrientation;
 
 // 比例相关工具方法
 - (CGRect)cropRectForAspectRatio:(CameraAspectRatio)ratio inImageSize:(CGSize)imageSize;

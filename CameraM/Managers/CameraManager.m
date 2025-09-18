@@ -7,6 +7,7 @@
 
 #import "CameraManager.h"
 #import <Photos/Photos.h>
+#import <CoreMotion/CoreMotion.h>
 
 @interface CameraManager () <AVCapturePhotoCaptureDelegate>
 
@@ -23,6 +24,10 @@
 @property (nonatomic, readwrite) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readwrite) FlashMode currentFlashMode;
 @property (nonatomic, readwrite) CameraAspectRatio currentAspectRatio;
+@property (nonatomic, readwrite) CameraDeviceOrientation currentDeviceOrientation;
+
+// 方向监听
+@property (nonatomic, strong) CMMotionManager *motionManager;
 
 // 性能优化 - 队列管理
 @property (nonatomic, strong) dispatch_queue_t sessionQueue;
@@ -57,9 +62,13 @@
     _currentResolutionMode = CameraResolutionModeStandard;
     _currentFlashMode = FlashModeAuto;
     _currentAspectRatio = CameraAspectRatio4to3; // 默认4:3比例
+    _currentDeviceOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
     
     // 创建专用队列 - 避免主线程阻塞
     _sessionQueue = dispatch_queue_create("com.cameram.session", DISPATCH_QUEUE_SERIAL);
+    
+    // 初始化方向监听
+    _motionManager = [[CMMotionManager alloc] init];
     
     // 检查4800万像素支持
     [self checkUltraHighResolutionSupport];
@@ -201,6 +210,70 @@
             [self.delegate cameraManager:self didChangeAspectRatio:ratio];
         }
     });
+}
+
+#pragma mark - 设备方向相关
+
+- (void)startDeviceOrientationMonitoring {
+    // 启用设备方向通知
+    [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
+    
+    // 注册通知监听
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(deviceOrientationDidChange:)
+                                                 name:UIDeviceOrientationDidChangeNotification
+                                               object:nil];
+    
+    // 获取当前方向
+    [self updateDeviceOrientation:[UIDevice currentDevice].orientation];
+    
+    NSLog(@"开始设备方向监听");
+}
+
+- (void)stopDeviceOrientationMonitoring {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                     name:UIDeviceOrientationDidChangeNotification
+                                                   object:nil];
+    [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
+    
+    NSLog(@"停止设备方向监听");
+}
+
+- (void)deviceOrientationDidChange:(NSNotification *)notification {
+    UIDeviceOrientation deviceOrientation = [UIDevice currentDevice].orientation;
+    [self updateDeviceOrientation:deviceOrientation];
+}
+
+- (void)updateDeviceOrientation:(UIDeviceOrientation)deviceOrientation {
+    CameraDeviceOrientation newOrientation;
+    
+    switch (deviceOrientation) {
+        case UIDeviceOrientationPortrait:
+            newOrientation = CameraDeviceOrientationPortrait;
+            break;
+        case UIDeviceOrientationLandscapeLeft:
+            newOrientation = CameraDeviceOrientationLandscapeLeft;
+            break;
+        case UIDeviceOrientationLandscapeRight:
+            newOrientation = CameraDeviceOrientationLandscapeRight;
+            break;
+        default:
+            // 忽略其他方向（面朝上、面朝下等）
+            return;
+    }
+    
+    if (newOrientation != self.currentDeviceOrientation) {
+        self.currentDeviceOrientation = newOrientation;
+        
+        NSLog(@"设备方向变化: %ld", (long)newOrientation);
+        
+        // 通知代理
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeDeviceOrientation:)]) {
+                [self.delegate cameraManager:self didChangeDeviceOrientation:newOrientation];
+            }
+        });
+    }
 }
 
 #pragma mark - 比例相关工具方法
@@ -621,6 +694,7 @@
 
 - (void)cleanup {
     [self stopSession];
+    [self stopDeviceOrientationMonitoring]; // 停止方向监听
     
     dispatch_async(self.sessionQueue, ^{
         // 清理AVFoundation组件
@@ -644,6 +718,7 @@
         self.currentDevice = nil;
         self.deviceInput = nil;
         self.photoOutput = nil;
+        self.motionManager = nil; // 清理方向监听器
         
         self.currentState = CameraStateIdle;
     });

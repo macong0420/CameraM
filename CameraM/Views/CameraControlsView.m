@@ -46,6 +46,11 @@
 @property (nonatomic, strong) UIView *aspectRatioPopover;
 @property (nonatomic, strong) CAShapeLayer *aspectRatioMaskLayer;
 
+// 横屏适配
+@property (nonatomic, assign) CameraDeviceOrientation currentOrientation;
+@property (nonatomic, strong) NSArray<NSLayoutConstraint *> *portraitConstraints;
+@property (nonatomic, strong) NSArray<NSLayoutConstraint *> *landscapeConstraints;
+
 @end
 
 @implementation CameraControlsView
@@ -53,6 +58,7 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
+        _currentOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
         [self setupUI];
     }
     return self;
@@ -765,6 +771,145 @@
                 }
             }
         }
+    }
+}
+
+#pragma mark - 横屏适配
+
+- (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation {
+    if (orientation == self.currentOrientation) {
+        return; // 方向未变化，无需更新
+    }
+    
+    self.currentOrientation = orientation;
+    
+    // 隐藏弹层（如果显示）
+    if (!self.aspectRatioPopover.hidden) {
+        [self hideAspectRatioPopover];
+    }
+    
+    // 执行布局切换动画
+    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.3 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        [self switchConstraintsForOrientation:orientation];
+        [self layoutIfNeeded];
+    } completion:^(BOOL finished) {
+        // 更新比例弹层约束
+        [self updateAspectRatioPopoverConstraintsForOrientation:orientation];
+        NSLog(@"UI布局切换完成: %ld", (long)orientation);
+    }];
+}
+
+- (void)switchConstraintsForOrientation:(CameraDeviceOrientation)orientation {
+    // 禁用当前约束
+    if (self.portraitConstraints) {
+        [NSLayoutConstraint deactivateConstraints:self.portraitConstraints];
+    }
+    if (self.landscapeConstraints) {
+        [NSLayoutConstraint deactivateConstraints:self.landscapeConstraints];
+    }
+    
+    if (orientation == CameraDeviceOrientationPortrait) {
+        // 激活竖屏约束
+        if (self.portraitConstraints) {
+            [NSLayoutConstraint activateConstraints:self.portraitConstraints];
+        }
+        
+        // 恢复顶部和底部控制栏的正常显示
+        self.topControlsView.hidden = NO;
+        self.bottomControlsView.hidden = NO;
+        self.professionalControlsView.hidden = NO;
+        
+    } else {
+        // 激活横屏约束
+        if (!self.landscapeConstraints) {
+            [self createLandscapeConstraints];
+        }
+        [NSLayoutConstraint activateConstraints:self.landscapeConstraints];
+        
+        // 在横屏时重新排列控制元素
+        [self rearrangeControlsForLandscape];
+    }
+}
+
+- (void)createLandscapeConstraints {
+    NSMutableArray *constraints = [NSMutableArray array];
+    UILayoutGuide *safeArea = self.safeAreaLayoutGuide;
+    
+    // 横屏时的布局：右侧垂直控制栏
+    CGFloat rightPanelWidth = 80;
+    
+    // 预览容器占据左侧大部分区域
+    [constraints addObjectsFromArray:@[
+        [self.previewContainer.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.previewContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-rightPanelWidth],
+        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-100] // 为底部控制留空间
+    ]];
+    
+    // 右侧控制栏重新布局
+    [constraints addObjectsFromArray:@[
+        [self.topControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.topControlsView.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
+        [self.topControlsView.widthAnchor constraintEqualToConstant:rightPanelWidth],
+        [self.topControlsView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-100]
+    ]];
+    
+    // 底部控制栏横屏布局
+    [constraints addObjectsFromArray:@[
+        [self.bottomControlsView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+        [self.bottomControlsView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.bottomControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-rightPanelWidth],
+        [self.bottomControlsView.heightAnchor constraintEqualToConstant:100]
+    ]];
+    
+    self.landscapeConstraints = [constraints copy];
+}
+
+- (void)rearrangeControlsForLandscape {
+    // 在横屏时重新排列顶部控制栏为垂直布局
+    NSArray *buttons = @[self.flashButton, self.gridButton, self.aspectRatioButton, 
+                        self.frameWatermarkButton, self.switchCameraButton, self.settingsButton];
+    
+    for (NSInteger i = 0; i < buttons.count; i++) {
+        UIButton *button = buttons[i];
+        
+        // 移除现有约束
+        [button removeFromSuperview];
+        [self.topControlsView addSubview:button];
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        
+        // 垂直排列约束
+        [NSLayoutConstraint activateConstraints:@[
+            [button.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+            [button.topAnchor constraintEqualToAnchor:self.topControlsView.topAnchor constant:20 + i * 60],
+            [button.widthAnchor constraintEqualToConstant:40],
+            [button.heightAnchor constraintEqualToConstant:40]
+        ]];
+    }
+}
+
+- (void)updateAspectRatioPopoverConstraintsForOrientation:(CameraDeviceOrientation)orientation {
+    // 移除现有约束
+    [self.aspectRatioPopover removeFromSuperview];
+    [self addSubview:self.aspectRatioPopover];
+    self.aspectRatioPopover.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    if (orientation == CameraDeviceOrientationPortrait) {
+        // 竖屏时向下弹出
+        [NSLayoutConstraint activateConstraints:@[
+            [self.aspectRatioPopover.topAnchor constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor constant:10],
+            [self.aspectRatioPopover.centerXAnchor constraintEqualToAnchor:self.aspectRatioButton.centerXAnchor],
+            [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
+            [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
+        ]];
+    } else {
+        // 横屏时向左弹出
+        [NSLayoutConstraint activateConstraints:@[
+            [self.aspectRatioPopover.trailingAnchor constraintEqualToAnchor:self.aspectRatioButton.leadingAnchor constant:-10],
+            [self.aspectRatioPopover.centerYAnchor constraintEqualToAnchor:self.aspectRatioButton.centerYAnchor],
+            [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
+            [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
+        ]];
     }
 }
 

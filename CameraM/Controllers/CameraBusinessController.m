@@ -47,6 +47,10 @@
     return self.cameraManager.currentAspectRatio;
 }
 
+- (CameraDeviceOrientation)currentDeviceOrientation {
+    return self.cameraManager.currentDeviceOrientation;
+}
+
 - (BOOL)isUltraHighResolutionSupported {
     return self.cameraManager.isUltraHighResolutionSupported;
 }
@@ -67,6 +71,14 @@
 
 - (void)cleanup {
     [self.cameraManager cleanup];
+}
+
+- (void)startOrientationMonitoring {
+    [self.cameraManager startDeviceOrientationMonitoring];
+}
+
+- (void)stopOrientationMonitoring {
+    [self.cameraManager stopDeviceOrientationMonitoring];
 }
 
 #pragma mark - 拍摄控制
@@ -197,6 +209,14 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self.delegate respondsToSelector:@selector(didChangeAspectRatio:)]) {
             [self.delegate didChangeAspectRatio:ratio];
+        }
+    });
+}
+
+- (void)cameraManager:(CameraManager *)manager didChangeDeviceOrientation:(CameraDeviceOrientation)orientation {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([self.delegate respondsToSelector:@selector(didChangeDeviceOrientation:)]) {
+            [self.delegate didChangeDeviceOrientation:orientation];
         }
     });
 }
