@@ -113,6 +113,16 @@
 
 - (void)didSelectMode:(NSInteger)modeIndex {
     NSLog(@"模式切换: %ld", (long)modeIndex);
+    
+    // Square模式自动切换到1:1比例
+    if (modeIndex == 2) { // Square模式
+        [self.businessController switchAspectRatio:CameraAspectRatio1to1];
+    }
+}
+
+- (void)didSelectAspectRatio:(CameraAspectRatio)ratio {
+    [self.businessController switchAspectRatio:ratio];
+    NSLog(@"比例切换: %ld", (long)ratio);
 }
 
 - (void)didTapFlashButton {
@@ -168,6 +178,13 @@
 
 - (void)didChangeFlashMode:(FlashMode)mode {
     [self updateUIState];
+}
+
+- (void)didChangeAspectRatio:(CameraAspectRatio)ratio {
+    // 更新UI遮罩和选择状态
+    [self.controlsView updateAspectRatioMask:ratio];
+    [self.controlsView updateAspectRatioSelection:ratio];
+    NSLog(@"比例变化通知: %ld", (long)ratio);
 }
 
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {

@@ -43,6 +43,10 @@
     return self.cameraManager.currentFlashMode;
 }
 
+- (CameraAspectRatio)currentAspectRatio {
+    return self.cameraManager.currentAspectRatio;
+}
+
 - (BOOL)isUltraHighResolutionSupported {
     return self.cameraManager.isUltraHighResolutionSupported;
 }
@@ -105,6 +109,10 @@
     [self.cameraManager switchFlashMode:nextMode];
 }
 
+- (void)switchAspectRatio:(CameraAspectRatio)ratio {
+    [self.cameraManager switchAspectRatio:ratio];
+}
+
 #pragma mark - 对焦和曝光
 
 - (void)focusAtPoint:(CGPoint)screenPoint withPreviewLayer:(AVCaptureVideoPreviewLayer *)previewLayer {
@@ -127,6 +135,10 @@
     return _isGridLinesVisible;
 }
 
+- (CGRect)previewRectForCurrentAspectRatioInViewSize:(CGSize)viewSize {
+    return [self.cameraManager previewRectForAspectRatio:self.currentAspectRatio inViewSize:viewSize];
+}
+
 #pragma mark - CameraManagerDelegate
 
 - (void)cameraManager:(CameraManager *)manager didChangeState:(CameraState)state {
@@ -140,12 +152,15 @@
 }
 
 - (void)cameraManager:(CameraManager *)manager didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {
-    // 保存最新照片
-    self.latestCapturedImage = image;
+    // 根据当前比例裁剪图像
+    UIImage *finalImage = [self.cameraManager cropImage:image toAspectRatio:self.currentAspectRatio];
+    
+    // 保存裁剪后的图像作为最新照片
+    self.latestCapturedImage = finalImage;
     
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self.delegate respondsToSelector:@selector(didCapturePhoto:withMetadata:)]) {
-            [self.delegate didCapturePhoto:image withMetadata:metadata];
+            [self.delegate didCapturePhoto:finalImage withMetadata:metadata];
         }
         
         if ([self.delegate respondsToSelector:@selector(shouldShowCaptureFlashEffect)]) {
@@ -174,6 +189,14 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self.delegate respondsToSelector:@selector(didChangeFlashMode:)]) {
             [self.delegate didChangeFlashMode:mode];
+        }
+    });
+}
+
+- (void)cameraManager:(CameraManager *)manager didChangeAspectRatio:(CameraAspectRatio)ratio {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([self.delegate respondsToSelector:@selector(didChangeAspectRatio:)]) {
+            [self.delegate didChangeAspectRatio:ratio];
         }
     });
 }

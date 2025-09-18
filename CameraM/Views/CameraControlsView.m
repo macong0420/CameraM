@@ -40,6 +40,10 @@
 @property (nonatomic, strong) UIView *gridLinesView;
 @property (nonatomic, strong) UIView *focusIndicator;
 
+// 比例相关
+@property (nonatomic, strong) UIView *aspectRatioSelector;
+@property (nonatomic, strong) CAShapeLayer *aspectRatioMaskLayer;
+
 @end
 
 @implementation CameraControlsView
@@ -64,6 +68,8 @@
     [self setupStatusIndicators];
     [self setupGridLines];
     [self setupFocusIndicator];
+    [self setupAspectRatioSelector];
+    [self setupAspectRatioMask];
     [self setupConstraints];
 }
 
@@ -225,6 +231,54 @@
     self.focusIndicator.layer.cornerRadius = 40;
     self.focusIndicator.hidden = YES;
     [self.previewContainer addSubview:self.focusIndicator];
+}
+
+- (void)setupAspectRatioSelector {
+    // 创建比例选择器
+    self.aspectRatioSelector = [[UIView alloc] init];
+    self.aspectRatioSelector.backgroundColor = [UIColor clearColor];
+    self.aspectRatioSelector.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.bottomControlsView addSubview:self.aspectRatioSelector];
+    
+    // 创建比例按钮
+    NSArray *ratios = @[@"4:3", @"1:1", @"Xpan"];
+    CGFloat buttonWidth = 50;
+    
+    for (NSInteger i = 0; i < ratios.count; i++) {
+        UIButton *ratioButton = [[UIButton alloc] init];
+        [ratioButton setTitle:ratios[i] forState:UIControlStateNormal];
+        [ratioButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        [ratioButton setTitleColor:[UIColor systemYellowColor] forState:UIControlStateSelected];
+        ratioButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        ratioButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
+        ratioButton.layer.cornerRadius = 6;
+        ratioButton.tag = i; // 对应CameraAspectRatio枚举值
+        [ratioButton addTarget:self action:@selector(aspectRatioButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+        ratioButton.translatesAutoresizingMaskIntoConstraints = NO;
+        
+        // 默认选中4:3
+        if (i == 0) {
+            ratioButton.selected = YES;
+            ratioButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.3];
+        }
+        
+        [self.aspectRatioSelector addSubview:ratioButton];
+        
+        [NSLayoutConstraint activateConstraints:@[
+            [ratioButton.widthAnchor constraintEqualToConstant:buttonWidth],
+            [ratioButton.heightAnchor constraintEqualToConstant:25],
+            [ratioButton.centerYAnchor constraintEqualToAnchor:self.aspectRatioSelector.centerYAnchor],
+            [ratioButton.leadingAnchor constraintEqualToAnchor:self.aspectRatioSelector.leadingAnchor constant:i * (buttonWidth + 10)]
+        ]];
+    }
+}
+
+- (void)setupAspectRatioMask {
+    // 创建比例遮罩层
+    self.aspectRatioMaskLayer = [CAShapeLayer layer];
+    self.aspectRatioMaskLayer.fillColor = [UIColor colorWithWhite:0.0 alpha:0.4].CGColor;
+    self.aspectRatioMaskLayer.fillRule = kCAFillRuleEvenOdd;
+    [self.previewContainer.layer addSublayer:self.aspectRatioMaskLayer];
 }
 
 - (void)setupConstraints {
@@ -426,8 +480,36 @@
     }
     sender.selected = YES;
     
+    // Square模式自动切换到1:1比例
+    if (sender.tag == 2) { // Square模式
+        [self updateAspectRatioSelection:CameraAspectRatio1to1];
+        if ([self.delegate respondsToSelector:@selector(didSelectAspectRatio:)]) {
+            [self.delegate didSelectAspectRatio:CameraAspectRatio1to1];
+        }
+    }
+    
     if ([self.delegate respondsToSelector:@selector(didSelectMode:)]) {
         [self.delegate didSelectMode:sender.tag];
+    }
+}
+
+- (void)aspectRatioButtonTapped:(UIButton *)sender {
+    // 更新比例选择状态
+    for (UIView *subview in self.aspectRatioSelector.subviews) {
+        if ([subview isKindOfClass:[UIButton class]]) {
+            UIButton *button = (UIButton *)subview;
+            button.selected = NO;
+            button.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
+        }
+    }
+    
+    sender.selected = YES;
+    sender.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.3];
+    
+    // 转发事件
+    CameraAspectRatio ratio = (CameraAspectRatio)sender.tag;
+    if ([self.delegate respondsToSelector:@selector(didSelectAspectRatio:)]) {
+        [self.delegate didSelectAspectRatio:ratio];
     }
 }
 
@@ -509,6 +591,68 @@
     }];
 }
 
+- (void)updateAspectRatioMask:(CameraAspectRatio)ratio {
+    CGRect bounds = self.previewContainer.bounds;
+    if (CGRectIsEmpty(bounds)) return;
+    
+    // 计算有效区域（需要从CameraManager获取）
+    // 这里先用简化计算，实际应该调用CameraManager的方法
+    CGRect activeRect;
+    switch (ratio) {
+        case CameraAspectRatio4to3: {
+            CGFloat targetHeight = bounds.size.width * 4.0 / 3.0;
+            if (targetHeight <= bounds.size.height) {
+                CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0;
+                activeRect = CGRectMake(0, yOffset, bounds.size.width, targetHeight);
+            } else {
+                activeRect = bounds; // 如果屏幕比4:3还窄，全屏显示
+            }
+            break;
+        }
+        case CameraAspectRatio1to1: {
+            CGFloat sideLength = MIN(bounds.size.width, bounds.size.height);
+            CGFloat xOffset = (bounds.size.width - sideLength) / 2.0;
+            CGFloat yOffset = (bounds.size.height - sideLength) / 2.0;
+            activeRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
+            break;
+        }
+        case CameraAspectRatioXpan: {
+            CGFloat targetHeight = bounds.size.width / 2.7;
+            CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0;
+            activeRect = CGRectMake(0, yOffset, bounds.size.width, targetHeight);
+            break;
+        }
+    }
+    
+    // 创建遮罩路径（全屏减去有效区域）
+    UIBezierPath *maskPath = [UIBezierPath bezierPathWithRect:bounds];
+    UIBezierPath *activePath = [UIBezierPath bezierPathWithRect:activeRect];
+    [maskPath appendPath:activePath];
+    maskPath.usesEvenOddFillRule = YES;
+    
+    // 应用遮罩动画
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:0.3];
+    self.aspectRatioMaskLayer.path = maskPath.CGPath;
+    [CATransaction commit];
+}
+
+- (void)updateAspectRatioSelection:(CameraAspectRatio)ratio {
+    // 更新比例选择器的UI状态
+    for (UIView *subview in self.aspectRatioSelector.subviews) {
+        if ([subview isKindOfClass:[UIButton class]]) {
+            UIButton *button = (UIButton *)subview;
+            if (button.tag == ratio) {
+                button.selected = YES;
+                button.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.3];
+            } else {
+                button.selected = NO;
+                button.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.3];
+            }
+        }
+    }
+}
+
 #pragma mark - 布局更新
 
 - (void)layoutSubviews {
@@ -517,6 +661,12 @@
     // 重新创建网格线以适应屏幕尺寸
     if (self.gridLinesView.subviews.count == 0) {
         [self createGridLinesWithFrame];
+    }
+    
+    // 更新比例遮罩尺寸
+    if (self.aspectRatioMaskLayer && !CGRectIsEmpty(self.previewContainer.bounds)) {
+        // 默认显示4:3比例遮罩
+        [self updateAspectRatioMask:CameraAspectRatio4to3];
     }
 }
 

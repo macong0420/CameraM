@@ -6,6 +6,7 @@
 //
 
 #import <UIKit/UIKit.h>
+#import "Managers/CameraManager.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -17,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)didTapCaptureButton;
 - (void)didTapGalleryButton;
 - (void)didSelectMode:(NSInteger)modeIndex;
+- (void)didSelectAspectRatio:(CameraAspectRatio)ratio;
 
 // 相机控制
 - (void)didTapFlashButton;
@@ -52,6 +54,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)updateGalleryButtonWithImage:(UIImage * _Nullable)image;
 - (void)showGridLines:(BOOL)show;
 - (void)showFocusIndicatorAtPoint:(CGPoint)point;
+- (void)updateAspectRatioMask:(CameraAspectRatio)ratio;
+- (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;
 
 @end
 

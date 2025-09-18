@@ -18,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 // 相机状态变化
 - (void)didChangeResolutionMode:(CameraResolutionMode)mode;
 - (void)didChangeFlashMode:(FlashMode)mode;
+- (void)didChangeAspectRatio:(CameraAspectRatio)ratio;
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata;
 - (void)didFailWithError:(NSError *)error;
 
@@ -34,6 +35,7 @@ NS_ASSUME_NONNULL_BEGIN
 // 状态查询接口
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readonly) FlashMode currentFlashMode;
+@property (nonatomic, readonly) CameraAspectRatio currentAspectRatio;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 @property (nonatomic, readonly) UIImage * _Nullable latestCapturedImage;
 
@@ -51,6 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)switchCamera;
 - (void)switchResolutionMode;
 - (void)switchFlashMode;
+- (void)switchAspectRatio:(CameraAspectRatio)ratio;
 
 // 对焦和曝光
 - (void)focusAtPoint:(CGPoint)screenPoint withPreviewLayer:(AVCaptureVideoPreviewLayer *)previewLayer;
@@ -59,6 +62,9 @@ NS_ASSUME_NONNULL_BEGIN
 // 网格线状态管理
 - (void)toggleGridLines;
 - (BOOL)isGridLinesVisible;
+
+// 比例相关工具方法
+- (CGRect)previewRectForCurrentAspectRatioInViewSize:(CGSize)viewSize;
 
 @end
 

@@ -36,6 +36,13 @@ typedef NS_ENUM(NSInteger, FlashMode) {
     FlashModeOff
 };
 
+// 拍照比例枚举
+typedef NS_ENUM(NSInteger, CameraAspectRatio) {
+    CameraAspectRatio4to3,    // 4:3 传统相机比例
+    CameraAspectRatio1to1,    // 1:1 正方形
+    CameraAspectRatioXpan     // 65:24 超宽比例
+};
+
 // 4800万像素模式
 typedef NS_ENUM(NSInteger, CameraResolutionMode) {
     CameraResolutionModeStandard,    // 标准分辨率
@@ -51,6 +58,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)cameraManager:(CameraManager *)manager didFailWithError:(NSError *)error;
 - (void)cameraManager:(CameraManager *)manager didChangeResolutionMode:(CameraResolutionMode)mode;
 - (void)cameraManager:(CameraManager *)manager didChangeFlashMode:(FlashMode)mode;
+- (void)cameraManager:(CameraManager *)manager didChangeAspectRatio:(CameraAspectRatio)ratio;
 
 @end
 
@@ -68,6 +76,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 @property (nonatomic, readonly) CameraPosition currentPosition;
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readonly) FlashMode currentFlashMode;
+@property (nonatomic, readonly) CameraAspectRatio currentAspectRatio;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 
 // 预览层 - 弱引用，避免循环引用
@@ -81,8 +90,14 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)switchCamera;
 - (void)switchResolutionMode:(CameraResolutionMode)mode;
 - (void)switchFlashMode:(FlashMode)mode;
+- (void)switchAspectRatio:(CameraAspectRatio)ratio;
 - (void)focusAtPoint:(CGPoint)point;
 - (void)setExposureCompensation:(float)value;
+
+// 比例相关工具方法
+- (CGRect)cropRectForAspectRatio:(CameraAspectRatio)ratio inImageSize:(CGSize)imageSize;
+- (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio;
+- (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize;
 
 // 内存管理
 - (void)cleanup;

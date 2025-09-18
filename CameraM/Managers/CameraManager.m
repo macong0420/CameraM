@@ -22,6 +22,7 @@
 @property (nonatomic, readwrite) CameraPosition currentPosition;
 @property (nonatomic, readwrite) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readwrite) FlashMode currentFlashMode;
+@property (nonatomic, readwrite) CameraAspectRatio currentAspectRatio;
 
 // 性能优化 - 队列管理
 @property (nonatomic, strong) dispatch_queue_t sessionQueue;
@@ -55,6 +56,7 @@
     _currentPosition = CameraPositionBack;
     _currentResolutionMode = CameraResolutionModeStandard;
     _currentFlashMode = FlashModeAuto;
+    _currentAspectRatio = CameraAspectRatio4to3; // 默认4:3比例
     
     // 创建专用队列 - 避免主线程阻塞
     _sessionQueue = dispatch_queue_create("com.cameram.session", DISPATCH_QUEUE_SERIAL);
@@ -189,6 +191,122 @@
             [self.delegate cameraManager:self didChangeFlashMode:mode];
         }
     });
+}
+
+- (void)switchAspectRatio:(CameraAspectRatio)ratio {
+    self.currentAspectRatio = ratio;
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeAspectRatio:)]) {
+            [self.delegate cameraManager:self didChangeAspectRatio:ratio];
+        }
+    });
+}
+
+#pragma mark - 比例相关工具方法
+
+- (CGRect)cropRectForAspectRatio:(CameraAspectRatio)ratio inImageSize:(CGSize)imageSize {
+    CGFloat imageWidth = imageSize.width;
+    CGFloat imageHeight = imageSize.height;
+    
+    CGRect cropRect;
+    
+    switch (ratio) {
+        case CameraAspectRatio4to3: {
+            // 4:3 比例
+            CGFloat targetHeight = imageWidth * 4.0 / 3.0;
+            if (targetHeight <= imageHeight) {
+                // 基于宽度计算高度
+                CGFloat yOffset = (imageHeight - targetHeight) / 2.0;
+                cropRect = CGRectMake(0, yOffset, imageWidth, targetHeight);
+            } else {
+                // 基于高度计算宽度
+                CGFloat targetWidth = imageHeight * 3.0 / 4.0;
+                CGFloat xOffset = (imageWidth - targetWidth) / 2.0;
+                cropRect = CGRectMake(xOffset, 0, targetWidth, imageHeight);
+            }
+            break;
+        }
+        case CameraAspectRatio1to1: {
+            // 1:1 正方形比例
+            CGFloat sideLength = MIN(imageWidth, imageHeight);
+            CGFloat xOffset = (imageWidth - sideLength) / 2.0;
+            CGFloat yOffset = (imageHeight - sideLength) / 2.0;
+            cropRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
+            break;
+        }
+        case CameraAspectRatioXpan: {
+            // Xpan 超宽比例 (65:24 ≈ 2.7:1)
+            CGFloat targetHeight = imageWidth / 2.7;
+            if (targetHeight <= imageHeight) {
+                CGFloat yOffset = (imageHeight - targetHeight) / 2.0;
+                cropRect = CGRectMake(0, yOffset, imageWidth, targetHeight);
+            } else {
+                // 如果图像太窄，基于高度计算
+                CGFloat targetWidth = imageHeight * 2.7;
+                CGFloat xOffset = (imageWidth - targetWidth) / 2.0;
+                cropRect = CGRectMake(xOffset, 0, targetWidth, imageHeight);
+            }
+            break;
+        }
+    }
+    
+    return cropRect;
+}
+
+- (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio {
+    if (!image) return nil;
+    
+    CGRect cropRect = [self cropRectForAspectRatio:ratio inImageSize:image.size];
+    
+    // 高性能裁剪 - 使用Core Graphics
+    CGImageRef croppedCGImage = CGImageCreateWithImageInRect(image.CGImage, cropRect);
+    if (!croppedCGImage) return image;
+    
+    UIImage *croppedImage = [UIImage imageWithCGImage:croppedCGImage scale:image.scale orientation:image.imageOrientation];
+    CGImageRelease(croppedCGImage); // 及时释放内存
+    
+    return croppedImage;
+}
+
+- (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize {
+    CGFloat viewWidth = viewSize.width;
+    CGFloat viewHeight = viewSize.height;
+    
+    CGRect previewRect;
+    
+    switch (ratio) {
+        case CameraAspectRatio4to3: {
+            // 4:3 比例在预览中的显示区域
+            CGFloat targetHeight = viewWidth * 4.0 / 3.0;
+            if (targetHeight <= viewHeight) {
+                CGFloat yOffset = (viewHeight - targetHeight) / 2.0;
+                previewRect = CGRectMake(0, yOffset, viewWidth, targetHeight);
+            } else {
+                CGFloat targetWidth = viewHeight * 3.0 / 4.0;
+                CGFloat xOffset = (viewWidth - targetWidth) / 2.0;
+                previewRect = CGRectMake(xOffset, 0, targetWidth, viewHeight);
+            }
+            break;
+        }
+        case CameraAspectRatio1to1: {
+            // 1:1 正方形
+            CGFloat sideLength = MIN(viewWidth, viewHeight);
+            CGFloat xOffset = (viewWidth - sideLength) / 2.0;
+            CGFloat yOffset = (viewHeight - sideLength) / 2.0;
+            previewRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
+            break;
+        }
+        case CameraAspectRatioXpan: {
+            // Xpan 超宽比例
+            CGFloat targetHeight = viewWidth / 2.7;
+            CGFloat yOffset = (viewHeight - targetHeight) / 2.0;
+            previewRect = CGRectMake(0, yOffset, viewWidth, targetHeight);
+            break;
+        }
+    }
+    
+    return previewRect;
 }
 
 - (void)focusAtPoint:(CGPoint)point {
