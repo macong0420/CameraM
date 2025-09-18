@@ -272,36 +272,51 @@
 - (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio {
     if (!image) return nil;
     
-    // 获取图像的实际尺寸（考虑方向）
-    CGSize imageSize = image.size;
-    CGFloat imageWidth = imageSize.width;
-    CGFloat imageHeight = imageSize.height;
-    
     NSLog(@"原始图像信息 - 尺寸: (%.0fx%.0f), 方向: %ld, 比例目标: %ld", 
-          imageWidth, imageHeight, (long)image.imageOrientation, (long)ratio);
+          image.size.width, image.size.height, (long)image.imageOrientation, (long)ratio);
     
-    CGRect cropRect = [self cropRectForAspectRatio:ratio inImageSize:imageSize];
+    // 第一步：将图像标准化为UIImageOrientationUp方向
+    UIImage *normalizedImage = [self normalizeImageOrientation:image];
     
-    // 验证裁剪区域
+    NSLog(@"标准化后图像 - 尺寸: (%.0fx%.0f), 方向: %ld", 
+          normalizedImage.size.width, normalizedImage.size.height, (long)normalizedImage.imageOrientation);
+    
+    // 第二步：在标准化的图像上进行裁剪
+    CGRect cropRect = [self cropRectForAspectRatio:ratio inImageSize:normalizedImage.size];
+    
     NSLog(@"计算的裁剪区域: (%.0f, %.0f, %.0f, %.0f)", 
           cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height);
     
-    // 高性能裁剪 - 使用Core Graphics
-    CGImageRef croppedCGImage = CGImageCreateWithImageInRect(image.CGImage, cropRect);
+    // 第三步：执行裁剪
+    CGImageRef croppedCGImage = CGImageCreateWithImageInRect(normalizedImage.CGImage, cropRect);
     if (!croppedCGImage) {
         NSLog(@"裁剪失败，返回原图");
         return image;
     }
     
-    UIImage *croppedImage = [UIImage imageWithCGImage:croppedCGImage scale:image.scale orientation:image.imageOrientation];
-    CGImageRelease(croppedCGImage); // 及时释放内存
+    UIImage *croppedImage = [UIImage imageWithCGImage:croppedCGImage];
+    CGImageRelease(croppedCGImage);
     
-    // 验证结果
-    NSLog(@"裁剪结果 - 尺寸: (%.0fx%.0f), 实际比例: %.2f:1", 
+    NSLog(@"最终裁剪结果 - 尺寸: (%.0fx%.0f), 实际比例: %.2f:1", 
           croppedImage.size.width, croppedImage.size.height, 
           croppedImage.size.width / croppedImage.size.height);
     
     return croppedImage;
+}
+
+// 新增方法：标准化图像方向
+- (UIImage *)normalizeImageOrientation:(UIImage *)image {
+    if (image.imageOrientation == UIImageOrientationUp) {
+        return image; // 已经是标准方向
+    }
+    
+    CGSize size = image.size;
+    UIGraphicsBeginImageContextWithOptions(size, NO, image.scale);
+    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    UIImage *normalizedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return normalizedImage ? normalizedImage : image;
 }
 
 - (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize {
