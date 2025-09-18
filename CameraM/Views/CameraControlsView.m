@@ -6,6 +6,7 @@
 //
 
 #import "CameraControlsView.h"
+#import "../Managers/CameraManager.h"
 
 @interface CameraControlsView ()
 

@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import "CameraManager.h"
+#import "../Managers/CameraManager.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
