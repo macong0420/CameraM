@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 // 前向声明，引用CameraManager中的定义
 @class CameraManager;
 typedef NS_ENUM(NSInteger, CameraAspectRatio);
+typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 
 // UI事件代理协议
 @protocol CameraControlsDelegate <NSObject>
