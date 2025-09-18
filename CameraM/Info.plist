@@ -2,6 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- 相机权限 -->
+	<key>NSCameraUsageDescription</key>
+	<string>此应用需要访问相机来拍摄照片和录制视频</string>
+	
+	<!-- 相册权限 -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>此应用需要访问相册来保存拍摄的照片和视频</string>
+	
+	<!-- 麦克风权限 -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>此应用需要访问麦克风来录制带音频的视频</string>
+	
+	<!-- 位置权限（用于GPS水印） -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>此应用需要访问位置信息来为照片添加地理位置水印</string>
+	
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
