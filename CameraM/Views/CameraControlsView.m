@@ -849,15 +849,31 @@
         [self.flashButton.widthAnchor constraintEqualToConstant:40],
         [self.flashButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.gridButton.leadingAnchor constraintEqualToAnchor:self.flashButton.trailingAnchor constant:15],
+        [self.gridButton.leadingAnchor constraintEqualToAnchor:self.flashButton.trailingAnchor constant:10],
         [self.gridButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.gridButton.widthAnchor constraintEqualToConstant:40],
         [self.gridButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.aspectRatioButton.leadingAnchor constraintEqualToAnchor:self.gridButton.trailingAnchor constant:15],
+        [self.aspectRatioButton.leadingAnchor constraintEqualToAnchor:self.gridButton.trailingAnchor constant:10],
         [self.aspectRatioButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.aspectRatioButton.widthAnchor constraintEqualToConstant:45],
-        [self.aspectRatioButton.heightAnchor constraintEqualToConstant:30]
+        [self.aspectRatioButton.heightAnchor constraintEqualToConstant:30],
+        
+        // 右侧按钮（从右往左排列）
+        [self.settingsButton.trailingAnchor constraintEqualToAnchor:self.topControlsView.trailingAnchor constant:-20],
+        [self.settingsButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.settingsButton.widthAnchor constraintEqualToConstant:40],
+        [self.settingsButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.switchCameraButton.trailingAnchor constraintEqualToAnchor:self.settingsButton.leadingAnchor constant:-10],
+        [self.switchCameraButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
+        [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.frameWatermarkButton.trailingAnchor constraintEqualToAnchor:self.switchCameraButton.leadingAnchor constant:-10],
+        [self.frameWatermarkButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
+        [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40]
     ]];
     
     // 底部控制栏
@@ -873,67 +889,67 @@
 }
 
 - (void)setupLandscapeLayout {
-    // 设置横屏布局
+    // 横屏布局：保持顶部和底部横向排列，不改为纵向
     UILayoutGuide *safeArea = self.safeAreaLayoutGuide;
-    CGFloat rightPanelWidth = 80;
     
     NSMutableArray *constraints = [NSMutableArray array];
     
-    // 预览容器占据左侧
+    // 预览容器 - 全屏（和竖屏一样）
     [constraints addObjectsFromArray:@[
         [self.previewContainer.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.previewContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-rightPanelWidth],
-        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-100]
+        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
     ]];
     
-    // 右侧控制面板
+    // 顶部控制栏 - 保持横向排列
     [constraints addObjectsFromArray:@[
-        [self.topControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.topControlsView.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
-        [self.topControlsView.widthAnchor constraintEqualToConstant:rightPanelWidth],
-        [self.topControlsView.heightAnchor constraintEqualToConstant:400]
+        [self.topControlsView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
+        [self.topControlsView.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
+        [self.topControlsView.heightAnchor constraintEqualToConstant:60]
     ]];
     
-    // 右侧按钮垂直排列
+    // 顶部按钮横向排列（横屏时适当调整间距）
     [constraints addObjectsFromArray:@[
-        [self.flashButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-        [self.flashButton.topAnchor constraintEqualToAnchor:self.topControlsView.topAnchor constant:20],
+        [self.flashButton.leadingAnchor constraintEqualToAnchor:self.topControlsView.leadingAnchor constant:20],
+        [self.flashButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.flashButton.widthAnchor constraintEqualToConstant:40],
         [self.flashButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.gridButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-        [self.gridButton.topAnchor constraintEqualToAnchor:self.flashButton.bottomAnchor constant:20],
+        [self.gridButton.leadingAnchor constraintEqualToAnchor:self.flashButton.trailingAnchor constant:20],
+        [self.gridButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.gridButton.widthAnchor constraintEqualToConstant:40],
         [self.gridButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.aspectRatioButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-        [self.aspectRatioButton.topAnchor constraintEqualToAnchor:self.gridButton.bottomAnchor constant:20],
+        [self.aspectRatioButton.leadingAnchor constraintEqualToAnchor:self.gridButton.trailingAnchor constant:20],
+        [self.aspectRatioButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.aspectRatioButton.widthAnchor constraintEqualToConstant:45],
         [self.aspectRatioButton.heightAnchor constraintEqualToConstant:30],
         
-        [self.frameWatermarkButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-        [self.frameWatermarkButton.topAnchor constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor constant:20],
-        [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
-        [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40],
+        // 右侧按钮
+        [self.settingsButton.trailingAnchor constraintEqualToAnchor:self.topControlsView.trailingAnchor constant:-20],
+        [self.settingsButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.settingsButton.widthAnchor constraintEqualToConstant:40],
+        [self.settingsButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.switchCameraButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-        [self.switchCameraButton.topAnchor constraintEqualToAnchor:self.frameWatermarkButton.bottomAnchor constant:20],
+        [self.switchCameraButton.trailingAnchor constraintEqualToAnchor:self.settingsButton.leadingAnchor constant:-20],
+        [self.switchCameraButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
         [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
         [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
         
-        [self.settingsButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-        [self.settingsButton.topAnchor constraintEqualToAnchor:self.switchCameraButton.bottomAnchor constant:20],
-        [self.settingsButton.widthAnchor constraintEqualToConstant:40],
-        [self.settingsButton.heightAnchor constraintEqualToConstant:40]
+        [self.frameWatermarkButton.trailingAnchor constraintEqualToAnchor:self.switchCameraButton.leadingAnchor constant:-20],
+        [self.frameWatermarkButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
+        [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40]
     ]];
     
-    // 底部控制栏（横屏时缩小）
+    // 底部控制栏 - 保持横向排列
     [constraints addObjectsFromArray:@[
         [self.bottomControlsView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
-        [self.bottomControlsView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-        [self.bottomControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-rightPanelWidth],
-        [self.bottomControlsView.heightAnchor constraintEqualToConstant:100]
+        [self.bottomControlsView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
+        [self.bottomControlsView.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
+        [self.bottomControlsView.heightAnchor constraintEqualToConstant:100] // 横屏时稍微缩小
     ]];
     
     self.landscapeConstraints = [constraints copy];
