@@ -78,7 +78,7 @@
     [self setupFocusIndicator];
     [self setupAspectRatioButton];
     [self setupAspectRatioMask];
-    [self setupConstraints];
+    [self setupPortraitLayout]; // 默认竖屏布局
 }
 
 - (void)setupPreviewContainer {
@@ -800,61 +800,135 @@
 }
 
 - (void)switchConstraintsForOrientation:(CameraDeviceOrientation)orientation {
-    // 禁用当前约束
+    // 清理之前的约束
     if (self.portraitConstraints) {
         [NSLayoutConstraint deactivateConstraints:self.portraitConstraints];
+        self.portraitConstraints = nil;
     }
     if (self.landscapeConstraints) {
         [NSLayoutConstraint deactivateConstraints:self.landscapeConstraints];
+        self.landscapeConstraints = nil;
     }
     
+    // 移除所有子视图的约束，重新布局
+    [self removeConstraints:self.constraints];
+    
     if (orientation == CameraDeviceOrientationPortrait) {
-        // 激活竖屏约束
-        if (self.portraitConstraints) {
-            [NSLayoutConstraint activateConstraints:self.portraitConstraints];
-        }
-        
-        // 恢复顶部和底部控制栏的正常显示
-        self.topControlsView.hidden = NO;
-        self.bottomControlsView.hidden = NO;
-        self.professionalControlsView.hidden = NO;
-        
+        [self setupPortraitLayout];
     } else {
-        // 激活横屏约束
-        if (!self.landscapeConstraints) {
-            [self createLandscapeConstraints];
-        }
-        [NSLayoutConstraint activateConstraints:self.landscapeConstraints];
-        
-        // 在横屏时重新排列控制元素
-        [self rearrangeControlsForLandscape];
+        [self setupLandscapeLayout];
     }
 }
 
-- (void)createLandscapeConstraints {
-    NSMutableArray *constraints = [NSMutableArray array];
+- (void)setupPortraitLayout {
+    // 重新设置竖屏布局（使用原有的约束逻辑）
     UILayoutGuide *safeArea = self.safeAreaLayoutGuide;
     
-    // 横屏时的布局：右侧垂直控制栏
+    NSMutableArray *constraints = [NSMutableArray array];
+    
+    // 预览容器 - 全屏
+    [constraints addObjectsFromArray:@[
+        [self.previewContainer.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.previewContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
+    ]];
+    
+    // 顶部控制栏
+    [constraints addObjectsFromArray:@[
+        [self.topControlsView.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
+        [self.topControlsView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.topControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.topControlsView.heightAnchor constraintEqualToConstant:60]
+    ]];
+    
+    // 顶部按钮水平排列
+    [constraints addObjectsFromArray:@[
+        [self.flashButton.leadingAnchor constraintEqualToAnchor:self.topControlsView.leadingAnchor constant:20],
+        [self.flashButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.flashButton.widthAnchor constraintEqualToConstant:40],
+        [self.flashButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.gridButton.leadingAnchor constraintEqualToAnchor:self.flashButton.trailingAnchor constant:15],
+        [self.gridButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.gridButton.widthAnchor constraintEqualToConstant:40],
+        [self.gridButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.aspectRatioButton.leadingAnchor constraintEqualToAnchor:self.gridButton.trailingAnchor constant:15],
+        [self.aspectRatioButton.centerYAnchor constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+        [self.aspectRatioButton.widthAnchor constraintEqualToConstant:45],
+        [self.aspectRatioButton.heightAnchor constraintEqualToConstant:30]
+    ]];
+    
+    // 底部控制栏
+    [constraints addObjectsFromArray:@[
+        [self.bottomControlsView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+        [self.bottomControlsView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.bottomControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.bottomControlsView.heightAnchor constraintEqualToConstant:120]
+    ]];
+    
+    self.portraitConstraints = [constraints copy];
+    [NSLayoutConstraint activateConstraints:self.portraitConstraints];
+}
+
+- (void)setupLandscapeLayout {
+    // 设置横屏布局
+    UILayoutGuide *safeArea = self.safeAreaLayoutGuide;
     CGFloat rightPanelWidth = 80;
     
-    // 预览容器占据左侧大部分区域
+    NSMutableArray *constraints = [NSMutableArray array];
+    
+    // 预览容器占据左侧
     [constraints addObjectsFromArray:@[
         [self.previewContainer.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.previewContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-rightPanelWidth],
-        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-100] // 为底部控制留空间
+        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-100]
     ]];
     
-    // 右侧控制栏重新布局
+    // 右侧控制面板
     [constraints addObjectsFromArray:@[
         [self.topControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.topControlsView.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
         [self.topControlsView.widthAnchor constraintEqualToConstant:rightPanelWidth],
-        [self.topControlsView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-100]
+        [self.topControlsView.heightAnchor constraintEqualToConstant:400]
     ]];
     
-    // 底部控制栏横屏布局
+    // 右侧按钮垂直排列
+    [constraints addObjectsFromArray:@[
+        [self.flashButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+        [self.flashButton.topAnchor constraintEqualToAnchor:self.topControlsView.topAnchor constant:20],
+        [self.flashButton.widthAnchor constraintEqualToConstant:40],
+        [self.flashButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.gridButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+        [self.gridButton.topAnchor constraintEqualToAnchor:self.flashButton.bottomAnchor constant:20],
+        [self.gridButton.widthAnchor constraintEqualToConstant:40],
+        [self.gridButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.aspectRatioButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+        [self.aspectRatioButton.topAnchor constraintEqualToAnchor:self.gridButton.bottomAnchor constant:20],
+        [self.aspectRatioButton.widthAnchor constraintEqualToConstant:45],
+        [self.aspectRatioButton.heightAnchor constraintEqualToConstant:30],
+        
+        [self.frameWatermarkButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+        [self.frameWatermarkButton.topAnchor constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor constant:20],
+        [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
+        [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.switchCameraButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+        [self.switchCameraButton.topAnchor constraintEqualToAnchor:self.frameWatermarkButton.bottomAnchor constant:20],
+        [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
+        [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
+        
+        [self.settingsButton.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
+        [self.settingsButton.topAnchor constraintEqualToAnchor:self.switchCameraButton.bottomAnchor constant:20],
+        [self.settingsButton.widthAnchor constraintEqualToConstant:40],
+        [self.settingsButton.heightAnchor constraintEqualToConstant:40]
+    ]];
+    
+    // 底部控制栏（横屏时缩小）
     [constraints addObjectsFromArray:@[
         [self.bottomControlsView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
         [self.bottomControlsView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
@@ -863,29 +937,7 @@
     ]];
     
     self.landscapeConstraints = [constraints copy];
-}
-
-- (void)rearrangeControlsForLandscape {
-    // 在横屏时重新排列顶部控制栏为垂直布局
-    NSArray *buttons = @[self.flashButton, self.gridButton, self.aspectRatioButton, 
-                        self.frameWatermarkButton, self.switchCameraButton, self.settingsButton];
-    
-    for (NSInteger i = 0; i < buttons.count; i++) {
-        UIButton *button = buttons[i];
-        
-        // 移除现有约束
-        [button removeFromSuperview];
-        [self.topControlsView addSubview:button];
-        button.translatesAutoresizingMaskIntoConstraints = NO;
-        
-        // 垂直排列约束
-        [NSLayoutConstraint activateConstraints:@[
-            [button.centerXAnchor constraintEqualToAnchor:self.topControlsView.centerXAnchor],
-            [button.topAnchor constraintEqualToAnchor:self.topControlsView.topAnchor constant:20 + i * 60],
-            [button.widthAnchor constraintEqualToConstant:40],
-            [button.heightAnchor constraintEqualToConstant:40]
-        ]];
-    }
+    [NSLayoutConstraint activateConstraints:self.landscapeConstraints];
 }
 
 - (void)updateAspectRatioPopoverConstraintsForOrientation:(CameraDeviceOrientation)orientation {
