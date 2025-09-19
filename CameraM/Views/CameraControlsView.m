@@ -886,6 +886,68 @@
     
     self.portraitConstraints = [constraints copy];
     [NSLayoutConstraint activateConstraints:self.portraitConstraints];
+    
+    // 补充：底部控制元素约束（竖屏时也需要）
+    NSMutableArray *bottomConstraints = [NSMutableArray array];
+    [bottomConstraints addObjectsFromArray:@[
+        // 模式选择器
+        [self.modeSelector.bottomAnchor constraintEqualToAnchor:self.captureButton.topAnchor constant:-20],
+        [self.modeSelector.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
+        [self.modeSelector.widthAnchor constraintEqualToConstant:300],
+        [self.modeSelector.heightAnchor constraintEqualToConstant:30],
+        
+        // 相册按钮
+        [self.galleryButton.leadingAnchor constraintEqualToAnchor:self.bottomControlsView.leadingAnchor constant:30],
+        [self.galleryButton.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.bottomAnchor constant:-20],
+        [self.galleryButton.widthAnchor constraintEqualToConstant:50],
+        [self.galleryButton.heightAnchor constraintEqualToConstant:50],
+        
+        // 拍摄按钮（居中）
+        [self.captureButton.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
+        [self.captureButton.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.bottomAnchor constant:-20],
+        [self.captureButton.widthAnchor constraintEqualToConstant:70],
+        [self.captureButton.heightAnchor constraintEqualToConstant:70],
+        
+        // 滤镜按钮
+        [self.filterButton.trailingAnchor constraintEqualToAnchor:self.bottomControlsView.trailingAnchor constant:-30],
+        [self.filterButton.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.bottomAnchor constant:-20],
+        [self.filterButton.widthAnchor constraintEqualToConstant:50],
+        [self.filterButton.heightAnchor constraintEqualToConstant:50],
+        
+        // 专业控制区域
+        [self.professionalControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.professionalControlsView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+        [self.professionalControlsView.widthAnchor constraintEqualToConstant:50],
+        [self.professionalControlsView.heightAnchor constraintEqualToConstant:200],
+        
+        [self.exposureSlider.centerXAnchor constraintEqualToAnchor:self.professionalControlsView.centerXAnchor],
+        [self.exposureSlider.centerYAnchor constraintEqualToAnchor:self.professionalControlsView.centerYAnchor],
+        [self.exposureSlider.widthAnchor constraintEqualToConstant:150],
+        
+        // 状态指示器
+        [self.resolutionModeLabel.topAnchor constraintEqualToAnchor:self.topControlsView.bottomAnchor constant:10],
+        [self.resolutionModeLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+        [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:50],
+        [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:20],
+        
+        [self.flashModeLabel.topAnchor constraintEqualToAnchor:self.resolutionModeLabel.bottomAnchor constant:5],
+        [self.flashModeLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+        [self.flashModeLabel.widthAnchor constraintEqualToConstant:50],
+        [self.flashModeLabel.heightAnchor constraintEqualToConstant:20],
+        
+        [self.frameWatermarkIndicator.topAnchor constraintEqualToAnchor:self.frameWatermarkButton.topAnchor constant:5],
+        [self.frameWatermarkIndicator.trailingAnchor constraintEqualToAnchor:self.frameWatermarkButton.trailingAnchor constant:-5],
+        [self.frameWatermarkIndicator.widthAnchor constraintEqualToConstant:6],
+        [self.frameWatermarkIndicator.heightAnchor constraintEqualToConstant:6],
+        
+        // 网格线约束
+        [self.gridLinesView.topAnchor constraintEqualToAnchor:self.topControlsView.bottomAnchor],
+        [self.gridLinesView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.gridLinesView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.gridLinesView.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor]
+    ]];
+    
+    [NSLayoutConstraint activateConstraints:bottomConstraints];
 }
 
 - (void)setupLandscapeLayout {
@@ -950,6 +1012,47 @@
         [self.bottomControlsView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
         [self.bottomControlsView.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
         [self.bottomControlsView.heightAnchor constraintEqualToConstant:100] // 横屏时稍微缩小
+    ]];
+    
+    // 底部控制元素约束（和竖屏保持一致）
+    [constraints addObjectsFromArray:@[
+        // 模式选择器
+        [self.modeSelector.bottomAnchor constraintEqualToAnchor:self.captureButton.topAnchor constant:-15],
+        [self.modeSelector.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
+        [self.modeSelector.widthAnchor constraintEqualToConstant:300],
+        [self.modeSelector.heightAnchor constraintEqualToConstant:30],
+        
+        // 相册按钮
+        [self.galleryButton.leadingAnchor constraintEqualToAnchor:self.bottomControlsView.leadingAnchor constant:30],
+        [self.galleryButton.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.bottomAnchor constant:-15],
+        [self.galleryButton.widthAnchor constraintEqualToConstant:50],
+        [self.galleryButton.heightAnchor constraintEqualToConstant:50],
+        
+        // 拍摄按钮（居中）
+        [self.captureButton.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
+        [self.captureButton.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.bottomAnchor constant:-15],
+        [self.captureButton.widthAnchor constraintEqualToConstant:70],
+        [self.captureButton.heightAnchor constraintEqualToConstant:70],
+        
+        // 滤镜按钮
+        [self.filterButton.trailingAnchor constraintEqualToAnchor:self.bottomControlsView.trailingAnchor constant:-30],
+        [self.filterButton.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.bottomAnchor constant:-15],
+        [self.filterButton.widthAnchor constraintEqualToConstant:50],
+        [self.filterButton.heightAnchor constraintEqualToConstant:50]
+    ]];
+    
+    // 专业控制区域（横屏时保持右侧）
+    [constraints addObjectsFromArray:@[
+        [self.professionalControlsView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.professionalControlsView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+        [self.professionalControlsView.widthAnchor constraintEqualToConstant:50],
+        [self.professionalControlsView.heightAnchor constraintEqualToConstant:200]
+    ]];
+    
+    [constraints addObjectsFromArray:@[
+        [self.exposureSlider.centerXAnchor constraintEqualToAnchor:self.professionalControlsView.centerXAnchor],
+        [self.exposureSlider.centerYAnchor constraintEqualToAnchor:self.professionalControlsView.centerYAnchor],
+        [self.exposureSlider.widthAnchor constraintEqualToConstant:150]
     ]];
     
     self.landscapeConstraints = [constraints copy];
