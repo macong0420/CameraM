@@ -476,6 +476,25 @@
 
     self.preferenceControl.selectedSegmentIndex = self.internalConfiguration.preference;
     self.preferenceControl.enabled = enabled && self.preferenceControl.userInteractionEnabled;
+    
+    // 确保宝丽来模式下preferenceOptions与preference同步
+    NSString *currentFrameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    if ([currentFrameId isEqualToString:@"frame.polaroid"]) {
+        switch (self.internalConfiguration.preference) {
+            case CMWatermarkPreferenceOff:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsNone;
+                break;
+            case CMWatermarkPreferenceExposure:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsExposure;
+                break;
+            case CMWatermarkPreferenceCoordinates:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsCoordinates;
+                break;
+            case CMWatermarkPreferenceDate:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsDate;
+                break;
+        }
+    }
 
     self.placementControl.selectedSegmentIndex = self.internalConfiguration.placement;
     self.placementControl.enabled = enabled;
@@ -589,6 +608,27 @@
 
 - (void)handlePreferenceChanged:(UISegmentedControl *)sender {
     self.internalConfiguration.preference = (CMWatermarkPreference)sender.selectedSegmentIndex;
+    
+    // 对于宝丽来模式，同时更新preferenceOptions来支持多选显示
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    if ([frameId isEqualToString:@"frame.polaroid"]) {
+        // 宝丽来模式：将单选preference转换为对应的preferenceOptions
+        switch (self.internalConfiguration.preference) {
+            case CMWatermarkPreferenceOff:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsNone;
+                break;
+            case CMWatermarkPreferenceExposure:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsExposure;
+                break;
+            case CMWatermarkPreferenceCoordinates:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsCoordinates;
+                break;
+            case CMWatermarkPreferenceDate:
+                self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsDate;
+                break;
+        }
+    }
+    
     [self notifyUpdate];
 }
 
