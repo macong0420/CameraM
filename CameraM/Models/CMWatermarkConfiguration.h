@@ -18,6 +18,13 @@ typedef NS_ENUM(NSInteger, CMWatermarkPreference) {
     CMWatermarkPreferenceDate
 };
 
+typedef NS_OPTIONS(NSInteger, CMWatermarkPreferenceOptions) {
+    CMWatermarkPreferenceOptionsNone = 0,
+    CMWatermarkPreferenceOptionsExposure = 1 << 0,
+    CMWatermarkPreferenceOptionsCoordinates = 1 << 1,
+    CMWatermarkPreferenceOptionsDate = 1 << 2
+};
+
 typedef NS_ENUM(NSInteger, CMWatermarkPlacement) {
     CMWatermarkPlacementBottom,
     CMWatermarkPlacementMiddle
@@ -32,6 +39,7 @@ typedef NS_ENUM(NSInteger, CMWatermarkPlacement) {
 @property (nonatomic, assign, getter=isCaptionEnabled) BOOL captionEnabled;
 @property (nonatomic, copy) NSString *captionText;
 @property (nonatomic, assign) CMWatermarkPreference preference;
+@property (nonatomic, assign) CMWatermarkPreferenceOptions preferenceOptions;
 @property (nonatomic, assign) CMWatermarkPlacement placement;
 @property (nonatomic, assign, getter=isSignatureEnabled) BOOL signatureEnabled;
 @property (nonatomic, copy) NSString *signatureText;

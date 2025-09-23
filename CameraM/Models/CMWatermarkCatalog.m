@@ -137,15 +137,15 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
 
         CMWatermarkFrameDescriptor *polaroid = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierPolaroid
                                                                                         displayName:@"Polaroid"
-                                                                                   overlayAssetName:@"baolilai"
+                                                                                   overlayAssetName:nil
                                                                                 backgroundAssetName:nil
-                                                                                bottomExpansionRatio:0.18
+                                                                                bottomExpansionRatio:0.1875
                                                                                     previewAssetName:@"baolilai"
-                                                                                  overlayInsetsRatio:0.08
-                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.09, 0.08, 0.36, 0.08)
-                                                                             photoContentScale:CGSizeMake(0.88, 0.68)
-                                                                            photoContentOffset:CGPointMake(0.06, 0.08)
-                                                                         photoCornerRadiusRatio:0.012];
+                                                                                  overlayInsetsRatio:0.0
+                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.02, 0.02, 0.2075, 0.02)
+                                                                             photoContentScale:CGSizeMake(0.96, 0.79)
+                                                                            photoContentOffset:CGPointMake(0.02, 0.02)
+                                                                         photoCornerRadiusRatio:0.008];
 
         CMWatermarkFrameDescriptor *minimal = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierMinimal
                                                                                         displayName:@"Minimal"

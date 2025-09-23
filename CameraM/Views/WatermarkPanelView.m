@@ -110,6 +110,7 @@
 @property (nonatomic, strong) UILabel *frameSectionLabel;
 @property (nonatomic, strong) UIView *preferenceRow;
 @property (nonatomic, strong) UIView *signatureRow;
+@property (nonatomic, strong) UIView *placementRow;
 
 @property (nonatomic, copy) NSArray<CMWatermarkFrameDescriptor *> *frameDescriptors;
 @property (nonatomic, copy) NSArray<CMWatermarkLogoDescriptor *> *logoDescriptors;
@@ -137,7 +138,7 @@
         [self setupFrameSection];
         [self setupLogoSection];
         [self setupTextSection];
-        [self setupSignatureSection];
+        // [self setupSignatureSection]; // 署名功能已删除
         [self setupPreferenceSection];
         [self setupPlacementSection];
         (void)[self updateUIFromConfigurationAnimated:NO];
@@ -352,6 +353,7 @@
         [self.placementControl addTarget:self action:@selector(handlePlacementChanged:) forControlEvents:UIControlEventValueChanged];
         [container addArrangedSubview:self.placementControl];
     }];
+    self.placementRow = row;
     [self.contentStack addArrangedSubview:row];
 }
 
@@ -467,9 +469,10 @@
     self.captionField.text = self.internalConfiguration.captionText;
     self.captionField.enabled = self.internalConfiguration.isCaptionEnabled && enabled;
 
-    self.signatureSwitch.on = self.internalConfiguration.isSignatureEnabled;
-    self.signatureField.text = self.internalConfiguration.signatureText;
-    self.signatureField.enabled = self.internalConfiguration.isSignatureEnabled && enabled;
+    // 署名功能已删除
+    // self.signatureSwitch.on = self.internalConfiguration.isSignatureEnabled;
+    // self.signatureField.text = self.internalConfiguration.signatureText;
+    // self.signatureField.enabled = self.internalConfiguration.isSignatureEnabled && enabled;
 
     self.preferenceControl.selectedSegmentIndex = self.internalConfiguration.preference;
     self.preferenceControl.enabled = enabled && self.preferenceControl.userInteractionEnabled;
@@ -522,25 +525,37 @@
         self.preferenceControl.selectedSegmentIndex = enforcedPreference;
     }
 
-    BOOL allowsSignature = descriptor ? descriptor.allowsSignatureEditing : YES;
-    if (self.signatureRow) {
-        self.signatureRow.hidden = !allowsSignature;
-        self.signatureRow.alpha = allowsSignature ? (panelEnabled ? 1.0 : 0.35) : 0.0;
+    // 署名功能已删除
+    // BOOL allowsSignature = descriptor ? descriptor.allowsSignatureEditing : YES;
+    // if (self.signatureRow) {
+    //     self.signatureRow.hidden = !allowsSignature;
+    //     self.signatureRow.alpha = allowsSignature ? (panelEnabled ? 1.0 : 0.35) : 0.0;
+    // }
+    // if (self.signatureSwitch) {
+    //     self.signatureSwitch.userInteractionEnabled = allowsSignature && panelEnabled;
+    //     self.signatureSwitch.enabled = allowsSignature && panelEnabled;
+    // }
+    // if (self.signatureField) {
+    //     self.signatureField.userInteractionEnabled = allowsSignature && panelEnabled;
+    // }
+    // if (!allowsSignature) {
+    //     BOOL hadSignature = self.internalConfiguration.isSignatureEnabled || self.internalConfiguration.signatureText.length > 0;
+    //     if (hadSignature) {
+    //         self.internalConfiguration.signatureEnabled = NO;
+    //         self.internalConfiguration.signatureText = @"";
+    //         configurationChanged = YES;
+    //     }
+    // }
+    
+    // 宝丽来模式不允许位置设置
+    BOOL allowsPlacement = !(descriptor && [descriptor.identifier isEqualToString:@"frame.polaroid"]);
+    if (self.placementRow) {
+        self.placementRow.hidden = !allowsPlacement;
+        self.placementRow.alpha = allowsPlacement ? (panelEnabled ? 1.0 : 0.35) : 0.0;
     }
-    if (self.signatureSwitch) {
-        self.signatureSwitch.userInteractionEnabled = allowsSignature && panelEnabled;
-        self.signatureSwitch.enabled = allowsSignature && panelEnabled;
-    }
-    if (self.signatureField) {
-        self.signatureField.userInteractionEnabled = allowsSignature && panelEnabled;
-    }
-    if (!allowsSignature) {
-        BOOL hadSignature = self.internalConfiguration.isSignatureEnabled || self.internalConfiguration.signatureText.length > 0;
-        if (hadSignature) {
-            self.internalConfiguration.signatureEnabled = NO;
-            self.internalConfiguration.signatureText = @"";
-            configurationChanged = YES;
-        }
+    if (self.placementControl) {
+        self.placementControl.userInteractionEnabled = allowsPlacement && panelEnabled;
+        self.placementControl.enabled = allowsPlacement && panelEnabled;
     }
 
     return configurationChanged;

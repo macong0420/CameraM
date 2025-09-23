@@ -24,6 +24,7 @@
         _captionEnabled = YES;
         _captionText = @"Mr.C | PHOTOGRAPHY 2025";
         _preference = CMWatermarkPreferenceExposure;
+        _preferenceOptions = CMWatermarkPreferenceOptionsExposure;
         _placement = CMWatermarkPlacementBottom;
         _signatureEnabled = NO;
         _signatureText = @"";
@@ -45,6 +46,7 @@
     copy.captionEnabled = self.captionEnabled;
     copy.captionText = [self.captionText copy];
     copy.preference = self.preference;
+    copy.preferenceOptions = self.preferenceOptions;
     copy.placement = self.placement;
     copy.signatureEnabled = self.signatureEnabled;
     copy.signatureText = [self.signatureText copy];
@@ -60,6 +62,7 @@
     [coder encodeBool:self.captionEnabled forKey:@"captionEnabled"];
     [coder encodeObject:self.captionText forKey:@"captionText"];
     [coder encodeInteger:self.preference forKey:@"preference"];
+    [coder encodeInteger:self.preferenceOptions forKey:@"preferenceOptions"];
     [coder encodeInteger:self.placement forKey:@"placement"];
     [coder encodeBool:self.signatureEnabled forKey:@"signatureEnabled"];
     [coder encodeObject:self.signatureText forKey:@"signatureText"];
@@ -83,6 +86,10 @@
         _captionEnabled = hasCaptionFlag ? [coder decodeBoolForKey:@"captionEnabled"] : YES;
         _captionText = decodedCaption.length ? [decodedCaption copy] : @"Mr.C | PHOTOGRAPHY 2025";
         _preference = (CMWatermarkPreference)[coder decodeIntegerForKey:@"preference"];
+        _preferenceOptions = (CMWatermarkPreferenceOptions)[coder decodeIntegerForKey:@"preferenceOptions"];
+        if (_preferenceOptions == 0) {
+            _preferenceOptions = CMWatermarkPreferenceOptionsExposure; // 默认值兼容旧版本
+        }
         _placement = (CMWatermarkPlacement)[coder decodeIntegerForKey:@"placement"];
         _signatureEnabled = [coder decodeBoolForKey:@"signatureEnabled"];
         _signatureText = decodedSignature.length ? [decodedSignature copy] : @"";

@@ -78,8 +78,9 @@
             CGContextRef ctx = context.CGContext;
             CGContextSaveGState(ctx);
             
-            // 对于Studio模式，使用白色背景，否则使用黑色
-            if ([frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
+            // 对于Studio模式和Polaroid模式，使用白色背景，否则使用黑色
+            if ([frameDescriptor.identifier isEqualToString:@"frame.studio"] || 
+                [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
                 CGContextSetFillColorWithColor(ctx, [UIColor whiteColor].CGColor);
             } else {
                 CGContextSetFillColorWithColor(ctx, [UIColor blackColor].CGColor);
@@ -191,6 +192,12 @@
                     }
                 }
                 
+            } else if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] && bottomPadding > 0.0) {
+                // Polaroid模式使用白色背景
+                CGRect whiteBackgroundRect = CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
+                [[UIColor whiteColor] setFill];
+                UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
+                
             } else if (frameDescriptor.backgroundAssetName.length > 0 && bottomPadding > 0.0) {
                 // 其他相框模式的原有逻辑
                 UIImage *background = [UIImage imageNamed:frameDescriptor.backgroundAssetName];
@@ -266,9 +273,10 @@
     CGFloat cursorX = contentRect.origin.x + horizontalPadding;
     CGFloat contentCenterY = CGRectGetMidY(contentRect);
 
-    // Studio模式不显示logo
+    // Studio模式和Polaroid模式不在此处显示logo
     if (logoDescriptor && logoDescriptor.assetName.length > 0 && 
-        !(frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"])) {
+        !(frameDescriptor && ([frameDescriptor.identifier isEqualToString:@"frame.studio"] || 
+                             [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]))) {
         UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
         if (logoImage) {
             CGFloat maxLogoHeight = MIN(contentRect.size.height * 0.6, 140.0);
@@ -308,10 +316,11 @@
         NSParagraphStyleAttributeName: captionParagraph
     };
 
-    // Studio模式不显示caption文字
+    // Studio模式和Polaroid模式不在此处显示caption文字
     NSString *captionText = @"";
     CGRect captionRect = CGRectZero;
-    if (frameDescriptor && ![frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
+    if (frameDescriptor && ![frameDescriptor.identifier isEqualToString:@"frame.studio"] && 
+        ![frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
         captionText = (configuration.isCaptionEnabled && configuration.captionText.length) ? configuration.captionText : @"";
         captionRect = CGRectMake(cursorX, contentCenterY - captionFont.lineHeight * 0.6, availableWidth, captionFont.lineHeight);
         if (captionText.length > 0) {
@@ -326,6 +335,14 @@
             [self drawStudioParametersInRect:contentRect 
                                 detailString:detailString 
                                   canvasSize:canvasSize];
+        } else if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
+            // Polaroid模式使用3行布局：logo, 文字, 参数
+            [self drawPolaroidLayoutInRect:contentRect
+                            configuration:configuration
+                             logoDescriptor:logoDescriptor
+                               detailString:detailString
+                                 canvasSize:canvasSize
+                        horizontalPadding:horizontalPadding];
         } else {
             // 其他相框模式使用原有样式
             UIFont *detailFont = [UIFont systemFontOfSize:baseFontSize * 0.55 weight:UIFontWeightMedium];
@@ -344,28 +361,57 @@
         }
     }
 
-    // Studio模式不显示signature
-    if (configuration.isSignatureEnabled && configuration.signatureText.length > 0 &&
-        !(frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"])) {
-        UIFont *signatureFont = [UIFont italicSystemFontOfSize:baseFontSize * 0.6];
-        UIColor *signatureColor = [UIColor whiteColor];
-        if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
-            signatureColor = [UIColor blackColor];
-        }
-        NSDictionary *signatureAttributes = @{
-            NSFontAttributeName: signatureFont,
-            NSForegroundColorAttributeName: [signatureColor colorWithAlphaComponent:0.9]
-        };
-        CGSize signatureSize = [configuration.signatureText sizeWithAttributes:signatureAttributes];
-        CGFloat signatureX = CGRectGetMaxX(contentRect) - horizontalPadding - signatureSize.width;
-        CGFloat signatureY = contentCenterY - signatureSize.height / 2.0;
-        CGRect signatureRect = CGRectMake(MAX(signatureX, cursorX + 20.0), signatureY, signatureSize.width, signatureSize.height);
-        [configuration.signatureText drawInRect:signatureRect withAttributes:signatureAttributes];
-    }
+    // 署名功能已完全删除
+    // if (configuration.isSignatureEnabled && configuration.signatureText.length > 0 &&
+    //     !(frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"])) {
+    //     UIFont *signatureFont = [UIFont italicSystemFontOfSize:baseFontSize * 0.6];
+    //     UIColor *signatureColor = [UIColor whiteColor];
+    //     if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
+    //         signatureColor = [UIColor blackColor];
+    //     }
+    //     NSDictionary *signatureAttributes = @{
+    //         NSFontAttributeName: signatureFont,
+    //         NSForegroundColorAttributeName: [signatureColor colorWithAlphaComponent:0.9]
+    //     };
+    //     CGSize signatureSize = [configuration.signatureText sizeWithAttributes:signatureAttributes];
+    //     CGFloat signatureX = CGRectGetMaxX(contentRect) - horizontalPadding - signatureSize.width;
+    //     CGFloat signatureY = contentCenterY - signatureSize.height / 2.0;
+    //     CGRect signatureRect = CGRectMake(MAX(signatureX, cursorX + 20.0), signatureY, signatureSize.width, signatureSize.height);
+    //     [configuration.signatureText drawInRect:signatureRect withAttributes:signatureAttributes];
+    // }
 }
 
 - (NSString *)supplementaryStringForConfiguration:(CMWatermarkConfiguration *)configuration
                                          metadata:(NSDictionary * _Nullable)metadata {
+    // 对于宝丽来模式，支持多选参数显示
+    if (configuration.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
+        NSMutableArray *components = [NSMutableArray array];
+        
+        if (configuration.preferenceOptions & CMWatermarkPreferenceOptionsExposure) {
+            NSString *exposure = [self exposureStringFromMetadata:metadata];
+            if (exposure.length > 0) {
+                [components addObject:exposure];
+            }
+        }
+        
+        if (configuration.preferenceOptions & CMWatermarkPreferenceOptionsCoordinates) {
+            NSString *coordinates = [self coordinateStringFromMetadata:metadata];
+            if (coordinates.length > 0) {
+                [components addObject:coordinates];
+            }
+        }
+        
+        if (configuration.preferenceOptions & CMWatermarkPreferenceOptionsDate) {
+            NSString *date = [self dateStringFromMetadata:metadata];
+            if (date.length > 0) {
+                [components addObject:date];
+            }
+        }
+        
+        return [components componentsJoinedByString:@"    "];
+    }
+    
+    // 兼容旧的单选模式
     switch (configuration.preference) {
         case CMWatermarkPreferenceOff:
             return configuration.auxiliaryText;
@@ -546,6 +592,125 @@
     CGFloat originX = CGRectGetMidX(boundingRect) - scaledSize.width / 2.0;
     CGFloat originY = CGRectGetMidY(boundingRect) - scaledSize.height / 2.0;
     return CGRectMake(originX, originY, scaledSize.width, scaledSize.height);
+}
+
+- (void)drawPolaroidLayoutInRect:(CGRect)contentRect
+                  configuration:(CMWatermarkConfiguration *)configuration
+                   logoDescriptor:(CMWatermarkLogoDescriptor * _Nullable)logoDescriptor
+                     detailString:(NSString *)detailString
+                       canvasSize:(CGSize)canvasSize
+                horizontalPadding:(CGFloat)horizontalPadding {
+    
+    // 3行布局：Logo(第1行), 文字(第2行), 参数(第3行) - logo和文字间距40px，文字和参数间距30px
+    CGFloat logoToTextSpacing = 40.0; // logo和文字间距40px
+    CGFloat textToParamSpacing = 30.0; // 文字和参数间距30px
+    CGFloat fontSize = MAX(70.0, MIN(120.0, canvasSize.width * 0.125)); // 放大5倍
+    CGFloat currentY = contentRect.origin.y;
+    
+    // 第1行：Logo
+    CGFloat logoHeight = 0.0;
+    if (logoDescriptor && logoDescriptor.assetName.length > 0) {
+        UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+        if (logoImage) {
+            CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+            // 根据logo形状设置不同高度：长条形110px，方形/圆形180px
+            if (aspect > 1.5) {
+                logoHeight = 110.0; // 长条形logo
+            } else {
+                logoHeight = 180.0; // 方形或圆形logo
+            }
+            CGFloat logoWidth = logoHeight * aspect;
+            
+            CGFloat logoX = contentRect.origin.x + (contentRect.size.width - logoWidth) / 2.0;
+            CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
+            
+            UIImage *renderableLogo = logoDescriptor.prefersTemplateRendering ? 
+                [logoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : logoImage;
+            if (logoDescriptor.prefersTemplateRendering) {
+                [[UIColor blackColor] setFill]; // 宝丽来模式使用黑色logo
+                [[UIColor blackColor] setStroke];
+            }
+            [renderableLogo drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:0.95];
+        }
+    }
+    currentY += logoHeight + logoToTextSpacing;
+    
+    // 第2行：文字(Caption + Signature)
+    CGFloat row2Y = currentY;
+    UIFont *textFont = [UIFont systemFontOfSize:fontSize weight:UIFontWeightMedium];
+    UIColor *textColor = [UIColor blackColor]; // 宝丽来模式使用黑色文字
+    
+    NSMutableString *combinedText = [NSMutableString string];
+    if (configuration.isCaptionEnabled && configuration.captionText.length > 0) {
+        [combinedText appendString:configuration.captionText];
+    }
+    // 署名功能已删除
+    // if (configuration.isSignatureEnabled && configuration.signatureText.length > 0) {
+    //     if (combinedText.length > 0) {
+    //         [combinedText appendString:@" | "];
+    //     }
+    //     [combinedText appendString:configuration.signatureText];
+    // }
+    
+    if (combinedText.length > 0) {
+        NSMutableParagraphStyle *textParagraph = [[NSMutableParagraphStyle alloc] init];
+        textParagraph.alignment = NSTextAlignmentCenter;
+        textParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+        
+        NSDictionary *textAttributes = @{
+            NSFontAttributeName: textFont,
+            NSForegroundColorAttributeName: textColor,
+            NSParagraphStyleAttributeName: textParagraph
+        };
+        
+        CGRect textRect = CGRectMake(contentRect.origin.x + horizontalPadding,
+                                     row2Y,
+                                     contentRect.size.width - 2 * horizontalPadding,
+                                     textFont.lineHeight);
+        [combinedText drawInRect:textRect withAttributes:textAttributes];
+        currentY += textFont.lineHeight + textToParamSpacing;
+    }
+    
+    // 第3行：参数（支持多选显示）
+    if (detailString.length > 0) {
+        CGFloat row3Y = currentY;
+        CGFloat parameterHeight = MIN(contentRect.size.height * 0.3, 90.0);
+        [self drawPolaroidParametersInRect:CGRectMake(contentRect.origin.x, row3Y, contentRect.size.width, parameterHeight)
+                              detailString:detailString
+                                canvasSize:canvasSize];
+    }
+}
+
+- (void)drawPolaroidParametersInRect:(CGRect)rect
+                        detailString:(NSString *)detailString
+                          canvasSize:(CGSize)canvasSize {
+    
+    CGFloat parameterFontSize = MAX(60.0, MIN(90.0, canvasSize.width * 0.1)); // 放大5倍
+    UIFont *parameterFont = [UIFont systemFontOfSize:parameterFontSize weight:UIFontWeightMedium];
+    UIColor *parameterColor = [[UIColor blackColor] colorWithAlphaComponent:0.9]; // 黑色参数文字
+    
+    NSMutableParagraphStyle *parameterParagraph = [[NSMutableParagraphStyle alloc] init];
+    parameterParagraph.alignment = NSTextAlignmentCenter;
+    parameterParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+    
+    NSDictionary *parameterAttributes = @{
+        NSFontAttributeName: parameterFont,
+        NSForegroundColorAttributeName: parameterColor,
+        NSParagraphStyleAttributeName: parameterParagraph
+    };
+    
+    // 将参数字符串分解并水平排列
+    NSArray *components = [detailString componentsSeparatedByString:@"    "];
+    if (components.count > 0) {
+        NSString *displayText = [components componentsJoinedByString:@"  •  "];
+        
+        CGFloat horizontalPadding = rect.size.width * 0.05;
+        CGRect parameterRect = CGRectMake(rect.origin.x + horizontalPadding,
+                                         rect.origin.y + (rect.size.height - parameterFont.lineHeight) / 2.0,
+                                         rect.size.width - 2 * horizontalPadding,
+                                         parameterFont.lineHeight);
+        [displayText drawInRect:parameterRect withAttributes:parameterAttributes];
+    }
 }
 
 @end
