@@ -935,10 +935,7 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
         [NSLayoutConstraint deactivateConstraints:self.landscapeConstraints];
         self.landscapeConstraints = nil;
     }
-    
-    // 移除所有子视图的约束，重新布局
-    [self removeConstraints:self.constraints];
-    
+
     if (orientation == CameraDeviceOrientationPortrait) {
         [self setupPortraitLayout];
     } else {
@@ -1010,12 +1007,8 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
         [self.bottomControlsView.heightAnchor constraintEqualToConstant:120]
     ]];
     
-    self.portraitConstraints = [constraints copy];
-    [NSLayoutConstraint activateConstraints:self.portraitConstraints];
-    
-    // 补充：底部控制元素约束（竖屏时也需要）
-    NSMutableArray *bottomConstraints = [NSMutableArray array];
-    [bottomConstraints addObjectsFromArray:@[
+    // 底部控制元素约束（竖屏时也需要）
+    [constraints addObjectsFromArray:@[
         // 模式选择器
         [self.modeSelector.bottomAnchor constraintEqualToAnchor:self.captureButton.topAnchor constant:-20],
         [self.modeSelector.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
@@ -1072,8 +1065,9 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
         [self.gridLinesView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.gridLinesView.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor]
     ]];
-    
-    [NSLayoutConstraint activateConstraints:bottomConstraints];
+
+    self.portraitConstraints = [constraints copy];
+    [NSLayoutConstraint activateConstraints:self.portraitConstraints];
 }
 
 - (void)setupLandscapeLayout {
@@ -1180,7 +1174,30 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
         [self.exposureSlider.centerYAnchor constraintEqualToAnchor:self.professionalControlsView.centerYAnchor],
         [self.exposureSlider.widthAnchor constraintEqualToConstant:150]
     ]];
-    
+
+    // 状态指示器与网格线
+    [constraints addObjectsFromArray:@[
+        [self.resolutionModeLabel.topAnchor constraintEqualToAnchor:self.topControlsView.bottomAnchor constant:12],
+        [self.resolutionModeLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:32],
+        [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:50],
+        [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:20],
+
+        [self.flashModeLabel.topAnchor constraintEqualToAnchor:self.resolutionModeLabel.bottomAnchor constant:6],
+        [self.flashModeLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:32],
+        [self.flashModeLabel.widthAnchor constraintEqualToConstant:50],
+        [self.flashModeLabel.heightAnchor constraintEqualToConstant:20],
+
+        [self.frameWatermarkIndicator.topAnchor constraintEqualToAnchor:self.frameWatermarkButton.topAnchor constant:5],
+        [self.frameWatermarkIndicator.trailingAnchor constraintEqualToAnchor:self.frameWatermarkButton.trailingAnchor constant:-5],
+        [self.frameWatermarkIndicator.widthAnchor constraintEqualToConstant:6],
+        [self.frameWatermarkIndicator.heightAnchor constraintEqualToConstant:6],
+
+        [self.gridLinesView.topAnchor constraintEqualToAnchor:self.topControlsView.bottomAnchor],
+        [self.gridLinesView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.gridLinesView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.gridLinesView.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor]
+    ]];
+
     self.landscapeConstraints = [constraints copy];
     [NSLayoutConstraint activateConstraints:self.landscapeConstraints];
 }
