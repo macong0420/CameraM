@@ -62,7 +62,8 @@
         }
         const CGFloat baseWidth = image.size.width;
         const CGFloat baseHeight = image.size.height;
-        const CGFloat bottomPadding = MAX(0.0, frameDescriptor.bottomExpansionRatio * baseWidth);
+        const CGFloat baseShortSide = MIN(baseWidth, baseHeight);
+        const CGFloat bottomPadding = MAX(0.0, frameDescriptor.bottomExpansionRatio * baseShortSide);
         const CGSize canvasSize = CGSizeMake(baseWidth, baseHeight + bottomPadding);
         
         NSLog(@"📏 相框渲染 - 模式: %@, 原始图像: %.0fx%.0f, 画布: %.0fx%.0f", 

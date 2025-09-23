@@ -10,6 +10,7 @@
 #import <CoreMotion/CoreMotion.h>
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
+#import <math.h>
 
 @interface CameraManager () <AVCapturePhotoCaptureDelegate>
 
@@ -141,6 +142,15 @@
     [self notifyDelegateStateChanged];
     
     dispatch_async(self.sessionQueue, ^{
+        AVCaptureConnection *photoConnection = [self.photoOutput connectionWithMediaType:AVMediaTypeVideo];
+        if (photoConnection) {
+            if (photoConnection.isVideoOrientationSupported) {
+                photoConnection.videoOrientation = [self currentVideoOrientation];
+            }
+            if (photoConnection.isVideoMirroringSupported) {
+                photoConnection.videoMirrored = (self.currentPosition == CameraPositionFront);
+            }
+        }
         AVCapturePhotoSettings *settings = [self createPhotoSettings];
         [self.photoOutput capturePhotoWithSettings:settings delegate:self];
     });
@@ -304,16 +314,24 @@
 
 // 新增方法：获取当前视频方向
 - (AVCaptureVideoOrientation)currentVideoOrientation {
+    switch (self.currentDeviceOrientation) {
+        case CameraDeviceOrientationPortrait:
+            return AVCaptureVideoOrientationPortrait;
+        case CameraDeviceOrientationLandscapeLeft:
+            return AVCaptureVideoOrientationLandscapeRight;
+        case CameraDeviceOrientationLandscapeRight:
+            return AVCaptureVideoOrientationLandscapeLeft;
+    }
+
     UIInterfaceOrientation interfaceOrientation = UIInterfaceOrientationPortrait;
-    
-    // 获取当前界面方向
+
     if (@available(iOS 13.0, *)) {
         UIWindowScene *windowScene = (UIWindowScene *)[UIApplication sharedApplication].connectedScenes.anyObject;
         if (windowScene) {
             interfaceOrientation = windowScene.interfaceOrientation;
         }
     }
-    
+
     switch (interfaceOrientation) {
         case UIInterfaceOrientationPortrait:
             return AVCaptureVideoOrientationPortrait;
@@ -331,67 +349,39 @@
 #pragma mark - 比例相关工具方法
 
 - (CGRect)cropRectForAspectRatio:(CameraAspectRatio)ratio inImageSize:(CGSize)imageSize {
-    CGFloat imageWidth = imageSize.width;
-    CGFloat imageHeight = imageSize.height;
-    
-    // iOS相机图像通常是竖屏的，需要考虑这个特点
-    CGRect cropRect;
-    
-    switch (ratio) {
-        case CameraAspectRatio4to3: {
-            // 4:3 比例 - 在竖屏图像中保持4:3（宽:高）
-            CGFloat targetWidth = imageWidth;
-            CGFloat targetHeight = imageWidth * 4.0 / 3.0;
-            
-            if (targetHeight <= imageHeight) {
-                // 基于宽度计算高度，居中裁剪
-                CGFloat yOffset = (imageHeight - targetHeight) / 2.0;
-                cropRect = CGRectMake(0, yOffset, targetWidth, targetHeight);
-            } else {
-                // 如果计算高度超出，基于高度计算宽度
-                targetHeight = imageHeight;
-                targetWidth = imageHeight * 3.0 / 4.0;
-                CGFloat xOffset = (imageWidth - targetWidth) / 2.0;
-                cropRect = CGRectMake(xOffset, 0, targetWidth, targetHeight);
-            }
-            break;
-        }
-        case CameraAspectRatio1to1: {
-            // 1:1 正方形比例 - 确保完全正方形
-            CGFloat sideLength = MIN(imageWidth, imageHeight);
-            CGFloat xOffset = (imageWidth - sideLength) / 2.0;
-            CGFloat yOffset = (imageHeight - sideLength) / 2.0;
-            cropRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
-            
-            NSLog(@"1:1裁剪区域: (%.0f, %.0f, %.0f, %.0f), 原图尺寸: (%.0f, %.0f)", 
-                  cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height,
-                  imageWidth, imageHeight);
-            break;
-        }
-        case CameraAspectRatioXpan: {
-            // Xpan 超宽比例 (65:24 ≈ 2.7:1) - 在竖屏图像中创建横向超宽条
-            CGFloat targetWidth = imageWidth; // 使用全宽
-            CGFloat targetHeight = imageWidth / 2.7; // 根据2.7:1计算高度
-            
-            if (targetHeight <= imageHeight) {
-                CGFloat yOffset = (imageHeight - targetHeight) / 2.0;
-                cropRect = CGRectMake(0, yOffset, targetWidth, targetHeight);
-                
-                NSLog(@"Xpan裁剪区域: (%.0f, %.0f, %.0f, %.0f), 比例: %.2f:1, 原图尺寸: (%.0f, %.0f)", 
-                      cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height,
-                      targetWidth/targetHeight, imageWidth, imageHeight);
-            } else {
-                // 如果计算高度超出（极少情况），使用全高
-                targetHeight = imageHeight;
-                targetWidth = imageHeight * 2.7;
-                CGFloat xOffset = (imageWidth - targetWidth) / 2.0;
-                cropRect = CGRectMake(xOffset, 0, targetWidth, targetHeight);
-            }
-            break;
-        }
+    const CGFloat imageWidth = imageSize.width;
+    const CGFloat imageHeight = imageSize.height;
+
+    if (imageWidth <= 0.0f || imageHeight <= 0.0f) {
+        return CGRectZero;
     }
-    
-    return cropRect;
+
+    const CGFloat targetAspect = [self aspectRatioValueForRatio:ratio];
+    if (targetAspect <= 0.0f) {
+        return CGRectMake(0.0f, 0.0f, imageWidth, imageHeight);
+    }
+
+    const CGFloat imageAspect = imageWidth / imageHeight;
+    CGRect cropRect = CGRectMake(0.0f, 0.0f, imageWidth, imageHeight);
+
+    if (fabs(imageAspect - targetAspect) < 0.0001f) {
+        return CGRectIntegral(cropRect);
+    }
+
+    if (imageAspect > targetAspect) {
+        // 图像比目标更宽，需要裁剪左右两侧
+        const CGFloat targetWidth = imageHeight * targetAspect;
+        const CGFloat xOffset = (imageWidth - targetWidth) / 2.0f;
+        cropRect = CGRectMake(xOffset, 0.0f, targetWidth, imageHeight);
+    } else {
+        // 图像比目标更窄（或更高），裁剪上下
+        const CGFloat targetHeight = imageWidth / targetAspect;
+        const CGFloat yOffset = (imageHeight - targetHeight) / 2.0f;
+        cropRect = CGRectMake(0.0f, yOffset, imageWidth, targetHeight);
+    }
+
+    NSLog(@"裁剪区域: %@, 原图尺寸: %.0fx%.0f, 目标比例: %.3f", NSStringFromCGRect(cropRect), imageWidth, imageHeight, targetAspect);
+    return CGRectIntegral(cropRect);
 }
 
 - (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio {
@@ -444,44 +434,46 @@
     return normalizedImage ? normalizedImage : image;
 }
 
-- (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize {
-    CGFloat viewWidth = viewSize.width;
-    CGFloat viewHeight = viewSize.height;
-    
-    CGRect previewRect;
-    
+- (CGFloat)aspectRatioValueForRatio:(CameraAspectRatio)ratio {
     switch (ratio) {
-        case CameraAspectRatio4to3: {
-            // 4:3 比例在预览中的显示区域
-            CGFloat targetHeight = viewWidth * 4.0 / 3.0;
-            if (targetHeight <= viewHeight) {
-                CGFloat yOffset = (viewHeight - targetHeight) / 2.0;
-                previewRect = CGRectMake(0, yOffset, viewWidth, targetHeight);
-            } else {
-                CGFloat targetWidth = viewHeight * 3.0 / 4.0;
-                CGFloat xOffset = (viewWidth - targetWidth) / 2.0;
-                previewRect = CGRectMake(xOffset, 0, targetWidth, viewHeight);
-            }
-            break;
-        }
-        case CameraAspectRatio1to1: {
-            // 1:1 正方形
-            CGFloat sideLength = MIN(viewWidth, viewHeight);
-            CGFloat xOffset = (viewWidth - sideLength) / 2.0;
-            CGFloat yOffset = (viewHeight - sideLength) / 2.0;
-            previewRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
-            break;
-        }
-        case CameraAspectRatioXpan: {
-            // Xpan 超宽比例
-            CGFloat targetHeight = viewWidth / 2.7;
-            CGFloat yOffset = (viewHeight - targetHeight) / 2.0;
-            previewRect = CGRectMake(0, yOffset, viewWidth, targetHeight);
-            break;
-        }
+        case CameraAspectRatio4to3:
+            return 4.0f / 3.0f;
+        case CameraAspectRatio1to1:
+            return 1.0f;
+        case CameraAspectRatioXpan:
+            return 2.7f;
     }
-    
-    return previewRect;
+    return 1.0f;
+}
+
+- (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize {
+    const CGFloat viewWidth = viewSize.width;
+    const CGFloat viewHeight = viewSize.height;
+
+    if (viewWidth <= 0.0f || viewHeight <= 0.0f) {
+        return CGRectZero;
+    }
+
+    const CGFloat targetAspect = [self aspectRatioValueForRatio:ratio];
+    const CGFloat viewAspect = viewWidth / viewHeight;
+
+    CGRect rect = CGRectMake(0.0f, 0.0f, viewWidth, viewHeight);
+
+    if (fabs(viewAspect - targetAspect) < 0.0001f) {
+        return CGRectIntegral(rect);
+    }
+
+    if (viewAspect > targetAspect) {
+        const CGFloat targetWidth = viewHeight * targetAspect;
+        const CGFloat xOffset = (viewWidth - targetWidth) / 2.0f;
+        rect = CGRectMake(xOffset, 0.0f, targetWidth, viewHeight);
+    } else {
+        const CGFloat targetHeight = viewWidth / targetAspect;
+        const CGFloat yOffset = (viewHeight - targetHeight) / 2.0f;
+        rect = CGRectMake(0.0f, yOffset, viewWidth, targetHeight);
+    }
+
+    return CGRectIntegral(rect);
 }
 
 - (void)focusAtPoint:(CGPoint)point {

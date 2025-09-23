@@ -8,8 +8,21 @@
 #import "CameraControlsView.h"
 #import "../Managers/CameraManager.h"
 #import "WatermarkPanelView.h"
+#import <math.h>
 
 static const CGFloat kWatermarkPanelHeight = 420.0;
+
+static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
+    switch (ratio) {
+        case CameraAspectRatio4to3:
+            return 4.0f / 3.0f;
+        case CameraAspectRatio1to1:
+            return 1.0f;
+        case CameraAspectRatioXpan:
+            return 2.7f;
+    }
+    return 1.0f;
+}
 
 @interface CameraControlsView () <WatermarkPanelViewDelegate>
 
@@ -60,6 +73,7 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
 @property (nonatomic, strong) NSLayoutConstraint *watermarkPanelBottomConstraint;
 @property (nonatomic, assign) BOOL watermarkPanelVisible;
 @property (nonatomic, strong) CMWatermarkConfiguration *watermarkConfiguration;
+@property (nonatomic, assign) CameraAspectRatio activeAspectRatio;
 
 @end
 
@@ -70,6 +84,7 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
     if (self) {
         _currentOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
         _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
+        _activeAspectRatio = CameraAspectRatio4to3;
         [self setupUI];
     }
     return self;
@@ -824,45 +839,34 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
 }
 
 - (void)updateAspectRatioMask:(CameraAspectRatio)ratio {
+    self.activeAspectRatio = ratio;
+
     CGRect bounds = self.previewContainer.bounds;
-    if (CGRectIsEmpty(bounds)) return;
-    
-    // 计算有效区域（需要从CameraManager获取）
-    // 这里先用简化计算，实际应该调用CameraManager的方法
-    CGRect activeRect;
-    switch (ratio) {
-        case CameraAspectRatio4to3: {
-            CGFloat targetHeight = bounds.size.width * 4.0 / 3.0;
-            if (targetHeight <= bounds.size.height) {
-                CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0;
-                activeRect = CGRectMake(0, yOffset, bounds.size.width, targetHeight);
-            } else {
-                activeRect = bounds; // 如果屏幕比4:3还窄，全屏显示
-            }
-            break;
-        }
-        case CameraAspectRatio1to1: {
-            CGFloat sideLength = MIN(bounds.size.width, bounds.size.height);
-            CGFloat xOffset = (bounds.size.width - sideLength) / 2.0;
-            CGFloat yOffset = (bounds.size.height - sideLength) / 2.0;
-            activeRect = CGRectMake(xOffset, yOffset, sideLength, sideLength);
-            break;
-        }
-        case CameraAspectRatioXpan: {
-            CGFloat targetHeight = bounds.size.width / 2.7;
-            CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0;
-            activeRect = CGRectMake(0, yOffset, bounds.size.width, targetHeight);
-            break;
+    if (CGRectIsEmpty(bounds)) {
+        return;
+    }
+
+    const CGFloat targetAspect = CMAspectRatioValue(ratio);
+    const CGFloat viewAspect = bounds.size.width / bounds.size.height;
+
+    CGRect activeRect = bounds;
+    if (fabs(viewAspect - targetAspect) >= 0.0001f) {
+        if (viewAspect > targetAspect) {
+            const CGFloat targetWidth = bounds.size.height * targetAspect;
+            const CGFloat xOffset = (bounds.size.width - targetWidth) / 2.0f;
+            activeRect = CGRectMake(xOffset, 0.0f, targetWidth, bounds.size.height);
+        } else {
+            const CGFloat targetHeight = bounds.size.width / targetAspect;
+            const CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0f;
+            activeRect = CGRectMake(0.0f, yOffset, bounds.size.width, targetHeight);
         }
     }
-    
-    // 创建遮罩路径（全屏减去有效区域）
+
     UIBezierPath *maskPath = [UIBezierPath bezierPathWithRect:bounds];
-    UIBezierPath *activePath = [UIBezierPath bezierPathWithRect:activeRect];
+    UIBezierPath *activePath = [UIBezierPath bezierPathWithRect:CGRectIntegral(activeRect)];
     [maskPath appendPath:activePath];
     maskPath.usesEvenOddFillRule = YES;
-    
-    // 应用遮罩动画
+
     [CATransaction begin];
     [CATransaction setAnimationDuration:0.3];
     self.aspectRatioMaskLayer.path = maskPath.CGPath;
@@ -870,6 +874,7 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
 }
 
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio {
+    self.activeAspectRatio = ratio;
     // 更新顶部按钮显示
     NSString *ratioText;
     switch (ratio) {
@@ -1239,8 +1244,7 @@ static const CGFloat kWatermarkPanelHeight = 420.0;
     
     // 更新比例遮罩尺寸
     if (self.aspectRatioMaskLayer && !CGRectIsEmpty(self.previewContainer.bounds)) {
-        // 默认显示4:3比例遮罩
-        [self updateAspectRatioMask:CameraAspectRatio4to3];
+        [self updateAspectRatioMask:self.activeAspectRatio];
     }
 }
 
