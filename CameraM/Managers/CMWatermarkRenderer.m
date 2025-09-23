@@ -252,6 +252,18 @@
                            logoDescriptor:(CMWatermarkLogoDescriptor * _Nullable)logoDescriptor
                           frameDescriptor:(CMWatermarkFrameDescriptor * _Nullable)frameDescriptor
                                 metadata:(NSDictionary * _Nullable)metadata {
+    NSString *detailString = [self supplementaryStringForConfiguration:configuration metadata:metadata];
+    BOOL shouldRenderInline = (!frameDescriptor || [frameDescriptor.identifier isEqualToString:CMWatermarkFrameIdentifierNone]);
+
+    if (shouldRenderInline) {
+        [self drawInlineWatermarkOnPhotoInContext:context
+                                        canvasSize:canvasSize
+                                     configuration:configuration
+                                      logoDescriptor:logoDescriptor
+                                       detailString:detailString];
+        return;
+    }
+
     const CGFloat horizontalPadding = MAX(24.0, canvasSize.width * 0.04);
     const CGFloat footerHeight = bottomPadding > 0.0 ? bottomPadding : MAX(120.0, canvasSize.height * 0.12);
     CGRect defaultFooterRect = CGRectMake(0.0, imageHeight, canvasSize.width, footerHeight);
@@ -329,8 +341,6 @@
         }
     }
 
-    NSString *detailString = [self supplementaryStringForConfiguration:configuration metadata:metadata];
-    
     // 宝丽来模式始终显示布局，不依赖detailString
     if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
         // Polaroid模式使用3行布局：logo, 文字, 参数
@@ -382,6 +392,140 @@
     //     CGRect signatureRect = CGRectMake(MAX(signatureX, cursorX + 20.0), signatureY, signatureSize.width, signatureSize.height);
     //     [configuration.signatureText drawInRect:signatureRect withAttributes:signatureAttributes];
     // }
+}
+
+- (void)drawInlineWatermarkOnPhotoInContext:(UIGraphicsImageRendererContext *)context
+                                 canvasSize:(CGSize)canvasSize
+                               configuration:(CMWatermarkConfiguration *)configuration
+                                logoDescriptor:(CMWatermarkLogoDescriptor * _Nullable)logoDescriptor
+                                 detailString:(NSString *)detailString {
+    BOOL hasCaption = configuration.isCaptionEnabled && configuration.captionText.length > 0;
+    BOOL hasDetail = detailString.length > 0;
+    BOOL hasLogoAsset = (configuration.logoEnabled && logoDescriptor && logoDescriptor.assetName.length > 0);
+
+    if (!hasCaption && !hasDetail && !hasLogoAsset) {
+        return;
+    }
+
+    const CGFloat horizontalMargin = MAX(canvasSize.width * 0.05f, 40.0f);
+    const CGFloat bottomInset = MAX(canvasSize.height * 0.06f, 80.0f);
+    const CGFloat baseFontSize = MAX(22.0f, MIN(52.0f, canvasSize.width * 0.045f));
+    UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize weight:UIFontWeightSemibold];
+    UIFont *detailFont = [UIFont systemFontOfSize:baseFontSize * 0.58f weight:UIFontWeightMedium];
+    const CGFloat lineSpacing = baseFontSize * 0.35f;
+
+    NSMutableParagraphStyle *centerParagraph = [[NSMutableParagraphStyle alloc] init];
+    centerParagraph.alignment = NSTextAlignmentCenter;
+    centerParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+
+    CGFloat rendererScale = 1.0f;
+    if ([context.format isKindOfClass:[UIGraphicsImageRendererFormat class]]) {
+        rendererScale = MAX(((UIGraphicsImageRendererFormat *)context.format).scale, 1.0f);
+    } else {
+        rendererScale = MAX([UIScreen mainScreen].scale, 1.0f);
+    }
+
+    const CGFloat strokeWidth = -1.0f / rendererScale;
+    UIColor *strokeColor = [UIColor colorWithWhite:0.0f alpha:0.35f];
+
+    NSDictionary *(^attributesForFont)(UIFont *) = ^NSDictionary *(UIFont *font) {
+        return @{
+            NSFontAttributeName: font,
+            NSForegroundColorAttributeName: [UIColor whiteColor],
+            NSStrokeColorAttributeName: strokeColor,
+            NSStrokeWidthAttributeName: @(strokeWidth),
+            NSParagraphStyleAttributeName: centerParagraph
+        };
+    };
+
+    NSMutableArray<NSDictionary<NSString *, id> *> *lines = [NSMutableArray array];
+    if (hasCaption) {
+        [lines addObject:@{ @"text": configuration.captionText, @"font": captionFont }];
+    }
+    if (hasDetail) {
+        [lines addObject:@{ @"text": detailString, @"font": detailFont }];
+    }
+
+    UIImage *logoImage = nil;
+    CGFloat logoHeight = 0.0f;
+    CGFloat logoWidth = 0.0f;
+    if (hasLogoAsset) {
+        logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+        if (!logoImage) {
+            hasLogoAsset = NO;
+        } else {
+            CGFloat maxLogoHeight = captionFont.lineHeight * 1.2f;
+            CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+            logoHeight = maxLogoHeight;
+            logoWidth = logoHeight * aspect;
+            CGFloat maxContentWidth = canvasSize.width - horizontalMargin * 2.0f;
+            if (logoWidth > maxContentWidth && maxContentWidth > 0.0f) {
+                logoWidth = maxContentWidth;
+                logoHeight = logoWidth / MAX(aspect, 0.1f);
+            }
+        }
+    }
+
+    CGFloat blockHeight = 0.0f;
+    if (hasLogoAsset) {
+        blockHeight += logoHeight;
+        if (lines.count > 0) {
+            blockHeight += lineSpacing;
+        }
+    }
+    for (NSUInteger index = 0; index < lines.count; index++) {
+        UIFont *font = lines[index][@"font"];
+        blockHeight += font.lineHeight;
+        if (index < lines.count - 1) {
+            blockHeight += lineSpacing;
+        }
+    }
+
+    if (blockHeight <= 0.0f) {
+        return;
+    }
+
+    CGFloat startY = canvasSize.height - bottomInset - blockHeight;
+    CGFloat minimumTop = MAX(horizontalMargin, canvasSize.height * 0.08f);
+    if (startY < minimumTop) {
+        startY = minimumTop;
+    }
+
+    CGFloat currentY = startY;
+    if (hasLogoAsset) {
+        CGFloat logoX = (canvasSize.width - logoWidth) / 2.0f;
+        CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
+        UIImage *renderableLogo = logoDescriptor.prefersTemplateRendering ? [logoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : logoImage;
+        if (logoDescriptor.prefersTemplateRendering) {
+            [[UIColor whiteColor] setFill];
+            [[UIColor whiteColor] setStroke];
+        }
+        [renderableLogo drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:0.95f];
+        currentY = CGRectGetMaxY(logoRect);
+        if (lines.count > 0) {
+            currentY += lineSpacing;
+        }
+    }
+
+    CGFloat textWidth = canvasSize.width - horizontalMargin * 2.0f;
+    if (textWidth <= 0.0f) {
+        textWidth = canvasSize.width;
+    }
+
+    for (NSUInteger index = 0; index < lines.count; index++) {
+        NSString *text = lines[index][@"text"];
+        UIFont *font = lines[index][@"font"];
+        if (text.length == 0 || !font) {
+            continue;
+        }
+        NSDictionary *attributes = attributesForFont(font);
+        CGRect lineRect = CGRectMake(horizontalMargin, currentY, textWidth, font.lineHeight);
+        [text drawInRect:lineRect withAttributes:attributes];
+        currentY = CGRectGetMaxY(lineRect);
+        if (index < lines.count - 1) {
+            currentY += lineSpacing;
+        }
+    }
 }
 
 - (NSString *)supplementaryStringForConfiguration:(CMWatermarkConfiguration *)configuration
