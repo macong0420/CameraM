@@ -601,24 +601,19 @@
                        canvasSize:(CGSize)canvasSize
                 horizontalPadding:(CGFloat)horizontalPadding {
     
-    // 3行布局：Logo(第1行), 文字(第2行), 参数(第3行) - logo和文字间距40px，文字和参数间距30px
-    CGFloat logoToTextSpacing = 40.0; // logo和文字间距40px
-    CGFloat textToParamSpacing = 30.0; // 文字和参数间距30px
-    CGFloat fontSize = MAX(70.0, MIN(120.0, canvasSize.width * 0.125)); // 放大5倍
+    // 3行布局：Logo(第1行), 文字(第2行), 参数(第3行) - 精确间距控制
+    CGFloat logoToTextSpacing = 35.0; // logo和文字间距35px
+    CGFloat textToParamSpacing = 26.0; // 文字和参数间距26px
     CGFloat currentY = contentRect.origin.y;
     
-    // 第1行：Logo
+    // 第1行：Logo - 高度约占底部边框高度的20%
     CGFloat logoHeight = 0.0;
     if (logoDescriptor && logoDescriptor.assetName.length > 0) {
         UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
         if (logoImage) {
+            CGFloat bottomBorderHeight = contentRect.size.height;
+            logoHeight = bottomBorderHeight * 0.20; // Logo高度为底部边框高度的20%
             CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
-            // 根据logo形状设置不同高度：长条形110px，方形/圆形180px
-            if (aspect > 1.5) {
-                logoHeight = 110.0; // 长条形logo
-            } else {
-                logoHeight = 180.0; // 方形或圆形logo
-            }
             CGFloat logoWidth = logoHeight * aspect;
             
             CGFloat logoX = contentRect.origin.x + (contentRect.size.width - logoWidth) / 2.0;
@@ -635,10 +630,11 @@
     }
     currentY += logoHeight + logoToTextSpacing;
     
-    // 第2行：文字(Caption + Signature)
+    // 第2行：文字 - 字号为Logo高度的35%-40%
     CGFloat row2Y = currentY;
-    UIFont *textFont = [UIFont systemFontOfSize:fontSize weight:UIFontWeightMedium];
-    UIColor *textColor = [UIColor blackColor]; // 宝丽来模式使用黑色文字
+    CGFloat textFontSize = logoHeight * 0.5; // Logo高度的37.5% (35%-40%之间)
+    UIFont *textFont = [UIFont systemFontOfSize:textFontSize weight:UIFontWeightMedium];
+    UIColor *textColor = [UIColor blackColor]; // 纯黑色 #000000
     
     NSMutableString *combinedText = [NSMutableString string];
     if (configuration.isCaptionEnabled && configuration.captionText.length > 0) {
@@ -671,23 +667,25 @@
         currentY += textFont.lineHeight + textToParamSpacing;
     }
     
-    // 第3行：参数（支持多选显示）
+    // 第3行：参数 - 字号为文字部分的70%-80%
     if (detailString.length > 0) {
         CGFloat row3Y = currentY;
+        CGFloat parameterFontSize = textFontSize * 0.75; // 文字字号的75% (70%-80%之间)
         CGFloat parameterHeight = MIN(contentRect.size.height * 0.3, 90.0);
         [self drawPolaroidParametersInRect:CGRectMake(contentRect.origin.x, row3Y, contentRect.size.width, parameterHeight)
                               detailString:detailString
-                                canvasSize:canvasSize];
+                                canvasSize:canvasSize
+                            parameterFontSize:parameterFontSize];
     }
 }
 
 - (void)drawPolaroidParametersInRect:(CGRect)rect
                         detailString:(NSString *)detailString
-                          canvasSize:(CGSize)canvasSize {
+                          canvasSize:(CGSize)canvasSize
+                   parameterFontSize:(CGFloat)parameterFontSize {
     
-    CGFloat parameterFontSize = MAX(60.0, MIN(90.0, canvasSize.width * 0.1)); // 放大5倍
     UIFont *parameterFont = [UIFont systemFontOfSize:parameterFontSize weight:UIFontWeightMedium];
-    UIColor *parameterColor = [[UIColor blackColor] colorWithAlphaComponent:0.9]; // 黑色参数文字
+    UIColor *parameterColor = [UIColor colorWithRed:102.0/255.0 green:102.0/255.0 blue:102.0/255.0 alpha:1.0]; // #666666
     
     NSMutableParagraphStyle *parameterParagraph = [[NSMutableParagraphStyle alloc] init];
     parameterParagraph.alignment = NSTextAlignmentCenter;

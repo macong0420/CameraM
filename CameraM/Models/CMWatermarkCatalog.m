@@ -139,12 +139,12 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                                                         displayName:@"Polaroid"
                                                                                    overlayAssetName:nil
                                                                                 backgroundAssetName:nil
-                                                                                bottomExpansionRatio:0.1875
+                                                                                bottomExpansionRatio:0.16
                                                                                     previewAssetName:@"baolilai"
                                                                                   overlayInsetsRatio:0.0
-                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.02, 0.02, 0.2075, 0.02)
-                                                                             photoContentScale:CGSizeMake(0.96, 0.79)
-                                                                            photoContentOffset:CGPointMake(0.02, 0.02)
+                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.035, 0.035, 0.195, 0.035)
+                                                                             photoContentScale:CGSizeMake(0.93, 0.805)
+                                                                            photoContentOffset:CGPointMake(0.035, 0.035)
                                                                          photoCornerRadiusRatio:0.008];
 
         CMWatermarkFrameDescriptor *minimal = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierMinimal
