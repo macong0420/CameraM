@@ -8,6 +8,8 @@
 #import "CameraManager.h"
 #import <Photos/Photos.h>
 #import <CoreMotion/CoreMotion.h>
+#import <CoreLocation/CoreLocation.h>
+#import <ImageIO/ImageIO.h>
 
 @interface CameraManager () <AVCapturePhotoCaptureDelegate>
 
@@ -705,36 +707,113 @@
             return;
         }
         
-        // 获取图像数据 - 内存优化处理
         NSData *imageData = photo.fileDataRepresentation;
         if (imageData) {
             UIImage *image = [UIImage imageWithData:imageData];
             NSDictionary *metadata = photo.metadata;
-            
+
             if ([self.delegate respondsToSelector:@selector(cameraManager:didCapturePhoto:withMetadata:)]) {
                 [self.delegate cameraManager:self didCapturePhoto:image withMetadata:metadata];
             }
-            
-            // 保存到相册
-            [self saveImageToPhotosLibrary:image];
         }
     });
 }
 
 #pragma mark - 相册保存
 
-- (void)saveImageToPhotosLibrary:(UIImage *)image {
+- (void)saveImageToPhotosLibrary:(UIImage *)image
+                        metadata:(NSDictionary *)metadata
+                       completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
+    if (!image) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, [NSError errorWithDomain:@"CameraManager"
+                                                    code:2001
+                                                userInfo:@{NSLocalizedDescriptionKey: @"Image is nil"}]);
+            });
+        }
+        return;
+    }
+
     [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly handler:^(PHAuthorizationStatus status) {
         if (status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited) {
             [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-                [PHAssetCreationRequest creationRequestForAssetFromImage:image];
+                PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAssetFromImage:image];
+                NSDate *creationDate = [self creationDateFromMetadata:metadata];
+                if (creationDate) {
+                    request.creationDate = creationDate;
+                }
+                CLLocation *location = [self locationFromMetadata:metadata];
+                if (location) {
+                    request.location = location;
+                }
             } completionHandler:^(BOOL success, NSError * _Nullable error) {
                 if (!success && error) {
                     NSLog(@"保存图片失败: %@", error.localizedDescription);
                 }
+                if (completion) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        completion(success, error);
+                    });
+                }
             }];
+        } else {
+            if (completion) {
+                NSError *permissionError = [NSError errorWithDomain:@"CameraManager"
+                                                               code:2002
+                                                           userInfo:@{NSLocalizedDescriptionKey: @"Photo library permission denied"}];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(NO, permissionError);
+                });
+            }
         }
     }];
+}
+
+#pragma mark - 元数据辅助
+
+- (NSDate *)creationDateFromMetadata:(NSDictionary *)metadata {
+    if (!metadata) { return nil; }
+    NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
+    NSString *timestamp = exif[(NSString *)kCGImagePropertyExifDateTimeOriginal];
+    if (!timestamp) {
+        timestamp = exif[(NSString *)kCGImagePropertyExifDateTimeDigitized];
+    }
+    if (!timestamp) { return nil; }
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    formatter.dateFormat = @"yyyy:MM:dd HH:mm:ss";
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    return [formatter dateFromString:timestamp];
+}
+
+- (CLLocation *)locationFromMetadata:(NSDictionary *)metadata {
+    if (!metadata) { return nil; }
+    NSDictionary *gps = metadata[(NSString *)kCGImagePropertyGPSDictionary];
+    if (!gps) { return nil; }
+
+    NSNumber *latValue = gps[(NSString *)kCGImagePropertyGPSLatitude];
+    NSNumber *lonValue = gps[(NSString *)kCGImagePropertyGPSLongitude];
+    if (!latValue || !lonValue) { return nil; }
+
+    NSString *latRef = gps[(NSString *)kCGImagePropertyGPSLatitudeRef];
+    NSString *lonRef = gps[(NSString *)kCGImagePropertyGPSLongitudeRef];
+
+    CLLocationDegrees latitude = latValue.doubleValue * ((latRef && [latRef isEqualToString:@"S"]) ? -1.0 : 1.0);
+    CLLocationDegrees longitude = lonValue.doubleValue * ((lonRef && [lonRef isEqualToString:@"W"]) ? -1.0 : 1.0);
+
+    NSNumber *altitudeValue = gps[(NSString *)kCGImagePropertyGPSAltitude];
+    CLLocationDistance altitude = altitudeValue ? altitudeValue.doubleValue : 0.0;
+
+    CLLocationDirection course = -1.0;
+    CLLocationSpeed speed = -1.0;
+
+    return [[CLLocation alloc] initWithCoordinate:CLLocationCoordinate2DMake(latitude, longitude)
+                                        altitude:altitude
+                              horizontalAccuracy:kCLLocationAccuracyNearestTenMeters
+                                verticalAccuracy:kCLLocationAccuracyNearestTenMeters
+                                           course:course
+                                            speed:speed
+                                        timestamp:[NSDate date]];
 }
 
 #pragma mark - 代理通知

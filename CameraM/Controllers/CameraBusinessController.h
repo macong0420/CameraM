@@ -8,6 +8,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import "../Managers/CameraManager.h"
+#import "../Models/CMWatermarkConfiguration.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -40,6 +41,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) CameraDeviceOrientation currentDeviceOrientation;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 @property (nonatomic, readonly) UIImage * _Nullable latestCapturedImage;
+@property (nonatomic, readonly) CMWatermarkConfiguration *watermarkConfiguration;
 
 // 内部组件访问（仅用于协调）
 @property (nonatomic, readonly) CameraManager *cameraManager;
@@ -71,6 +73,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 比例相关工具方法
 - (CGRect)previewRectForCurrentAspectRatioInViewSize:(CGSize)viewSize;
+
+// 水印
+- (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;
 
 @end
 

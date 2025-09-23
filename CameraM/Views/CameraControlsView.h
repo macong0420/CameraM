@@ -6,6 +6,7 @@
 //
 
 #import <UIKit/UIKit.h>
+#import "CMWatermarkConfiguration.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -34,6 +35,10 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 
 // 专业控制
 - (void)didChangeExposure:(float)value;
+
+// 水印设置
+- (void)didUpdateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;
+- (void)didChangeWatermarkPanelVisibility:(BOOL)isVisible;
 
 // 预览交互
 - (void)didTapPreviewAtPoint:(CGPoint)point;
@@ -66,6 +71,12 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 
 // 横屏适配接口
 - (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation;
+
+// 水印
+- (void)applyWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;
+- (void)presentWatermarkPanel;
+- (void)dismissWatermarkPanel;
+- (BOOL)isWatermarkPanelVisible;
 
 @end
 

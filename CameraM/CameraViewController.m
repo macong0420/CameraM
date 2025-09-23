@@ -54,6 +54,8 @@
     // 创建业务控制器
     self.businessController = [[CameraBusinessController alloc] init];
     self.businessController.delegate = self;
+
+    [self.controlsView applyWatermarkConfiguration:self.businessController.watermarkConfiguration];
     
     // UI组件约束
     [NSLayoutConstraint activateConstraints:@[
@@ -144,11 +146,6 @@
 
 - (void)didTapFrameWatermarkButton {
     NSLog(@"相框水印按钮点击");
-    
-    // 模拟状态切换
-    static BOOL frameWatermarkEnabled = NO;
-    frameWatermarkEnabled = !frameWatermarkEnabled;
-    [self.controlsView updateFrameWatermarkStatus:frameWatermarkEnabled];
 }
 
 - (void)didTapSettingsButton {
@@ -172,6 +169,14 @@
     if (self.businessController.isUltraHighResolutionSupported) {
         [self.businessController switchResolutionMode];
     }
+}
+
+- (void)didUpdateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
+    [self.businessController updateWatermarkConfiguration:configuration];
+}
+
+- (void)didChangeWatermarkPanelVisibility:(BOOL)isVisible {
+    NSLog(@"水印面板%@", isVisible ? @"展开" : @"收起");
 }
 
 #pragma mark - CameraBusinessDelegate (业务事件处理)

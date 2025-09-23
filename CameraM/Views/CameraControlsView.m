@@ -7,8 +7,11 @@
 
 #import "CameraControlsView.h"
 #import "../Managers/CameraManager.h"
+#import "WatermarkPanelView.h"
 
-@interface CameraControlsView ()
+static const CGFloat kWatermarkPanelHeight = 420.0;
+
+@interface CameraControlsView () <WatermarkPanelViewDelegate>
 
 // 主要容器
 @property (nonatomic, strong) UIView *previewContainer;
@@ -51,6 +54,13 @@
 @property (nonatomic, strong) NSArray<NSLayoutConstraint *> *portraitConstraints;
 @property (nonatomic, strong) NSArray<NSLayoutConstraint *> *landscapeConstraints;
 
+// 水印配置
+@property (nonatomic, strong) UIView *watermarkBackdropView;
+@property (nonatomic, strong) WatermarkPanelView *watermarkPanel;
+@property (nonatomic, strong) NSLayoutConstraint *watermarkPanelBottomConstraint;
+@property (nonatomic, assign) BOOL watermarkPanelVisible;
+@property (nonatomic, strong) CMWatermarkConfiguration *watermarkConfiguration;
+
 @end
 
 @implementation CameraControlsView
@@ -59,6 +69,7 @@
     self = [super initWithFrame:frame];
     if (self) {
         _currentOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
+        _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
         [self setupUI];
     }
     return self;
@@ -78,6 +89,7 @@
     [self setupFocusIndicator];
     [self setupAspectRatioButton];
     [self setupAspectRatioMask];
+    [self setupWatermarkPanel];
     [self setupPortraitLayout]; // 默认竖屏布局
 }
 
@@ -350,6 +362,41 @@
     [self.previewContainer.layer addSublayer:self.aspectRatioMaskLayer];
 }
 
+- (void)setupWatermarkPanel {
+
+    self.watermarkBackdropView = [[UIView alloc] init];
+    self.watermarkBackdropView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.watermarkBackdropView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
+    self.watermarkBackdropView.alpha = 0.0;
+    self.watermarkBackdropView.hidden = YES;
+    [self addSubview:self.watermarkBackdropView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.watermarkBackdropView.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.watermarkBackdropView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.watermarkBackdropView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.watermarkBackdropView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
+    ]];
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleWatermarkBackdropTap)];
+    [self.watermarkBackdropView addGestureRecognizer:tap];
+
+    self.watermarkPanel = [[WatermarkPanelView alloc] initWithFrame:CGRectZero];
+    self.watermarkPanel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.watermarkPanel.delegate = self;
+    self.watermarkPanel.hidden = YES;
+    [self addSubview:self.watermarkPanel];
+
+    self.watermarkPanelBottomConstraint = [self.watermarkPanel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:kWatermarkPanelHeight];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.watermarkPanel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.watermarkPanel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.watermarkPanel.heightAnchor constraintEqualToConstant:kWatermarkPanelHeight],
+        self.watermarkPanelBottomConstraint
+    ]];
+}
+
 - (void)setupConstraints {
     UILayoutGuide *safeArea = self.safeAreaLayoutGuide;
     
@@ -508,6 +555,11 @@
 }
 
 - (void)frameWatermarkButtonTapped:(UIButton *)sender {
+    if (self.watermarkPanelVisible) {
+        [self dismissWatermarkPanel];
+    } else {
+        [self presentWatermarkPanel];
+    }
     if ([self.delegate respondsToSelector:@selector(didTapFrameWatermarkButton)]) {
         [self.delegate didTapFrameWatermarkButton];
     }
@@ -544,6 +596,10 @@
     if ([self.delegate respondsToSelector:@selector(didTapFilterButton)]) {
         [self.delegate didTapFilterButton];
     }
+}
+
+- (void)handleWatermarkBackdropTap {
+    [self dismissWatermarkPanel];
 }
 
 - (void)modeButtonTapped:(UIButton *)sender {
@@ -652,6 +708,76 @@
 
 - (void)updateFrameWatermarkStatus:(BOOL)enabled {
     self.frameWatermarkIndicator.hidden = !enabled;
+    self.frameWatermarkButton.tintColor = enabled ? [UIColor systemOrangeColor] : [UIColor whiteColor];
+}
+
+- (void)applyWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
+    if (!configuration) { return; }
+    self.watermarkConfiguration = [configuration copy];
+    [self updateFrameWatermarkStatus:configuration.isEnabled];
+    if (self.watermarkPanelVisible) {
+        [self.watermarkPanel applyConfiguration:self.watermarkConfiguration animated:YES];
+    } else {
+        [self.watermarkPanel applyConfiguration:self.watermarkConfiguration animated:NO];
+    }
+}
+
+- (void)presentWatermarkPanel {
+    if (self.watermarkPanelVisible) { return; }
+    self.watermarkPanelVisible = YES;
+    self.watermarkBackdropView.hidden = NO;
+    self.watermarkPanel.hidden = NO;
+    [self bringSubviewToFront:self.watermarkBackdropView];
+    [self bringSubviewToFront:self.watermarkPanel];
+    [self.watermarkPanel applyConfiguration:self.watermarkConfiguration animated:NO];
+    [self layoutIfNeeded];
+    self.watermarkPanelBottomConstraint.constant = 0.0;
+    [UIView animateWithDuration:0.3
+                          delay:0
+         usingSpringWithDamping:0.85
+          initialSpringVelocity:0.4
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:^{
+        self.watermarkBackdropView.alpha = 1.0;
+        [self layoutIfNeeded];
+    } completion:nil];
+    if ([self.delegate respondsToSelector:@selector(didChangeWatermarkPanelVisibility:)]) {
+        [self.delegate didChangeWatermarkPanelVisibility:YES];
+    }
+}
+
+- (void)dismissWatermarkPanel {
+    if (!self.watermarkPanelVisible) { return; }
+    self.watermarkPanelVisible = NO;
+    self.watermarkPanelBottomConstraint.constant = kWatermarkPanelHeight;
+    [UIView animateWithDuration:0.25 animations:^{
+        self.watermarkBackdropView.alpha = 0.0;
+        [self layoutIfNeeded];
+    } completion:^(BOOL finished) {
+        self.watermarkBackdropView.hidden = YES;
+        self.watermarkPanel.hidden = YES;
+    }];
+    if ([self.delegate respondsToSelector:@selector(didChangeWatermarkPanelVisibility:)]) {
+        [self.delegate didChangeWatermarkPanelVisibility:NO];
+    }
+}
+
+- (BOOL)isWatermarkPanelVisible {
+    return self.watermarkPanelVisible;
+}
+
+#pragma mark - WatermarkPanelViewDelegate
+
+- (void)watermarkPanelDidRequestDismiss:(WatermarkPanelView *)panel {
+    [self dismissWatermarkPanel];
+}
+
+- (void)watermarkPanel:(WatermarkPanelView *)panel didUpdateConfiguration:(CMWatermarkConfiguration *)configuration {
+    self.watermarkConfiguration = [configuration copy];
+    [self updateFrameWatermarkStatus:configuration.isEnabled];
+    if ([self.delegate respondsToSelector:@selector(didUpdateWatermarkConfiguration:)]) {
+        [self.delegate didUpdateWatermarkConfiguration:configuration];
+    }
 }
 
 - (void)updateGalleryButtonWithImage:(UIImage *)image {

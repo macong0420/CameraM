@@ -6,12 +6,16 @@
 //
 
 #import "CameraBusinessController.h"
+#import "../Managers/CMWatermarkRenderer.h"
 
 @interface CameraBusinessController () <CameraManagerDelegate>
 
 @property (nonatomic, strong) CameraManager *cameraManager;
 @property (nonatomic, strong) UIImage *latestCapturedImage;
 @property (nonatomic, assign) BOOL isGridLinesVisible;
+@property (nonatomic, copy) CMWatermarkConfiguration *watermarkConfiguration;
+@property (nonatomic, strong) CMWatermarkRenderer *watermarkRenderer;
+@property (nonatomic, strong) dispatch_queue_t renderQueue;
 
 @end
 
@@ -22,6 +26,9 @@
     if (self) {
         [self setupCameraManager];
         _isGridLinesVisible = NO;
+        _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
+        _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
+        _renderQueue = dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
@@ -151,6 +158,11 @@
     return [self.cameraManager previewRectForAspectRatio:self.currentAspectRatio inViewSize:viewSize];
 }
 
+- (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
+    if (!configuration) { return; }
+    self.watermarkConfiguration = [configuration copy];
+}
+
 #pragma mark - CameraManagerDelegate
 
 - (void)cameraManager:(CameraManager *)manager didChangeState:(CameraState)state {
@@ -164,19 +176,31 @@
 }
 
 - (void)cameraManager:(CameraManager *)manager didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {
-    // 根据当前比例裁剪图像
-    UIImage *finalImage = [self.cameraManager cropImage:image toAspectRatio:self.currentAspectRatio];
-    
-    // 保存裁剪后的图像作为最新照片
-    self.latestCapturedImage = finalImage;
-    
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if ([self.delegate respondsToSelector:@selector(didCapturePhoto:withMetadata:)]) {
-            [self.delegate didCapturePhoto:finalImage withMetadata:metadata];
-        }
-        
-        if ([self.delegate respondsToSelector:@selector(shouldShowCaptureFlashEffect)]) {
-            [self.delegate shouldShowCaptureFlashEffect];
+    if (!image) { return; }
+    CMWatermarkConfiguration *configurationSnapshot = [self.watermarkConfiguration copy];
+    CameraAspectRatio aspectRatio = self.currentAspectRatio;
+
+    dispatch_async(self.renderQueue, ^{
+        @autoreleasepool {
+            UIImage *croppedImage = [self.cameraManager cropImage:image toAspectRatio:aspectRatio];
+            UIImage *renderedImage = croppedImage;
+            if (configurationSnapshot) {
+                renderedImage = [self.watermarkRenderer renderImage:croppedImage
+                                                  withConfiguration:configurationSnapshot
+                                                           metadata:metadata] ?: croppedImage;
+            }
+            UIImage *finalImage = renderedImage ?: croppedImage;
+            [self.cameraManager saveImageToPhotosLibrary:finalImage metadata:metadata completion:nil];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.latestCapturedImage = finalImage;
+                if ([self.delegate respondsToSelector:@selector(didCapturePhoto:withMetadata:)]) {
+                    [self.delegate didCapturePhoto:finalImage withMetadata:metadata];
+                }
+                if ([self.delegate respondsToSelector:@selector(shouldShowCaptureFlashEffect)]) {
+                    [self.delegate shouldShowCaptureFlashEffect];
+                }
+            });
         }
     });
 }
