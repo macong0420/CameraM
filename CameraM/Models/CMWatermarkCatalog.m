@@ -181,9 +181,69 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                       displayName:@"Apple W"
                                                          assetName:@"Apple_logo_white"
                                              prefersTemplateRendering:YES],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.arri"
+                                                      displayName:@"ARRI"
+                                                         assetName:@"Arri_logo"
+                                             prefersTemplateRendering:NO],
             [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.canon"
                                                       displayName:@"Canon"
                                                          assetName:@"Canon_wordmark"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.dji"
+                                                      displayName:@"DJI"
+                                                         assetName:@"dji-1"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.fujifilm"
+                                                      displayName:@"Fujifilm"
+                                                         assetName:@"Fujifilm_logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.hasselblad"
+                                                      displayName:@"Hasselblad"
+                                                         assetName:@"Hasselblad_logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.hasselblad.white"
+                                                      displayName:@"Hasselblad W"
+                                                         assetName:@"Hasselblad_logo_w"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.hasu"
+                                                      displayName:@"HASU"
+                                                         assetName:@"hasu"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.hasu.black"
+                                                      displayName:@"HASU Black"
+                                                         assetName:@"hasu_black"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.kodak"
+                                                      displayName:@"Kodak"
+                                                         assetName:@"Eastman_Kodak_Company_logo_(2016)(no_background)"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.leica"
+                                                      displayName:@"Leica"
+                                                         assetName:@"Leica_Camera_logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.nikon"
+                                                      displayName:@"Nikon"
+                                                         assetName:@"Nikon_Logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.olympus"
+                                                      displayName:@"Olympus"
+                                                         assetName:@"Olympus_Corporation_logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.panasonic"
+                                                      displayName:@"Panasonic"
+                                                         assetName:@"Panasonic_logo_(Blue)"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.panavision"
+                                                      displayName:@"Panavision"
+                                                         assetName:@"Panavision_logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.polaroid"
+                                                      displayName:@"Polaroid"
+                                                         assetName:@"Polaroid_logo"
+                                             prefersTemplateRendering:NO],
+            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.ricoh"
+                                                      displayName:@"Ricoh"
+                                                         assetName:@"Ricoh_logo_2012"
                                              prefersTemplateRendering:NO],
             [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.sony"
                                                       displayName:@"Sony"
@@ -192,22 +252,6 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
             [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.zeiss"
                                                       displayName:@"Zeiss"
                                                          assetName:@"Zeiss_logo"
-                                             prefersTemplateRendering:NO],
-            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.ricoh"
-                                                      displayName:@"Ricoh"
-                                                         assetName:@"Ricoh_logo_2012"
-                                             prefersTemplateRendering:NO],
-            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.hasselblad"
-                                                      displayName:@"Hasselblad"
-                                                         assetName:@"Hasselblad_logo"
-                                             prefersTemplateRendering:NO],
-            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.dji"
-                                                      displayName:@"DJI"
-                                                         assetName:@"dji-1"
-                                             prefersTemplateRendering:NO],
-            [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.leica"
-                                                      displayName:@"Leica"
-                                                         assetName:@"Leica_Camera_logo"
                                              prefersTemplateRendering:NO]
         ];
     });
