@@ -29,6 +29,10 @@
 @property (nonatomic, readwrite) FlashMode currentFlashMode;
 @property (nonatomic, readwrite) CameraAspectRatio currentAspectRatio;
 @property (nonatomic, readwrite) CameraDeviceOrientation currentDeviceOrientation;
+@property (nonatomic, readwrite) BOOL isUltraHighResolutionSupported;
+@property (nonatomic, assign) CameraResolutionMode preferredResolutionMode;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, AVCaptureDeviceFormat *> *standardDeviceFormats;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, AVCaptureDeviceFormat *> *ultraHighDeviceFormats;
 
 // 方向监听
 @property (nonatomic, strong) CMMotionManager *motionManager;
@@ -49,6 +53,15 @@
                                  devices:(NSArray<AVCaptureDevice *> *)devices;
 - (void)notifyLensUpdate;
 - (CGSize)activeFormatDimensions;
+- (BOOL)deviceSupportsUltraHighResolution:(AVCaptureDevice *)device;
+- (void)primeFormatCachesForDevice:(AVCaptureDevice *)device;
+- (NSString *)formatCacheKeyForDevice:(AVCaptureDevice *)device;
+- (AVCaptureDeviceFormat *)standardFormatForDevice:(AVCaptureDevice *)device;
+- (AVCaptureDeviceFormat *)ultraHighResolutionFormatForDevice:(AVCaptureDevice *)device;
+- (AVCaptureDeviceFormat *)findUltraHighResolutionFormatForDevice:(AVCaptureDevice *)device;
+- (BOOL)applyFormat:(AVCaptureDeviceFormat *)format toDevice:(AVCaptureDevice *)device;
+- (void)updateUltraHighResolutionSupportForDevice:(AVCaptureDevice *)device;
+- (void)applyPreferredResolutionModeLockedWithSupportChanged:(BOOL)supportChanged;
 
 @end
 
@@ -78,12 +91,15 @@
     _currentState = CameraStateIdle;
     _currentPosition = CameraPositionBack;
     _currentResolutionMode = CameraResolutionModeStandard;
+    _preferredResolutionMode = CameraResolutionModeStandard;
     _currentFlashMode = FlashModeAuto;
     _currentAspectRatio = CameraAspectRatio4to3; // 默认4:3比例
     _currentDeviceOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
     _availableLensOptions = @[];
     _lensDeviceMap = @{};
-    
+    _standardDeviceFormats = [NSMutableDictionary dictionary];
+    _ultraHighDeviceFormats = [NSMutableDictionary dictionary];
+
     // 创建专用队列 - 避免主线程阻塞
     _sessionQueue = dispatch_queue_create("com.cameram.session", DISPATCH_QUEUE_SERIAL);
     
@@ -201,6 +217,7 @@
             self.deviceInput = newInput;
             self.currentDevice = newDevice;
             self.currentPosition = newPosition;
+            [self primeFormatCachesForDevice:self.currentDevice];
         } else if (error) {
             NSLog(@"⚠️ 切换摄像头失败: %@", error.localizedDescription);
             if (self.deviceInput) {
@@ -210,26 +227,16 @@
 
         [self.captureSession commitConfiguration];
 
+        [self updateUltraHighResolutionSupportForDevice:self.currentDevice];
+
         [self notifyLensUpdate];
     });
 }
 
 - (void)switchResolutionMode:(CameraResolutionMode)mode {
-    if (!self.isUltraHighResolutionSupported && mode == CameraResolutionModeUltraHigh) {
-        return;
-    }
-    
     dispatch_async(self.sessionQueue, ^{
-        [self.captureSession beginConfiguration];
-        [self configurePhotoOutputForResolutionMode:mode];
-        [self.captureSession commitConfiguration];
-        
-        self.currentResolutionMode = mode;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeResolutionMode:)]) {
-                [self.delegate cameraManager:self didChangeResolutionMode:mode];
-            }
-        });
+        self.preferredResolutionMode = mode;
+        [self applyPreferredResolutionModeLockedWithSupportChanged:NO];
     });
 }
 
@@ -311,6 +318,7 @@
             self.deviceInput = newInput;
             self.currentDevice = targetDevice;
             self.currentLensOption = targetOption;
+            [self primeFormatCachesForDevice:self.currentDevice];
             didAddInput = YES;
         } else if (previousInput) {
             [self.captureSession addInput:previousInput];
@@ -321,6 +329,8 @@
             NSLog(@"⚠️ 切换镜头失败: 无法添加输入");
             return;
         }
+
+        [self updateUltraHighResolutionSupportForDevice:self.currentDevice];
 
         [self notifyLensUpdate];
     });
@@ -913,19 +923,24 @@
         }
         return NO;
     }
-    
+
+    [self primeFormatCachesForDevice:self.currentDevice];
+
     // 创建照片输出
     self.photoOutput = [[AVCapturePhotoOutput alloc] init];
     if ([self.captureSession canAddOutput:self.photoOutput]) {
         [self.captureSession addOutput:self.photoOutput];
-        [self configurePhotoOutputForResolutionMode:self.currentResolutionMode];
+        self.photoOutput.highResolutionCaptureEnabled = YES;
+        [self configurePhotoOutputForResolutionMode:self.currentResolutionMode withFormat:self.currentDevice.activeFormat];
     } else {
         if (error) {
             *error = [NSError errorWithDomain:@"CameraManager" code:1004 userInfo:@{NSLocalizedDescriptionKey: @"Cannot add photo output"}];
         }
         return NO;
     }
-    
+
+    [self updateUltraHighResolutionSupportForDevice:self.currentDevice];
+
     return YES;
 }
 
@@ -952,42 +967,294 @@
 
 - (void)checkUltraHighResolutionSupport {
     AVCaptureDevice *backCamera = [self cameraWithPosition:CameraPositionBack];
-    
-    // 检查是否支持4800万像素
-    if (@available(iOS 16.0, *)) {
-        for (AVCaptureDeviceFormat *format in backCamera.formats) {
-            CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
-            // 4800万像素大约是8000x6000
-            if (dimensions.width >= 8000 || dimensions.height >= 6000) {
-                _isUltraHighResolutionSupported = YES;
-                break;
-            }
-        }
+    [self primeFormatCachesForDevice:backCamera];
+    BOOL supported = [self deviceSupportsUltraHighResolution:backCamera];
+    self.isUltraHighResolutionSupported = supported;
+    if (!supported) {
+        self.preferredResolutionMode = CameraResolutionModeStandard;
+        self.currentResolutionMode = CameraResolutionModeStandard;
     }
 }
 
-- (void)configurePhotoOutputForResolutionMode:(CameraResolutionMode)mode {
+- (void)configurePhotoOutputForResolutionMode:(CameraResolutionMode)mode withFormat:(AVCaptureDeviceFormat *)format {
+    if (!self.photoOutput) {
+        return;
+    }
+
+    if (@available(iOS 17.0, *)) {
+        if (format) {
+            CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+            if (dimensions.width > 0 && dimensions.height > 0) {
+                self.photoOutput.maxPhotoDimensions = dimensions;
+            }
+        }
+    }
+
     if (@available(iOS 16.0, *)) {
         if (mode == CameraResolutionModeUltraHigh && self.isUltraHighResolutionSupported) {
-            // 启用最大分辨率
             self.photoOutput.maxPhotoQualityPrioritization = AVCapturePhotoQualityPrioritizationQuality;
         } else {
-            // 标准模式 - 平衡性能和质量
             self.photoOutput.maxPhotoQualityPrioritization = AVCapturePhotoQualityPrioritizationBalanced;
         }
+    }
+
+    if (@available(iOS 11.0, *)) {
+        self.photoOutput.highResolutionCaptureEnabled = YES;
+    }
+}
+
+#pragma mark - 分辨率管理
+
+- (BOOL)deviceSupportsUltraHighResolution:(AVCaptureDevice *)device {
+    if (!device) {
+        return NO;
+    }
+    return ([self ultraHighResolutionFormatForDevice:device] != nil);
+}
+
+- (void)primeFormatCachesForDevice:(AVCaptureDevice *)device {
+    if (!device) {
+        return;
+    }
+    [self standardFormatForDevice:device];
+    [self ultraHighResolutionFormatForDevice:device];
+}
+
+- (NSString *)formatCacheKeyForDevice:(AVCaptureDevice *)device {
+    if (!device) {
+        return nil;
+    }
+    NSString *uniqueID = device.uniqueID;
+    if (uniqueID.length > 0) {
+        return uniqueID;
+    }
+    return [NSString stringWithFormat:@"%p", device];
+}
+
+- (AVCaptureDeviceFormat *)standardFormatForDevice:(AVCaptureDevice *)device {
+    if (!device) {
+        return nil;
+    }
+    NSString *key = [self formatCacheKeyForDevice:device];
+    if (key.length == 0) {
+        return device.activeFormat;
+    }
+    AVCaptureDeviceFormat *cached = self.standardDeviceFormats[key];
+    if (!cached) {
+        AVCaptureDeviceFormat *active = device.activeFormat;
+        if (active) {
+            self.standardDeviceFormats[key] = active;
+            cached = active;
+        }
+    }
+    return cached ?: device.activeFormat;
+}
+
+- (AVCaptureDeviceFormat *)ultraHighResolutionFormatForDevice:(AVCaptureDevice *)device {
+    if (!device) {
+        return nil;
+    }
+    NSString *key = [self formatCacheKeyForDevice:device];
+    if (key.length == 0) {
+        return [self findUltraHighResolutionFormatForDevice:device];
+    }
+    AVCaptureDeviceFormat *cached = self.ultraHighDeviceFormats[key];
+    if (!cached) {
+        cached = [self findUltraHighResolutionFormatForDevice:device];
+        if (cached) {
+            self.ultraHighDeviceFormats[key] = cached;
+        }
+    }
+    return cached;
+}
+
+- (AVCaptureDeviceFormat *)findUltraHighResolutionFormatForDevice:(AVCaptureDevice *)device {
+    if (!device) {
+        return nil;
+    }
+
+    AVCaptureDeviceFormat *bestFormat = nil;
+    int64_t bestPixelCount = 0;
+    CGFloat bestAspectPenalty = CGFLOAT_MAX;
+
+    for (AVCaptureDeviceFormat *format in device.formats) {
+        CMFormatDescriptionRef description = format.formatDescription;
+        if (!description) {
+            continue;
+        }
+        CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(description);
+        if (dimensions.width <= 0 || dimensions.height <= 0) {
+            continue;
+        }
+        if (!format.isHighResolutionStillImageOutputEnabled) {
+            continue;
+        }
+
+        int64_t pixelCount = (int64_t)dimensions.width * (int64_t)dimensions.height;
+        if (pixelCount < 40000000) { // 约4000万像素以上再考虑，48MP约为8064x6048
+            continue;
+        }
+
+        CGFloat aspect = (CGFloat)dimensions.width / (CGFloat)dimensions.height;
+        CGFloat penalty = fabs(aspect - (4.0f / 3.0f));
+
+        if (!bestFormat || pixelCount > bestPixelCount || (pixelCount == bestPixelCount && penalty < bestAspectPenalty)) {
+            bestFormat = format;
+            bestPixelCount = pixelCount;
+            bestAspectPenalty = penalty;
+        }
+    }
+
+    return bestFormat;
+}
+
+- (BOOL)applyFormat:(AVCaptureDeviceFormat *)format toDevice:(AVCaptureDevice *)device {
+    if (!device || !format) {
+        return NO;
+    }
+
+    if (device.activeFormat == format) {
+        return NO;
+    }
+
+    NSError *configurationError = nil;
+    if (![device lockForConfiguration:&configurationError]) {
+        NSLog(@"⚠️ 无法锁定设备配置: %@", configurationError.localizedDescription);
+        return NO;
+    }
+
+    CGFloat previousZoom = device.videoZoomFactor;
+    device.activeFormat = format;
+
+    CGFloat minZoom = device.minAvailableVideoZoomFactor;
+    CGFloat maxZoom = device.maxAvailableVideoZoomFactor;
+    CGFloat clampedZoom = MIN(MAX(previousZoom, minZoom), maxZoom);
+    if (fabs(clampedZoom - previousZoom) > 0.001f) {
+        device.videoZoomFactor = clampedZoom;
+    }
+
+    [device unlockForConfiguration];
+    return YES;
+}
+
+- (void)updateUltraHighResolutionSupportForDevice:(AVCaptureDevice *)device {
+    BOOL previousSupport = self.isUltraHighResolutionSupported;
+    [self primeFormatCachesForDevice:device];
+    BOOL currentSupport = [self deviceSupportsUltraHighResolution:device];
+    self.isUltraHighResolutionSupported = currentSupport;
+
+    BOOL supportChanged = (previousSupport != currentSupport);
+    [self applyPreferredResolutionModeLockedWithSupportChanged:supportChanged];
+}
+
+- (void)applyPreferredResolutionModeLockedWithSupportChanged:(BOOL)supportChanged {
+    CameraResolutionMode desiredMode = self.preferredResolutionMode;
+    CameraResolutionMode resolvedMode = desiredMode;
+    AVCaptureDevice *device = self.currentDevice;
+
+    BOOL requestedUltra = (desiredMode == CameraResolutionModeUltraHigh);
+    BOOL fallbackDueToSupport = NO;
+
+    if (requestedUltra && !self.isUltraHighResolutionSupported) {
+        fallbackDueToSupport = YES;
+        resolvedMode = CameraResolutionModeStandard;
+    }
+
+    if (!self.captureSession || !self.photoOutput || !device) {
+        self.currentResolutionMode = resolvedMode;
+        return;
+    }
+
+    [self primeFormatCachesForDevice:device];
+
+    AVCaptureDeviceFormat *targetFormat = nil;
+    if (resolvedMode == CameraResolutionModeUltraHigh) {
+        targetFormat = [self ultraHighResolutionFormatForDevice:device];
+        if (!targetFormat) {
+            fallbackDueToSupport = YES;
+            resolvedMode = CameraResolutionModeStandard;
+        }
+    }
+
+    if (resolvedMode == CameraResolutionModeStandard) {
+        targetFormat = [self standardFormatForDevice:device];
+    }
+
+    if (!targetFormat) {
+        targetFormat = device.activeFormat;
+    }
+
+    BOOL didChangeMode = (self.currentResolutionMode != resolvedMode);
+    BOOL alreadyUsingTargetFormat = (device.activeFormat == targetFormat);
+
+    if (!didChangeMode && alreadyUsingTargetFormat) {
+        self.currentResolutionMode = resolvedMode;
+        if (supportChanged) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeResolutionMode:)]) {
+                    [self.delegate cameraManager:self didChangeResolutionMode:self.currentResolutionMode];
+                }
+            });
+        }
+        return;
+    }
+
+    [self.captureSession beginConfiguration];
+    BOOL formatChanged = [self applyFormat:targetFormat toDevice:device];
+    AVCaptureDeviceFormat *appliedFormat = formatChanged ? targetFormat : device.activeFormat;
+    BOOL formatApplied = (appliedFormat == targetFormat);
+    if (resolvedMode == CameraResolutionModeUltraHigh && !formatApplied) {
+        fallbackDueToSupport = YES;
+        resolvedMode = CameraResolutionModeStandard;
+    }
+    [self configurePhotoOutputForResolutionMode:resolvedMode withFormat:appliedFormat];
+    [self.captureSession commitConfiguration];
+
+    BOOL finalModeChanged = (self.currentResolutionMode != resolvedMode);
+    self.currentResolutionMode = resolvedMode;
+
+    if (resolvedMode == CameraResolutionModeStandard && appliedFormat) {
+        NSString *cacheKey = [self formatCacheKeyForDevice:device];
+        if (cacheKey.length > 0) {
+            self.standardDeviceFormats[cacheKey] = appliedFormat;
+        }
+    }
+
+    if (resolvedMode == CameraResolutionModeUltraHigh) {
+        NSLog(@"✅ 已启用4800万像素模式");
+    } else if (requestedUltra && (finalModeChanged || formatChanged || fallbackDueToSupport)) {
+        NSLog(@"⚠️ 当前镜头不支持4800万像素，回退到标准分辨率");
+    }
+
+    if (supportChanged || finalModeChanged || formatChanged) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeResolutionMode:)]) {
+                [self.delegate cameraManager:self didChangeResolutionMode:self.currentResolutionMode];
+            }
+        });
     }
 }
 
 - (AVCapturePhotoSettings *)createPhotoSettings {
     AVCapturePhotoSettings *settings = [AVCapturePhotoSettings photoSettings];
-    
+
     // 4800万像素模式配置
     if (self.currentResolutionMode == CameraResolutionModeUltraHigh && self.isUltraHighResolutionSupported) {
         if (@available(iOS 16.0, *)) {
             settings.photoQualityPrioritization = AVCapturePhotoQualityPrioritizationQuality;
         }
+        if (@available(iOS 11.0, *)) {
+            settings.highResolutionPhotoEnabled = YES;
+        }
+    } else {
+        if (@available(iOS 16.0, *)) {
+            settings.photoQualityPrioritization = AVCapturePhotoQualityPrioritizationBalanced;
+        }
+        if (@available(iOS 11.0, *)) {
+            settings.highResolutionPhotoEnabled = NO;
+        }
     }
-    
+
     // 应用闪光灯设置
     if (self.currentDevice && [self.currentDevice hasFlash]) {
         switch (self.currentFlashMode) {
@@ -1006,7 +1273,7 @@
     // 启用高质量拍摄
     if ([self.photoOutput.availablePhotoCodecTypes containsObject:AVVideoCodecTypeHEVC]) {
         settings = [AVCapturePhotoSettings photoSettingsWithFormat:@{AVVideoCodecKey: AVVideoCodecTypeHEVC}];
-        
+
         // 重新应用闪光灯设置
         if (self.currentDevice && [self.currentDevice hasFlash]) {
             switch (self.currentFlashMode) {
@@ -1027,9 +1294,19 @@
             if (@available(iOS 16.0, *)) {
                 settings.photoQualityPrioritization = AVCapturePhotoQualityPrioritizationQuality;
             }
+            if (@available(iOS 11.0, *)) {
+                settings.highResolutionPhotoEnabled = YES;
+            }
+        } else {
+            if (@available(iOS 16.0, *)) {
+                settings.photoQualityPrioritization = AVCapturePhotoQualityPrioritizationBalanced;
+            }
+            if (@available(iOS 11.0, *)) {
+                settings.highResolutionPhotoEnabled = NO;
+            }
         }
     }
-    
+
     return settings;
 }
 

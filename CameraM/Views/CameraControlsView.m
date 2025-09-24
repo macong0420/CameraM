@@ -251,8 +251,16 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     self.resolutionModeLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.5];
     self.resolutionModeLabel.layer.cornerRadius = 4;
     self.resolutionModeLabel.textAlignment = NSTextAlignmentCenter;
+    self.resolutionModeLabel.layer.masksToBounds = YES;
+    self.resolutionModeLabel.userInteractionEnabled = YES;
+    self.resolutionModeLabel.accessibilityLabel = NSLocalizedString(@"Photo resolution", nil);
+    self.resolutionModeLabel.accessibilityTraits = UIAccessibilityTraitButton;
     self.resolutionModeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:self.resolutionModeLabel];
+
+    UITapGestureRecognizer *resolutionTap = [[UITapGestureRecognizer alloc] initWithTarget:self
+                                                                                    action:@selector(resolutionModeLabelTapped:)];
+    [self.resolutionModeLabel addGestureRecognizer:resolutionTap];
     
     self.flashModeLabel = [[UILabel alloc] init];
     self.flashModeLabel.text = @"AUTO";
@@ -699,10 +707,20 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     }
 }
 
+- (void)resolutionModeLabelTapped:(UITapGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateEnded) {
+        return;
+    }
+
+    if ([self.delegate respondsToSelector:@selector(didTapResolutionMode)]) {
+        [self.delegate didTapResolutionMode];
+    }
+}
+
 - (void)aspectRatioButtonTapped:(UIButton *)sender {
     // 显示/隐藏弹层
     BOOL isCurrentlyVisible = !self.aspectRatioPopover.hidden;
-    
+
     if (isCurrentlyVisible) {
         [self hideAspectRatioPopover];
     } else {
@@ -778,6 +796,12 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 - (void)updateResolutionMode:(NSString *)modeText highlighted:(BOOL)highlighted {
     self.resolutionModeLabel.text = modeText;
     self.resolutionModeLabel.backgroundColor = highlighted ? [UIColor systemYellowColor] : [UIColor colorWithWhite:0.0 alpha:0.5];
+}
+
+- (void)setResolutionModeEnabled:(BOOL)enabled {
+    self.resolutionModeLabel.userInteractionEnabled = enabled;
+    self.resolutionModeLabel.alpha = enabled ? 1.0 : 0.4;
+    self.resolutionModeLabel.accessibilityTraits = enabled ? UIAccessibilityTraitButton : UIAccessibilityTraitStaticText;
 }
 
 - (void)updateFlashMode:(NSString *)modeText highlighted:(BOOL)highlighted {

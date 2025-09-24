@@ -98,7 +98,8 @@
     NSString *modeText = (mode == CameraResolutionModeUltraHigh) ? @"48MP" : @"12MP";
     BOOL highlighted = (mode == CameraResolutionModeUltraHigh);
     [self.controlsView updateResolutionMode:modeText highlighted:highlighted];
-    
+    [self.controlsView setResolutionModeEnabled:self.businessController.isUltraHighResolutionSupported];
+
     FlashMode flashMode = self.businessController.currentFlashMode;
     NSString *flashText = [self flashModeText:flashMode];
     BOOL flashHighlighted = (flashMode == FlashModeOn);
@@ -140,6 +141,13 @@
 - (void)didSelectAspectRatio:(CameraAspectRatio)ratio {
     [self.businessController switchAspectRatio:ratio];
     NSLog(@"比例切换: %ld", (long)ratio);
+}
+
+- (void)didTapResolutionMode {
+    if (!self.businessController.isUltraHighResolutionSupported) {
+        return;
+    }
+    [self.businessController switchResolutionMode];
 }
 
 - (void)didTapFlashButton {
@@ -225,6 +233,7 @@
 
 - (void)didUpdateAvailableLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption *)currentLens {
     [self.controlsView updateLensOptions:lensOptions currentLens:currentLens];
+    [self updateUIState];
 }
 
 // 新增方法：更新预览层frame

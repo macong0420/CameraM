@@ -25,6 +25,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)didTapGalleryButton;
 - (void)didSelectMode:(NSInteger)modeIndex;
 - (void)didSelectAspectRatio:(CameraAspectRatio)ratio;
+- (void)didTapResolutionMode;
 
 // 相机控制
 - (void)didTapFlashButton;
@@ -72,6 +73,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)updatePreviewVideoRect:(CGRect)videoRect;
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;
 - (void)updateLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption * _Nullable)currentLens;
+- (void)setResolutionModeEnabled:(BOOL)enabled;
 
 // 横屏适配接口
 - (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation;
