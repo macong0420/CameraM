@@ -8,6 +8,7 @@
 #import "CameraViewController.h"
 #import "Views/CameraControlsView.h"
 #import "Controllers/CameraBusinessController.h"
+#import "Models/CMCameraLensOption.h"
 
 @interface CameraViewController () <CameraControlsDelegate, CameraBusinessDelegate>
 
@@ -56,7 +57,11 @@
     self.businessController.delegate = self;
 
     [self.controlsView applyWatermarkConfiguration:self.businessController.watermarkConfiguration];
-    
+    if (self.businessController.availableLensOptions.count > 0) {
+        [self.controlsView updateLensOptions:self.businessController.availableLensOptions
+                                   currentLens:self.businessController.currentLensOption];
+    }
+
     // UI组件约束
     [NSLayoutConstraint activateConstraints:@[
         [self.controlsView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
@@ -160,6 +165,10 @@
     [self.businessController setExposureCompensation:value];
 }
 
+- (void)didSelectLensOption:(CMCameraLensOption *)lensOption {
+    [self.businessController switchToLensOption:lensOption];
+}
+
 - (void)didTapPreviewAtPoint:(CGPoint)point {
     [self.businessController focusAtPoint:point withPreviewLayer:self.businessController.cameraManager.previewLayer];
     [self.controlsView showFocusIndicatorAtPoint:point];
@@ -206,6 +215,10 @@
     });
     
     NSLog(@"设备方向变化，UI适配: %ld", (long)orientation);
+}
+
+- (void)didUpdateAvailableLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption *)currentLens {
+    [self.controlsView updateLensOptions:lensOptions currentLens:currentLens];
 }
 
 // 新增方法：更新预览层frame

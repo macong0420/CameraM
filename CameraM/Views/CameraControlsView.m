@@ -60,6 +60,13 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 @property (nonatomic, strong) UIView *aspectRatioPopover;
 @property (nonatomic, strong) CAShapeLayer *aspectRatioMaskLayer;
 
+// 镜头选择
+@property (nonatomic, strong) UIView *lensSelectorContainer;
+@property (nonatomic, strong) UIStackView *lensStackView;
+@property (nonatomic, copy) NSArray<UIButton *> *lensButtons;
+@property (nonatomic, copy) NSArray<CMCameraLensOption *> *lensOptions;
+@property (nonatomic, copy) NSString *currentLensIdentifier;
+
 // 横屏适配
 @property (nonatomic, assign) CameraDeviceOrientation currentOrientation;
 @property (nonatomic, strong) NSArray<NSLayoutConstraint *> *portraitConstraints;
@@ -84,6 +91,9 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         _currentOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
         _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
         _activeAspectRatio = CameraAspectRatio4to3;
+        _lensOptions = @[];
+        _lensButtons = @[];
+        _currentLensIdentifier = @"";
         [self setupUI];
     }
     return self;
@@ -103,6 +113,7 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     [self setupFocusIndicator];
     [self setupAspectRatioButton];
     [self setupAspectRatioMask];
+    [self setupLensSelector];
     [self setupWatermarkPanel];
     [self setupPortraitLayout]; // 默认竖屏布局
 }
@@ -374,6 +385,30 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     self.aspectRatioMaskLayer.fillColor = [UIColor colorWithWhite:0.0 alpha:0.4].CGColor;
     self.aspectRatioMaskLayer.fillRule = kCAFillRuleEvenOdd;
     [self.previewContainer.layer addSublayer:self.aspectRatioMaskLayer];
+}
+
+- (void)setupLensSelector {
+    self.lensSelectorContainer = [[UIView alloc] init];
+    self.lensSelectorContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lensSelectorContainer.backgroundColor = [[UIColor colorWithWhite:0.0 alpha:0.75] colorWithAlphaComponent:0.35];
+    self.lensSelectorContainer.layer.cornerRadius = 28.0;
+    self.lensSelectorContainer.layer.masksToBounds = YES;
+    self.lensSelectorContainer.hidden = YES;
+    [self addSubview:self.lensSelectorContainer];
+
+    self.lensStackView = [[UIStackView alloc] init];
+    self.lensStackView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lensStackView.axis = UILayoutConstraintAxisHorizontal;
+    self.lensStackView.alignment = UIStackViewAlignmentCenter;
+    self.lensStackView.spacing = 12.0;
+    [self.lensSelectorContainer addSubview:self.lensStackView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.lensStackView.topAnchor constraintEqualToAnchor:self.lensSelectorContainer.topAnchor constant:8.0],
+        [self.lensStackView.bottomAnchor constraintEqualToAnchor:self.lensSelectorContainer.bottomAnchor constant:-8.0],
+        [self.lensStackView.leadingAnchor constraintEqualToAnchor:self.lensSelectorContainer.leadingAnchor constant:12.0],
+        [self.lensStackView.trailingAnchor constraintEqualToAnchor:self.lensSelectorContainer.trailingAnchor constant:-12.0]
+    ]];
 }
 
 - (void)setupWatermarkPanel {
@@ -933,6 +968,80 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     }
 }
 
+- (void)updateLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption * _Nullable)currentLens {
+    self.lensOptions = [lensOptions copy];
+    self.currentLensIdentifier = currentLens.identifier ?: lensOptions.firstObject.identifier;
+
+    for (UIView *subview in self.lensStackView.arrangedSubviews) {
+        [self.lensStackView removeArrangedSubview:subview];
+        [subview removeFromSuperview];
+    }
+
+    if (lensOptions.count <= 1) {
+        self.lensButtons = @[];
+        self.lensSelectorContainer.hidden = YES;
+        return;
+    }
+
+    NSMutableArray<UIButton *> *buttons = [NSMutableArray array];
+    [lensOptions enumerateObjectsUsingBlock:^(CMCameraLensOption * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        [button setTitle:obj.displayName forState:UIControlStateNormal];
+        button.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+        button.tag = (NSInteger)idx;
+        [button addTarget:self action:@selector(lensButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+        button.layer.cornerRadius = 24.0;
+        button.clipsToBounds = YES;
+        [button.widthAnchor constraintEqualToConstant:56.0].active = YES;
+        [button.heightAnchor constraintEqualToConstant:56.0].active = YES;
+        [self.lensStackView addArrangedSubview:button];
+        [buttons addObject:button];
+    }];
+
+    self.lensButtons = [buttons copy];
+    self.lensSelectorContainer.hidden = NO;
+    [self updateLensButtonsAppearanceAnimated:NO];
+}
+
+- (void)updateLensButtonsAppearanceAnimated:(BOOL)animated {
+    if (self.currentLensIdentifier.length == 0 && self.lensOptions.count > 0) {
+        self.currentLensIdentifier = self.lensOptions.firstObject.identifier;
+    }
+    [self.lensButtons enumerateObjectsUsingBlock:^(UIButton * _Nonnull button, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (idx >= self.lensOptions.count) { return; }
+        CMCameraLensOption *option = self.lensOptions[idx];
+        BOOL selected = [option.identifier isEqualToString:self.currentLensIdentifier];
+        UIColor *selectedBackground = [[UIColor colorWithWhite:1.0 alpha:1.0] colorWithAlphaComponent:0.18];
+        UIColor *normalBackground = [UIColor clearColor];
+        UIColor *selectedTextColor = [UIColor systemOrangeColor];
+        UIColor *normalTextColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
+
+        void (^applyAppearance)(void) = ^{
+            button.backgroundColor = selected ? selectedBackground : normalBackground;
+            [button setTitleColor:selected ? selectedTextColor : normalTextColor forState:UIControlStateNormal];
+            button.transform = selected ? CGAffineTransformMakeScale(1.1, 1.1) : CGAffineTransformIdentity;
+        };
+
+        if (animated) {
+            [UIView animateWithDuration:0.2 animations:applyAppearance];
+        } else {
+            applyAppearance();
+        }
+    }];
+}
+
+- (void)lensButtonTapped:(UIButton *)sender {
+    NSInteger index = sender.tag;
+    if (index < 0 || index >= (NSInteger)self.lensOptions.count) { return; }
+    CMCameraLensOption *selectedOption = self.lensOptions[index];
+    self.currentLensIdentifier = selectedOption.identifier;
+    [self updateLensButtonsAppearanceAnimated:YES];
+    if ([self.delegate respondsToSelector:@selector(didSelectLensOption:)]) {
+        [self.delegate didSelectLensOption:selectedOption];
+    }
+}
+
 #pragma mark - 横屏适配
 
 - (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation {
@@ -1101,6 +1210,13 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         [self.gridLinesView.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor]
     ]];
 
+    // 镜头选择器
+    [constraints addObjectsFromArray:@[
+        [self.lensSelectorContainer.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [self.lensSelectorContainer.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor constant:-16.0],
+        [self.lensSelectorContainer.heightAnchor constraintGreaterThanOrEqualToConstant:56.0]
+    ]];
+
     self.portraitConstraints = [constraints copy];
     [NSLayoutConstraint activateConstraints:self.portraitConstraints];
 }
@@ -1231,6 +1347,13 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         [self.gridLinesView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.gridLinesView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.gridLinesView.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor]
+    ]];
+
+    // 镜头选择器（横屏）
+    [constraints addObjectsFromArray:@[
+        [self.lensSelectorContainer.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [self.lensSelectorContainer.bottomAnchor constraintEqualToAnchor:self.bottomControlsView.topAnchor constant:-12.0],
+        [self.lensSelectorContainer.heightAnchor constraintGreaterThanOrEqualToConstant:56.0]
     ]];
 
     self.landscapeConstraints = [constraints copy];

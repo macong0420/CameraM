@@ -9,6 +9,7 @@
 #import "../Managers/CMWatermarkRenderer.h"
 
 static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.watermark.configuration";
+static NSString * const kCMLensSelectionStorageKey = @"com.cameram.lens.selection";
 
 @interface CameraBusinessController () <CameraManagerDelegate>
 
@@ -18,9 +19,13 @@ static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.wate
 @property (nonatomic, copy) CMWatermarkConfiguration *watermarkConfiguration;
 @property (nonatomic, strong) CMWatermarkRenderer *watermarkRenderer;
 @property (nonatomic, strong) dispatch_queue_t renderQueue;
+@property (nonatomic, copy) NSArray<CMCameraLensOption *> *availableLensOptions;
+@property (nonatomic, strong) CMCameraLensOption *currentLensOption;
+@property (nonatomic, copy) NSString *restoredLensIdentifier;
 
 - (void)persistWatermarkConfiguration;
 - (void)loadPersistedWatermarkConfiguration;
+- (void)persistCurrentLensSelection;
 
 @end
 
@@ -35,6 +40,9 @@ static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.wate
         [self loadPersistedWatermarkConfiguration];
         _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
         _renderQueue = dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
+        _availableLensOptions = self.cameraManager.availableLensOptions ?: @[];
+        _currentLensOption = self.cameraManager.currentLensOption;
+        _restoredLensIdentifier = [[NSUserDefaults standardUserDefaults] stringForKey:kCMLensSelectionStorageKey];
     }
     return self;
 }
@@ -138,6 +146,10 @@ static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.wate
     [self.cameraManager switchAspectRatio:ratio];
 }
 
+- (void)switchToLensOption:(CMCameraLensOption *)lensOption {
+    [self.cameraManager switchToLensOption:lensOption];
+}
+
 #pragma mark - 对焦和曝光
 
 - (void)focusAtPoint:(CGPoint)screenPoint withPreviewLayer:(AVCaptureVideoPreviewLayer *)previewLayer {
@@ -198,6 +210,14 @@ static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.wate
     } else if (unarchiveError) {
         NSLog(@"⚠️ 水印配置读取失败: %@", unarchiveError.localizedDescription);
     }
+}
+
+- (void)persistCurrentLensSelection {
+    if (self.currentLensOption.identifier.length == 0) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kCMLensSelectionStorageKey];
+        return;
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:self.currentLensOption.identifier forKey:kCMLensSelectionStorageKey];
 }
 
 #pragma mark - CameraManagerDelegate
@@ -280,6 +300,36 @@ static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.wate
             [self.delegate didChangeDeviceOrientation:orientation];
         }
     });
+}
+
+- (void)cameraManager:(CameraManager *)manager
+didUpdateAvailableLenses:(NSArray<CMCameraLensOption *> *)lenses
+          currentLens:(CMCameraLensOption *)currentLens {
+    self.availableLensOptions = [lenses copy];
+    self.currentLensOption = currentLens ?: self.availableLensOptions.firstObject;
+    if ([self.delegate respondsToSelector:@selector(didUpdateAvailableLensOptions:currentLens:)]) {
+        [self.delegate didUpdateAvailableLensOptions:self.availableLensOptions currentLens:self.currentLensOption];
+    }
+
+    BOOL hasPendingRestore = self.restoredLensIdentifier.length > 0 && self.currentLensOption && ![self.currentLensOption.identifier isEqualToString:self.restoredLensIdentifier];
+    if (hasPendingRestore) {
+        CMCameraLensOption *targetOption = nil;
+        for (CMCameraLensOption *candidate in self.availableLensOptions) {
+            if ([candidate.identifier isEqualToString:self.restoredLensIdentifier]) {
+                targetOption = candidate;
+                break;
+            }
+        }
+        self.restoredLensIdentifier = nil;
+        if (targetOption) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self switchToLensOption:targetOption];
+            });
+            return;
+        }
+    }
+
+    [self persistCurrentLensSelection];
 }
 
 @end

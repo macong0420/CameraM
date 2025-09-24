@@ -11,6 +11,7 @@
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
 #import <math.h>
+#import "../Models/CMCameraLensOption.h"
 
 @interface CameraManager () <AVCapturePhotoCaptureDelegate>
 
@@ -34,6 +35,19 @@
 
 // 性能优化 - 队列管理
 @property (nonatomic, strong) dispatch_queue_t sessionQueue;
+
+// 镜头管理
+@property (nonatomic, strong) NSArray<CMCameraLensOption *> *availableLensOptions;
+@property (nonatomic, strong) CMCameraLensOption *currentLensOption;
+@property (nonatomic, strong) NSDictionary<NSString *, AVCaptureDevice *> *lensDeviceMap;
+
+- (NSArray<AVCaptureDevice *> *)discoverDevicesForPosition:(CameraPosition)position;
+- (void)rebuildLensOptionsForPosition:(CameraPosition)position
+                              devices:(NSArray<AVCaptureDevice *> *)devices
+                          shouldNotify:(BOOL)notify;
+- (AVCaptureDevice *)deviceForLensOption:(CMCameraLensOption *)lensOption
+                                 devices:(NSArray<AVCaptureDevice *> *)devices;
+- (void)notifyLensUpdate;
 
 @end
 
@@ -66,6 +80,8 @@
     _currentFlashMode = FlashModeAuto;
     _currentAspectRatio = CameraAspectRatio4to3; // 默认4:3比例
     _currentDeviceOrientation = CameraDeviceOrientationPortrait; // 默认竖屏
+    _availableLensOptions = @[];
+    _lensDeviceMap = @{};
     
     // 创建专用队列 - 避免主线程阻塞
     _sessionQueue = dispatch_queue_create("com.cameram.session", DISPATCH_QUEUE_SERIAL);
@@ -98,6 +114,7 @@
         if (success && previewView) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self setupPreviewLayerWithView:previewView];
+                [self notifyLensUpdate];
                 if (completion) completion(YES, nil);
             });
         } else {
@@ -168,19 +185,31 @@
             [self.captureSession removeInput:self.deviceInput];
         }
         
-        // 创建新的设备输入
-        AVCaptureDevice *newDevice = [self cameraWithPosition:newPosition];
+        NSArray<AVCaptureDevice *> *devices = [self discoverDevicesForPosition:newPosition];
+        [self rebuildLensOptionsForPosition:newPosition devices:devices shouldNotify:NO];
+
+        AVCaptureDevice *newDevice = [self deviceForLensOption:self.currentLensOption devices:devices];
+        if (!newDevice) {
+            newDevice = devices.firstObject ?: [self cameraWithPosition:newPosition];
+        }
+
         NSError *error = nil;
-        AVCaptureDeviceInput *newInput = [AVCaptureDeviceInput deviceInputWithDevice:newDevice error:&error];
-        
+        AVCaptureDeviceInput *newInput = newDevice ? [AVCaptureDeviceInput deviceInputWithDevice:newDevice error:&error] : nil;
         if (newInput && [self.captureSession canAddInput:newInput]) {
             [self.captureSession addInput:newInput];
             self.deviceInput = newInput;
             self.currentDevice = newDevice;
             self.currentPosition = newPosition;
+        } else if (error) {
+            NSLog(@"⚠️ 切换摄像头失败: %@", error.localizedDescription);
+            if (self.deviceInput) {
+                [self.captureSession addInput:self.deviceInput];
+            }
         }
-        
+
         [self.captureSession commitConfiguration];
+
+        [self notifyLensUpdate];
     });
 }
 
@@ -221,6 +250,78 @@
         if ([self.delegate respondsToSelector:@selector(cameraManager:didChangeAspectRatio:)]) {
             [self.delegate cameraManager:self didChangeAspectRatio:ratio];
         }
+    });
+}
+
+- (void)switchToLensOption:(CMCameraLensOption *)lensOption {
+    if (!lensOption) { return; }
+
+    dispatch_async(self.sessionQueue, ^{
+        CMCameraLensOption *targetOption = nil;
+        for (CMCameraLensOption *option in self.availableLensOptions) {
+            if ([option.identifier isEqualToString:lensOption.identifier]) {
+                targetOption = option;
+                break;
+            }
+        }
+        if (!targetOption) {
+            return;
+        }
+
+        AVCaptureDevice *targetDevice = self.lensDeviceMap[targetOption.deviceUniqueID];
+        if (!targetDevice) {
+            NSArray<AVCaptureDevice *> *devices = [self discoverDevicesForPosition:self.currentPosition];
+            [self rebuildLensOptionsForPosition:self.currentPosition devices:devices shouldNotify:NO];
+            targetOption = nil;
+            for (CMCameraLensOption *option in self.availableLensOptions) {
+                if ([option.identifier isEqualToString:lensOption.identifier]) {
+                    targetOption = option;
+                    break;
+                }
+            }
+            if (!targetOption) {
+                return;
+            }
+            targetDevice = self.lensDeviceMap[targetOption.deviceUniqueID];
+        }
+
+        if (!targetDevice || [targetDevice.uniqueID isEqualToString:self.currentDevice.uniqueID]) {
+            self.currentLensOption = targetOption;
+            [self notifyLensUpdate];
+            return;
+        }
+
+        NSError *inputError = nil;
+        AVCaptureDeviceInput *newInput = [AVCaptureDeviceInput deviceInputWithDevice:targetDevice error:&inputError];
+        if (!newInput) {
+            NSLog(@"⚠️ 切换镜头失败: %@", inputError.localizedDescription);
+            return;
+        }
+
+        [self.captureSession beginConfiguration];
+        AVCaptureDeviceInput *previousInput = self.deviceInput;
+        if (previousInput) {
+            [self.captureSession removeInput:previousInput];
+        }
+
+        BOOL didAddInput = NO;
+        if ([self.captureSession canAddInput:newInput]) {
+            [self.captureSession addInput:newInput];
+            self.deviceInput = newInput;
+            self.currentDevice = targetDevice;
+            self.currentLensOption = targetOption;
+            didAddInput = YES;
+        } else if (previousInput) {
+            [self.captureSession addInput:previousInput];
+        }
+        [self.captureSession commitConfiguration];
+
+        if (!didAddInput) {
+            NSLog(@"⚠️ 切换镜头失败: 无法添加输入");
+            return;
+        }
+
+        [self notifyLensUpdate];
     });
 }
 
@@ -529,6 +630,211 @@
 
 #pragma mark - 私有方法
 
+#pragma mark 镜头管理
+
+- (NSArray<AVCaptureDevice *> *)discoverDevicesForPosition:(CameraPosition)position {
+    AVCaptureDevicePosition avPosition = (position == CameraPositionBack) ? AVCaptureDevicePositionBack : AVCaptureDevicePositionFront;
+    NSMutableArray<AVCaptureDeviceType> *deviceTypes = [NSMutableArray array];
+
+    if (position == CameraPositionBack) {
+        [deviceTypes addObjectsFromArray:@[
+            AVCaptureDeviceTypeBuiltInWideAngleCamera,
+            AVCaptureDeviceTypeBuiltInUltraWideCamera,
+            AVCaptureDeviceTypeBuiltInTelephotoCamera
+        ]];
+    } else {
+        [deviceTypes addObject:AVCaptureDeviceTypeBuiltInWideAngleCamera];
+        if (@available(iOS 13.0, *)) {
+            [deviceTypes addObject:AVCaptureDeviceTypeBuiltInTrueDepthCamera];
+        }
+    }
+
+    AVCaptureDeviceDiscoverySession *session = [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:deviceTypes
+                                                                                                      mediaType:AVMediaTypeVideo
+                                                                                                       position:avPosition];
+    NSMutableArray<AVCaptureDevice *> *uniqueDevices = [NSMutableArray array];
+    NSMutableSet<NSString *> *seenIDs = [NSMutableSet set];
+    for (AVCaptureDevice *device in session.devices) {
+        if (![seenIDs containsObject:device.uniqueID]) {
+            [uniqueDevices addObject:device];
+            [seenIDs addObject:device.uniqueID];
+        }
+    }
+
+    if (uniqueDevices.count == 0) {
+        AVCaptureDevice *fallback = [self cameraWithPosition:position];
+        if (fallback) {
+            [uniqueDevices addObject:fallback];
+        }
+    }
+    return [uniqueDevices copy];
+}
+
+- (CGFloat)canonicalZoomForDevice:(AVCaptureDevice *)device
+                        reference:(AVCaptureDevice *)referenceDevice {
+    if (device.position == AVCaptureDevicePositionFront) {
+        return 1.0f;
+    }
+
+    CGFloat referenceFOV = referenceDevice.activeFormat.videoFieldOfView;
+    CGFloat targetFOV = device.activeFormat.videoFieldOfView;
+    CGFloat rawZoom = (referenceFOV > 0.0f && targetFOV > 0.0f) ? (referenceFOV / targetFOV) : 1.0f;
+
+    if ([device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInUltraWideCamera]) {
+        return 0.5f;
+    }
+    if ([device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInWideAngleCamera]) {
+        return 1.0f;
+    }
+    if ([device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInTelephotoCamera]) {
+        if (rawZoom >= 4.5f) {
+            return 5.0f;
+        }
+        if (rawZoom >= 2.7f) {
+            return 3.0f;
+        }
+        if (rawZoom >= 1.6f) {
+            return 2.0f;
+        }
+        return MAX(1.5f, rawZoom);
+    }
+    return MAX(0.1f, rawZoom);
+}
+
+- (NSString *)titleForZoomFactor:(CGFloat)zoomFactor {
+    CGFloat rounded = zoomFactor;
+    if (zoomFactor < 0.8f) {
+        rounded = 0.5f;
+    } else if (fabs(zoomFactor - 1.0f) < 0.15f) {
+        rounded = 1.0f;
+    } else if (fabs(zoomFactor - 2.0f) < 0.4f) {
+        rounded = 2.0f;
+    } else if (fabs(zoomFactor - 3.0f) < 0.5f) {
+        rounded = 3.0f;
+    } else if (fabs(zoomFactor - 5.0f) < 0.6f) {
+        rounded = 5.0f;
+    } else {
+        rounded = roundf(zoomFactor * 10.0f) / 10.0f;
+    }
+
+    if (fabs(rounded - roundf(rounded)) < 0.05f) {
+        return [NSString stringWithFormat:@"%.0fx", roundf(rounded)];
+    }
+    return [NSString stringWithFormat:@"%.1fx", rounded];
+}
+
+- (void)rebuildLensOptionsForPosition:(CameraPosition)position
+                              devices:(NSArray<AVCaptureDevice *> *)devices
+                          shouldNotify:(BOOL)notify {
+    if (devices.count == 0) {
+        self.availableLensOptions = @[];
+        self.lensDeviceMap = @{};
+        self.currentLensOption = nil;
+        if (notify) {
+            [self notifyLensUpdate];
+        }
+        return;
+    }
+
+    AVCaptureDevice *referenceDevice = nil;
+    if (position == CameraPositionBack) {
+        for (AVCaptureDevice *device in devices) {
+            if ([device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInWideAngleCamera]) {
+                referenceDevice = device;
+                break;
+            }
+        }
+    }
+    if (!referenceDevice) {
+        referenceDevice = devices.firstObject;
+    }
+
+    NSMutableArray<CMCameraLensOption *> *options = [NSMutableArray array];
+    NSMutableDictionary<NSString *, AVCaptureDevice *> *deviceMap = [NSMutableDictionary dictionary];
+
+    for (AVCaptureDevice *device in devices) {
+        CGFloat zoom = [self canonicalZoomForDevice:device reference:referenceDevice];
+        NSString *title = [self titleForZoomFactor:zoom];
+        NSString *identifier = [NSString stringWithFormat:@"lens.%@", device.uniqueID];
+        CMCameraLensOption *option = [CMCameraLensOption optionWithIdentifier:identifier
+                                                                  displayName:title
+                                                                    zoomFactor:zoom
+                                                                deviceUniqueID:device.uniqueID];
+        [options addObject:option];
+        if (device.uniqueID) {
+            deviceMap[device.uniqueID] = device;
+        }
+    }
+
+    [options sortUsingComparator:^NSComparisonResult(CMCameraLensOption *obj1, CMCameraLensOption *obj2) {
+        if (obj1.zoomFactor < obj2.zoomFactor) { return NSOrderedAscending; }
+        if (obj1.zoomFactor > obj2.zoomFactor) { return NSOrderedDescending; }
+        return [obj1.displayName compare:obj2.displayName];
+    }];
+
+    self.availableLensOptions = [options copy];
+    self.lensDeviceMap = [deviceMap copy];
+
+    CMCameraLensOption *selected = nil;
+    if (self.currentLensOption) {
+        for (CMCameraLensOption *candidate in self.availableLensOptions) {
+            if ([candidate.identifier isEqualToString:self.currentLensOption.identifier]) {
+                selected = candidate;
+                break;
+            }
+        }
+    }
+
+    if (!selected) {
+        CGFloat closestDiff = CGFLOAT_MAX;
+        for (CMCameraLensOption *candidate in self.availableLensOptions) {
+            CGFloat diff = fabs(candidate.zoomFactor - 1.0f);
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                selected = candidate;
+            }
+        }
+    }
+    if (!selected) {
+        selected = self.availableLensOptions.firstObject;
+    }
+    self.currentLensOption = selected;
+
+    if (notify) {
+        [self notifyLensUpdate];
+    }
+}
+
+- (AVCaptureDevice *)deviceForLensOption:(CMCameraLensOption *)lensOption
+                                 devices:(NSArray<AVCaptureDevice *> *)devices {
+    if (!lensOption) { return nil; }
+    if (lensOption.deviceUniqueID.length > 0) {
+        AVCaptureDevice *mappedDevice = self.lensDeviceMap[lensOption.deviceUniqueID];
+        if (mappedDevice) { return mappedDevice; }
+    }
+    for (AVCaptureDevice *device in devices) {
+        if ([device.uniqueID isEqualToString:lensOption.deviceUniqueID]) {
+            return device;
+        }
+    }
+    return devices.firstObject;
+}
+
+- (void)notifyLensUpdate {
+    NSArray<CMCameraLensOption *> *lensSnapshot = [[NSArray alloc] initWithArray:self.availableLensOptions copyItems:YES];
+    CMCameraLensOption *currentSnapshot = [self.currentLensOption copy];
+    if (!lensSnapshot) { lensSnapshot = @[]; }
+    if (!currentSnapshot && lensSnapshot.count > 0) {
+        currentSnapshot = [lensSnapshot.firstObject copy];
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([self.delegate respondsToSelector:@selector(cameraManager:didUpdateAvailableLenses:currentLens:)]) {
+            [self.delegate cameraManager:self didUpdateAvailableLenses:lensSnapshot currentLens:currentSnapshot];
+        }
+    });
+}
+
 - (BOOL)performCameraSetup:(NSError **)error {
     // 创建capture session
     self.captureSession = [[AVCaptureSession alloc] init];
@@ -538,8 +844,13 @@
         [self.captureSession setSessionPreset:AVCaptureSessionPresetPhoto];
     }
     
-    // 设置相机设备
-    self.currentDevice = [self cameraWithPosition:self.currentPosition];
+    NSArray<AVCaptureDevice *> *availableDevices = [self discoverDevicesForPosition:self.currentPosition];
+    [self rebuildLensOptionsForPosition:self.currentPosition devices:availableDevices shouldNotify:NO];
+
+    self.currentDevice = [self deviceForLensOption:self.currentLensOption devices:availableDevices];
+    if (!self.currentDevice) {
+        self.currentDevice = availableDevices.firstObject ?: [self cameraWithPosition:self.currentPosition];
+    }
     if (!self.currentDevice) {
         if (error) {
             *error = [NSError errorWithDomain:@"CameraManager" code:1002 userInfo:@{NSLocalizedDescriptionKey: @"No camera device available"}];

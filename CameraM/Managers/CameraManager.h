@@ -12,6 +12,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class CameraManager;
+@class CMCameraLensOption;
 
 // 相机状态枚举
 typedef NS_ENUM(NSInteger, CameraState) {
@@ -67,6 +68,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)cameraManager:(CameraManager *)manager didChangeFlashMode:(FlashMode)mode;
 - (void)cameraManager:(CameraManager *)manager didChangeAspectRatio:(CameraAspectRatio)ratio;
 - (void)cameraManager:(CameraManager *)manager didChangeDeviceOrientation:(CameraDeviceOrientation)orientation;
+- (void)cameraManager:(CameraManager *)manager didUpdateAvailableLenses:(NSArray<CMCameraLensOption *> *)lenses currentLens:(CMCameraLensOption *)currentLens;
 
 @end
 
@@ -87,6 +89,8 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 @property (nonatomic, readonly) CameraAspectRatio currentAspectRatio;
 @property (nonatomic, readonly) CameraDeviceOrientation currentDeviceOrientation;
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
+@property (nonatomic, readonly) NSArray<CMCameraLensOption *> *availableLensOptions;
+@property (nonatomic, readonly) CMCameraLensOption *currentLensOption;
 
 // 预览层 - 弱引用，避免循环引用
 @property (nonatomic, readonly, strong) AVCaptureVideoPreviewLayer *previewLayer;
@@ -100,6 +104,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (void)switchResolutionMode:(CameraResolutionMode)mode;
 - (void)switchFlashMode:(FlashMode)mode;
 - (void)switchAspectRatio:(CameraAspectRatio)ratio;
+- (void)switchToLensOption:(CMCameraLensOption *)lensOption;
 - (void)focusAtPoint:(CGPoint)point;
 - (void)setExposureCompensation:(float)value;
 

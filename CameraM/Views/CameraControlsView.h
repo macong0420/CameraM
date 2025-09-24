@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 #import "CMWatermarkConfiguration.h"
+#import "CMCameraLensOption.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -32,6 +33,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)didTapFrameWatermarkButton;
 - (void)didTapSettingsButton;
 - (void)didTapFilterButton;
+- (void)didSelectLensOption:(CMCameraLensOption *)lensOption;
 
 // 专业控制
 - (void)didChangeExposure:(float)value;
@@ -68,6 +70,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)showFocusIndicatorAtPoint:(CGPoint)point;
 - (void)updateAspectRatioMask:(CameraAspectRatio)ratio;
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;
+- (void)updateLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption * _Nullable)currentLens;
 
 // 横屏适配接口
 - (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation;

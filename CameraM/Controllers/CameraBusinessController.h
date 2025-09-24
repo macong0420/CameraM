@@ -9,6 +9,7 @@
 #import <UIKit/UIKit.h>
 #import "../Managers/CameraManager.h"
 #import "../Models/CMWatermarkConfiguration.h"
+#import "../Models/CMCameraLensOption.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -21,6 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)didChangeFlashMode:(FlashMode)mode;
 - (void)didChangeAspectRatio:(CameraAspectRatio)ratio;
 - (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation;
+- (void)didUpdateAvailableLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption *)currentLens;
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata;
 - (void)didFailWithError:(NSError *)error;
 
@@ -42,6 +44,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) BOOL isUltraHighResolutionSupported;
 @property (nonatomic, readonly) UIImage * _Nullable latestCapturedImage;
 @property (nonatomic, readonly) CMWatermarkConfiguration *watermarkConfiguration;
+@property (nonatomic, readonly) NSArray<CMCameraLensOption *> *availableLensOptions;
+@property (nonatomic, readonly) CMCameraLensOption *currentLensOption;
 
 // 内部组件访问（仅用于协调）
 @property (nonatomic, readonly) CameraManager *cameraManager;
@@ -62,6 +66,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)switchResolutionMode;
 - (void)switchFlashMode;
 - (void)switchAspectRatio:(CameraAspectRatio)ratio;
+- (void)switchToLensOption:(CMCameraLensOption *)lensOption;
 
 // 对焦和曝光
 - (void)focusAtPoint:(CGPoint)screenPoint withPreviewLayer:(AVCaptureVideoPreviewLayer *)previewLayer;
