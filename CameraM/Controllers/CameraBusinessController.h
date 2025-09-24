@@ -78,6 +78,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 比例相关工具方法
 - (CGRect)previewRectForCurrentAspectRatioInViewSize:(CGSize)viewSize;
+- (CGRect)activePreviewRectInViewSize:(CGSize)viewSize;
 
 // 水印
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;

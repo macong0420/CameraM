@@ -176,6 +176,10 @@ static NSString * const kCMLensSelectionStorageKey = @"com.cameram.lens.selectio
     return [self.cameraManager previewRectForAspectRatio:self.currentAspectRatio inViewSize:viewSize];
 }
 
+- (CGRect)activePreviewRectInViewSize:(CGSize)viewSize {
+    return [self.cameraManager activeFormatPreviewRectInViewSize:viewSize];
+}
+
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
     if (!configuration) { return; }
     self.watermarkConfiguration = [configuration copy];

@@ -38,6 +38,11 @@
     [self.businessController stopSession];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self updatePreviewLayerFrame];
+}
+
 - (void)dealloc {
     [self.businessController stopOrientationMonitoring]; // 停止方向监听
     [self.businessController cleanup];
@@ -76,6 +81,7 @@
         if (success) {
             NSLog(@"相机设置成功");
             [self updateUIState];
+            [self updatePreviewLayerFrame];
             
             // 启动方向监听
             [self.businessController startOrientationMonitoring];
@@ -226,13 +232,26 @@
     CGRect newFrame = self.controlsView.previewContainer.bounds;
     
     if (!CGRectIsEmpty(newFrame)) {
+        AVCaptureVideoPreviewLayer *previewLayer = self.businessController.cameraManager.previewLayer;
+        if (!previewLayer) {
+            return;
+        }
+
         // 使用CATransaction确保frame和方向同步更新
         [CATransaction begin];
         [CATransaction setDisableActions:YES];
-        self.businessController.cameraManager.previewLayer.frame = newFrame;
+        BOOL frameChanged = !CGRectEqualToRect(previewLayer.frame, newFrame);
+        if (frameChanged) {
+            previewLayer.frame = newFrame;
+        }
         [CATransaction commit];
-        
-        NSLog(@"📐 预览层frame已更新: %@", NSStringFromCGRect(newFrame));
+
+        CGRect videoRect = [self.businessController activePreviewRectInViewSize:newFrame.size];
+        [self.controlsView updatePreviewVideoRect:videoRect];
+
+        if (frameChanged) {
+            NSLog(@"📐 预览层frame已更新: %@", NSStringFromCGRect(newFrame));
+        }
     }
 }
 

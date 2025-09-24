@@ -48,6 +48,7 @@
 - (AVCaptureDevice *)deviceForLensOption:(CMCameraLensOption *)lensOption
                                  devices:(NSArray<AVCaptureDevice *> *)devices;
 - (void)notifyLensUpdate;
+- (CGSize)activeFormatDimensions;
 
 @end
 
@@ -547,6 +548,25 @@
     return 1.0f;
 }
 
+- (CGSize)activeFormatDimensions {
+    AVCaptureDevice *device = self.currentDevice ?: self.deviceInput.device;
+    if (!device) {
+        return CGSizeZero;
+    }
+
+    CMFormatDescriptionRef description = device.activeFormat.formatDescription;
+    if (!description) {
+        return CGSizeZero;
+    }
+
+    CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(description);
+    if (dimensions.width <= 0 || dimensions.height <= 0) {
+        return CGSizeZero;
+    }
+
+    return CGSizeMake(dimensions.width, dimensions.height);
+}
+
 - (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize {
     const CGFloat viewWidth = viewSize.width;
     const CGFloat viewHeight = viewSize.height;
@@ -575,6 +595,24 @@
     }
 
     return CGRectIntegral(rect);
+}
+
+- (CGRect)activeFormatPreviewRectInViewSize:(CGSize)viewSize {
+    const CGFloat viewWidth = viewSize.width;
+    const CGFloat viewHeight = viewSize.height;
+
+    if (viewWidth <= 0.0f || viewHeight <= 0.0f) {
+        return CGRectZero;
+    }
+
+    CGSize activeDimensions = [self activeFormatDimensions];
+    if (activeDimensions.width <= 0.0f || activeDimensions.height <= 0.0f) {
+        return CGRectIntegral(CGRectMake(0.0f, 0.0f, viewWidth, viewHeight));
+    }
+
+    CGRect boundingRect = CGRectMake(0.0f, 0.0f, viewWidth, viewHeight);
+    CGRect videoRect = AVMakeRectWithAspectRatioInsideRect(activeDimensions, boundingRect);
+    return CGRectIntegral(videoRect);
 }
 
 - (void)focusAtPoint:(CGPoint)point {
@@ -894,7 +932,7 @@
 - (void)setupPreviewLayerWithView:(UIView *)view {
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
     self.previewLayer.frame = view.bounds;
-    self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspect;
     [view.layer insertSublayer:self.previewLayer atIndex:0];
     
     // 设置初始方向

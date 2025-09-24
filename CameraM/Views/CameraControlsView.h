@@ -69,6 +69,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)showGridLines:(BOOL)show;
 - (void)showFocusIndicatorAtPoint:(CGPoint)point;
 - (void)updateAspectRatioMask:(CameraAspectRatio)ratio;
+- (void)updatePreviewVideoRect:(CGRect)videoRect;
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;
 - (void)updateLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption * _Nullable)currentLens;
 

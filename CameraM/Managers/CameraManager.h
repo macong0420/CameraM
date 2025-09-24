@@ -117,6 +117,7 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (CGRect)cropRectForAspectRatio:(CameraAspectRatio)ratio inImageSize:(CGSize)imageSize;
 - (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio;
 - (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize;
+- (CGRect)activeFormatPreviewRectInViewSize:(CGSize)viewSize;
 
 // 图片保存
 - (void)saveImageToPhotosLibrary:(UIImage *)image

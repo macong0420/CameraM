@@ -80,6 +80,7 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 @property (nonatomic, assign) BOOL watermarkPanelVisible;
 @property (nonatomic, strong) CMWatermarkConfiguration *watermarkConfiguration;
 @property (nonatomic, assign) CameraAspectRatio activeAspectRatio;
+@property (nonatomic, assign) CGRect previewVideoRect;
 
 @end
 
@@ -757,6 +758,10 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     
     // 否则执行对焦
     CGPoint location = [gesture locationInView:self.previewContainer];
+    CGRect videoRect = CGRectIsEmpty(self.previewVideoRect) ? self.previewContainer.bounds : self.previewVideoRect;
+    if (!CGRectContainsPoint(videoRect, location)) {
+        return;
+    }
     if ([self.delegate respondsToSelector:@selector(didTapPreviewAtPoint:)]) {
         [self.delegate didTapPreviewAtPoint:location];
     }
@@ -901,6 +906,19 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     }];
 }
 
+- (void)updatePreviewVideoRect:(CGRect)videoRect {
+    CGRect normalizedRect = CGRectIntegral(videoRect);
+    if (CGRectEqualToRect(self.previewVideoRect, normalizedRect)) {
+        return;
+    }
+
+    self.previewVideoRect = normalizedRect;
+
+    if (self.aspectRatioMaskLayer) {
+        [self updateAspectRatioMask:self.activeAspectRatio];
+    }
+}
+
 - (void)updateAspectRatioMask:(CameraAspectRatio)ratio {
     self.activeAspectRatio = ratio;
 
@@ -909,19 +927,24 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         return;
     }
 
-    const CGFloat targetAspect = CMAspectRatioValue(ratio);
-    const CGFloat viewAspect = bounds.size.width / bounds.size.height;
+    CGRect videoRect = self.previewVideoRect;
+    if (CGRectIsEmpty(videoRect) || !CGRectContainsRect(bounds, videoRect)) {
+        videoRect = bounds;
+    }
 
-    CGRect activeRect = bounds;
-    if (fabs(viewAspect - targetAspect) >= 0.0001f) {
-        if (viewAspect > targetAspect) {
-            const CGFloat targetWidth = bounds.size.height * targetAspect;
-            const CGFloat xOffset = (bounds.size.width - targetWidth) / 2.0f;
-            activeRect = CGRectMake(xOffset, 0.0f, targetWidth, bounds.size.height);
+    const CGFloat targetAspect = CMAspectRatioValue(ratio);
+    const CGFloat videoAspect = videoRect.size.width / videoRect.size.height;
+
+    CGRect activeRect = videoRect;
+    if (fabs(videoAspect - targetAspect) >= 0.0001f) {
+        if (videoAspect > targetAspect) {
+            const CGFloat targetWidth = videoRect.size.height * targetAspect;
+            const CGFloat xOffset = CGRectGetMidX(videoRect) - (targetWidth / 2.0f);
+            activeRect = CGRectMake(xOffset, CGRectGetMinY(videoRect), targetWidth, videoRect.size.height);
         } else {
-            const CGFloat targetHeight = bounds.size.width / targetAspect;
-            const CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0f;
-            activeRect = CGRectMake(0.0f, yOffset, bounds.size.width, targetHeight);
+            const CGFloat targetHeight = videoRect.size.width / targetAspect;
+            const CGFloat yOffset = CGRectGetMidY(videoRect) - (targetHeight / 2.0f);
+            activeRect = CGRectMake(CGRectGetMinX(videoRect), yOffset, videoRect.size.width, targetHeight);
         }
     }
 
