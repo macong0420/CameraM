@@ -8,6 +8,8 @@
 #import "CameraBusinessController.h"
 #import "../Managers/CMWatermarkRenderer.h"
 
+static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.watermark.configuration";
+
 @interface CameraBusinessController () <CameraManagerDelegate>
 
 @property (nonatomic, strong) CameraManager *cameraManager;
@@ -16,6 +18,9 @@
 @property (nonatomic, copy) CMWatermarkConfiguration *watermarkConfiguration;
 @property (nonatomic, strong) CMWatermarkRenderer *watermarkRenderer;
 @property (nonatomic, strong) dispatch_queue_t renderQueue;
+
+- (void)persistWatermarkConfiguration;
+- (void)loadPersistedWatermarkConfiguration;
 
 @end
 
@@ -27,6 +32,7 @@
         [self setupCameraManager];
         _isGridLinesVisible = NO;
         _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
+        [self loadPersistedWatermarkConfiguration];
         _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
         _renderQueue = dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
     }
@@ -161,6 +167,37 @@
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
     if (!configuration) { return; }
     self.watermarkConfiguration = [configuration copy];
+    [self persistWatermarkConfiguration];
+}
+
+- (void)persistWatermarkConfiguration {
+    if (!self.watermarkConfiguration) { return; }
+
+    NSError *archiveError = nil;
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:self.watermarkConfiguration
+                                       requiringSecureCoding:YES
+                                                       error:&archiveError];
+    if (data && !archiveError) {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:data forKey:kCMWatermarkConfigurationStorageKey];
+    } else if (archiveError) {
+        NSLog(@"⚠️ 水印配置存档失败: %@", archiveError.localizedDescription);
+    }
+}
+
+- (void)loadPersistedWatermarkConfiguration {
+    NSData *storedData = [[NSUserDefaults standardUserDefaults] objectForKey:kCMWatermarkConfigurationStorageKey];
+    if (!storedData) { return; }
+
+    NSError *unarchiveError = nil;
+    CMWatermarkConfiguration *storedConfig = [NSKeyedUnarchiver unarchivedObjectOfClass:[CMWatermarkConfiguration class]
+                                                                               fromData:storedData
+                                                                                  error:&unarchiveError];
+    if (storedConfig && !unarchiveError) {
+        self.watermarkConfiguration = [storedConfig copy];
+    } else if (unarchiveError) {
+        NSLog(@"⚠️ 水印配置读取失败: %@", unarchiveError.localizedDescription);
+    }
 }
 
 #pragma mark - CameraManagerDelegate

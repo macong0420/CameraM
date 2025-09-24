@@ -10,8 +10,6 @@
 #import "WatermarkPanelView.h"
 #import <math.h>
 
-static const CGFloat kWatermarkPanelHeight = 420.0;
-
 static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     switch (ratio) {
         case CameraAspectRatio4to3:
@@ -71,6 +69,7 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 @property (nonatomic, strong) UIView *watermarkBackdropView;
 @property (nonatomic, strong) WatermarkPanelView *watermarkPanel;
 @property (nonatomic, strong) NSLayoutConstraint *watermarkPanelBottomConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *watermarkPanelHeightConstraint;
 @property (nonatomic, assign) BOOL watermarkPanelVisible;
 @property (nonatomic, strong) CMWatermarkConfiguration *watermarkConfiguration;
 @property (nonatomic, assign) CameraAspectRatio activeAspectRatio;
@@ -402,14 +401,39 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     self.watermarkPanel.hidden = YES;
     [self addSubview:self.watermarkPanel];
 
-    self.watermarkPanelBottomConstraint = [self.watermarkPanel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:kWatermarkPanelHeight];
+    self.watermarkPanelBottomConstraint = [self.watermarkPanel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:0.0];
+    self.watermarkPanelHeightConstraint = [self.watermarkPanel.heightAnchor constraintEqualToConstant:0.0];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.watermarkPanel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.watermarkPanel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [self.watermarkPanel.heightAnchor constraintEqualToConstant:kWatermarkPanelHeight],
+        self.watermarkPanelHeightConstraint,
         self.watermarkPanelBottomConstraint
     ]];
+
+    [self updateWatermarkPanelHeightConstraints];
+}
+
+- (CGFloat)desiredWatermarkPanelHeight {
+    CGFloat screenHeight = UIScreen.mainScreen.bounds.size.height;
+    CGFloat targetHeight = screenHeight * 0.7f;
+    CGFloat minimumHeight = 360.0f;
+    CGFloat availableHeight = screenHeight - self.safeAreaInsets.top - 24.0f;
+    if (availableHeight < minimumHeight) {
+        availableHeight = minimumHeight;
+    }
+    targetHeight = MIN(targetHeight, availableHeight);
+    targetHeight = MAX(targetHeight, minimumHeight);
+    return targetHeight;
+}
+
+- (void)updateWatermarkPanelHeightConstraints {
+    if (!self.watermarkPanelHeightConstraint || !self.watermarkPanelBottomConstraint) {
+        return;
+    }
+    CGFloat panelHeight = [self desiredWatermarkPanelHeight];
+    self.watermarkPanelHeightConstraint.constant = panelHeight;
+    self.watermarkPanelBottomConstraint.constant = self.watermarkPanelVisible ? 0.0f : panelHeight;
 }
 
 - (void)setupConstraints {
@@ -739,14 +763,17 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 
 - (void)presentWatermarkPanel {
     if (self.watermarkPanelVisible) { return; }
+    [self updateWatermarkPanelHeightConstraints];
+    [self layoutIfNeeded];
+
     self.watermarkPanelVisible = YES;
     self.watermarkBackdropView.hidden = NO;
+    self.watermarkBackdropView.alpha = 0.0;
     self.watermarkPanel.hidden = NO;
     [self bringSubviewToFront:self.watermarkBackdropView];
     [self bringSubviewToFront:self.watermarkPanel];
     [self.watermarkPanel applyConfiguration:self.watermarkConfiguration animated:NO];
-    [self layoutIfNeeded];
-    self.watermarkPanelBottomConstraint.constant = 0.0;
+    [self updateWatermarkPanelHeightConstraints];
     [UIView animateWithDuration:0.3
                           delay:0
          usingSpringWithDamping:0.85
@@ -763,8 +790,9 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 
 - (void)dismissWatermarkPanel {
     if (!self.watermarkPanelVisible) { return; }
+    [self layoutIfNeeded];
     self.watermarkPanelVisible = NO;
-    self.watermarkPanelBottomConstraint.constant = kWatermarkPanelHeight;
+    [self updateWatermarkPanelHeightConstraints];
     [UIView animateWithDuration:0.25 animations:^{
         self.watermarkBackdropView.alpha = 0.0;
         [self layoutIfNeeded];
@@ -922,10 +950,12 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     // 执行布局切换动画
     [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.3 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         [self switchConstraintsForOrientation:orientation];
+        [self updateWatermarkPanelHeightConstraints];
         [self layoutIfNeeded];
     } completion:^(BOOL finished) {
         // 更新比例弹层约束
         [self updateAspectRatioPopoverConstraintsForOrientation:orientation];
+        [self updateWatermarkPanelHeightConstraints];
         NSLog(@"UI布局切换完成: %ld", (long)orientation);
     }];
 }
@@ -1246,6 +1276,8 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     if (self.aspectRatioMaskLayer && !CGRectIsEmpty(self.previewContainer.bounds)) {
         [self updateAspectRatioMask:self.activeAspectRatio];
     }
+
+    [self updateWatermarkPanelHeightConstraints];
 }
 
 - (void)createGridLinesWithFrame {
