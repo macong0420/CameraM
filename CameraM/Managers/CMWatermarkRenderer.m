@@ -11,6 +11,8 @@
 #import <ImageIO/ImageIO.h>
 #import <math.h>
 
+static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
+
 @interface CMWatermarkRenderer ()
 
 @property (nonatomic, strong) NSDateFormatter *dateFormatter;
@@ -292,7 +294,8 @@
                              [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]))) {
         UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
         if (logoImage) {
-            CGFloat maxLogoHeight = MIN(contentRect.size.height * 0.6, 140.0);
+            CGFloat maxLogoHeight = MIN(contentRect.size.height * 0.6, 140.0) * CMWatermarkUIScaleFactor;
+            maxLogoHeight = MIN(maxLogoHeight, contentRect.size.height);
             CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
             CGFloat logoHeight = maxLogoHeight;
             CGFloat logoWidth = logoHeight * aspect;
@@ -312,7 +315,7 @@
         return;
     }
 
-    CGFloat baseFontSize = MAX(18.0, MIN(42.0, canvasSize.width * 0.035));
+    CGFloat baseFontSize = MAX(18.0, MIN(42.0, canvasSize.width * 0.035)) * CMWatermarkUIScaleFactor;
     UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize weight:UIFontWeightSemibold];
     NSMutableParagraphStyle *captionParagraph = [[NSMutableParagraphStyle alloc] init];
     captionParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -368,7 +371,7 @@
                 NSForegroundColorAttributeName: detailTextColor,
                 NSParagraphStyleAttributeName: detailParagraph
             };
-            CGFloat detailBaselineY = captionText.length > 0 ? CGRectGetMaxY(captionRect) + 6.0 : (contentCenterY - detailFont.lineHeight * 0.5);
+            CGFloat detailBaselineY = captionText.length > 0 ? CGRectGetMaxY(captionRect) + (6.0 * CMWatermarkUIScaleFactor) : (contentCenterY - detailFont.lineHeight * 0.5);
             CGRect detailRect = CGRectMake(cursorX, detailBaselineY, availableWidth, detailFont.lineHeight);
             [detailString drawInRect:detailRect withAttributes:detailAttributes];
         }
@@ -409,7 +412,7 @@
 
     const CGFloat horizontalMargin = MAX(canvasSize.width * 0.05f, 40.0f);
     const CGFloat bottomInset = MAX(canvasSize.height * 0.06f, 80.0f);
-    const CGFloat baseFontSize = MAX(22.0f, MIN(52.0f, canvasSize.width * 0.045f));
+    CGFloat baseFontSize = MAX(22.0f, MIN(52.0f, canvasSize.width * 0.045f)) * CMWatermarkUIScaleFactor;
     UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize weight:UIFontWeightSemibold];
     UIFont *detailFont = [UIFont systemFontOfSize:baseFontSize * 0.58f weight:UIFontWeightMedium];
     const CGFloat lineSpacing = baseFontSize * 0.35f;
@@ -454,7 +457,8 @@
         if (!logoImage) {
             hasLogoAsset = NO;
         } else {
-            CGFloat maxLogoHeight = captionFont.lineHeight * 1.2f;
+            CGFloat maxLogoHeight = captionFont.lineHeight * 1.2f * CMWatermarkUIScaleFactor;
+            maxLogoHeight = MIN(maxLogoHeight, canvasSize.height * 0.3f);
             CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
             logoHeight = maxLogoHeight;
             logoWidth = logoHeight * aspect;
@@ -675,8 +679,8 @@
 - (void)drawStudioParametersInRect:(CGRect)contentRect 
                       detailString:(NSString *)detailString 
                         canvasSize:(CGSize)canvasSize {
-    // 参数字体样式 - 扩大3倍
-    CGFloat parameterFontSize = MAX(48.0, MIN(96.0, canvasSize.width * 0.075)); // 原来的3倍大小
+    CGFloat parameterFontSize = MAX(48.0, MIN(96.0, canvasSize.width * 0.075)) * CMWatermarkUIScaleFactor;
+    parameterFontSize = MIN(parameterFontSize, contentRect.size.height * 0.85f);
     UIFont *parameterValueFont = [UIFont systemFontOfSize:parameterFontSize weight:UIFontWeightSemibold];
     UIFont *parameterLabelFont = [UIFont systemFontOfSize:parameterFontSize * 0.65 weight:UIFontWeightMedium];
     
@@ -703,7 +707,7 @@
                 // 计算每个参数的中心位置
                 CGFloat centerX = startX + (spacing * i) + (spacing * 0.5);
                 CGFloat valueY = contentRect.origin.y + contentRect.size.height * 0.15;
-                CGFloat labelY = valueY + parameterValueFont.lineHeight + 4.0;
+                CGFloat labelY = valueY + parameterValueFont.lineHeight + (4.0 * CMWatermarkUIScaleFactor);
                 
                 // 绘制数值 - 居中对齐
                 NSDictionary *valueAttributes = @{
@@ -752,8 +756,8 @@
                 horizontalPadding:(CGFloat)horizontalPadding {
     
     // 3行布局：Logo(第1行), 文字(第2行), 参数(第3行) - 精确间距控制
-    CGFloat logoToTextSpacing = 35.0; // logo和文字间距35px
-    CGFloat textToParamSpacing = 26.0; // 文字和参数间距26px
+    CGFloat logoToTextSpacing = 35.0 * CMWatermarkUIScaleFactor; // logo和文字间距
+    CGFloat textToParamSpacing = 26.0 * CMWatermarkUIScaleFactor; // 文字和参数间距
     CGFloat currentY = contentRect.origin.y;
     
     // 第1行：Logo - 高度约占底部边框高度的20%
@@ -762,7 +766,7 @@
         UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
         if (logoImage) {
             CGFloat bottomBorderHeight = contentRect.size.height;
-            logoHeight = bottomBorderHeight * 0.20; // Logo高度为底部边框高度的20%
+            logoHeight = MIN(bottomBorderHeight * 0.20 * CMWatermarkUIScaleFactor, bottomBorderHeight);
             CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
             CGFloat logoWidth = logoHeight * aspect;
             
@@ -786,8 +790,10 @@
     if (logoHeight > 0) {
         textFontSize = logoHeight * 0.5; // 有logo时基于logo高度
     } else {
-        textFontSize = contentRect.size.height * 0.12; // 无logo时基于底部区域高度
+        textFontSize = contentRect.size.height * 0.12 * CMWatermarkUIScaleFactor; // 无logo时基于底部区域高度
+        textFontSize = MIN(textFontSize, contentRect.size.height * 0.9f);
     }
+    textFontSize = MIN(textFontSize, contentRect.size.height);
     UIFont *textFont = [UIFont systemFontOfSize:textFontSize weight:UIFontWeightMedium];
     UIColor *textColor = [UIColor blackColor]; // 纯黑色 #000000
     
@@ -829,7 +835,7 @@
     if (detailString.length > 0) {
         CGFloat row3Y = currentY;
         CGFloat parameterFontSize = textFontSize * 0.75; // 文字字号的75% (70%-80%之间)
-        CGFloat parameterHeight = MIN(contentRect.size.height * 0.3, 90.0);
+        CGFloat parameterHeight = MIN(contentRect.size.height * 0.3, 90.0 * CMWatermarkUIScaleFactor);
         [self drawPolaroidParametersInRect:CGRectMake(contentRect.origin.x, row3Y, contentRect.size.width, parameterHeight)
                               detailString:detailString
                                 canvasSize:canvasSize
