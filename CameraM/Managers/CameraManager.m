@@ -62,6 +62,8 @@
 - (BOOL)applyFormat:(AVCaptureDeviceFormat *)format toDevice:(AVCaptureDevice *)device;
 - (void)updateUltraHighResolutionSupportForDevice:(AVCaptureDevice *)device;
 - (void)applyPreferredResolutionModeLockedWithSupportChanged:(BOOL)supportChanged;
+- (CMVideoDimensions)maxPhotoDimensionsForFormat:(AVCaptureDeviceFormat *)format;
+- (void)configureMaxPhotoDimensionsForSettings:(AVCapturePhotoSettings *)settings;
 
 @end
 
@@ -982,11 +984,9 @@
     }
 
     if (@available(iOS 17.0, *)) {
-        if (format) {
-            CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
-            if (dimensions.width > 0 && dimensions.height > 0) {
-                self.photoOutput.maxPhotoDimensions = dimensions;
-            }
+        CMVideoDimensions dimensions = [self maxPhotoDimensionsForFormat:format];
+        if (dimensions.width > 0 && dimensions.height > 0) {
+            self.photoOutput.maxPhotoDimensions = dimensions;
         }
     }
 
@@ -1018,6 +1018,50 @@
     }
     [self standardFormatForDevice:device];
     [self ultraHighResolutionFormatForDevice:device];
+}
+
+- (CMVideoDimensions)maxPhotoDimensionsForFormat:(AVCaptureDeviceFormat *)format {
+    if (!format) {
+        return (CMVideoDimensions){0, 0};
+    }
+
+    CMVideoDimensions bestDimensions = format.highResolutionStillImageDimensions;
+
+    if (@available(iOS 17.0, *)) {
+        for (NSValue *value in format.supportedMaxPhotoDimensions) {
+            CMVideoDimensions candidate = {0, 0};
+            [value getValue:&candidate];
+            int64_t candidatePixels = (int64_t)candidate.width * (int64_t)candidate.height;
+            int64_t bestPixels = (int64_t)bestDimensions.width * (int64_t)bestDimensions.height;
+            if (candidatePixels > bestPixels) {
+                bestDimensions = candidate;
+            }
+        }
+    }
+
+    if (bestDimensions.width <= 0 || bestDimensions.height <= 0) {
+        bestDimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+    }
+
+    return bestDimensions;
+}
+
+- (void)configureMaxPhotoDimensionsForSettings:(AVCapturePhotoSettings *)settings {
+    if (!settings) {
+        return;
+    }
+
+    if (@available(iOS 17.0, *)) {
+        CMVideoDimensions targetDimensions = self.photoOutput.maxPhotoDimensions;
+
+        if ((targetDimensions.width <= 0 || targetDimensions.height <= 0) && self.currentDevice.activeFormat) {
+            targetDimensions = [self maxPhotoDimensionsForFormat:self.currentDevice.activeFormat];
+        }
+
+        if (targetDimensions.width > 0 && targetDimensions.height > 0) {
+            settings.maxPhotoDimensions = targetDimensions;
+        }
+    }
 }
 
 - (NSString *)formatCacheKeyForDevice:(AVCaptureDevice *)device {
@@ -1078,24 +1122,17 @@
     CGFloat bestAspectPenalty = CGFLOAT_MAX;
 
     for (AVCaptureDeviceFormat *format in device.formats) {
-        CMFormatDescriptionRef description = format.formatDescription;
-        if (!description) {
-            continue;
-        }
-        CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(description);
-        if (dimensions.width <= 0 || dimensions.height <= 0) {
-            continue;
-        }
-        if (!format.isHighResolutionStillImageOutputEnabled) {
+        CMVideoDimensions stillDimensions = [self maxPhotoDimensionsForFormat:format];
+        if (stillDimensions.width <= 0 || stillDimensions.height <= 0) {
             continue;
         }
 
-        int64_t pixelCount = (int64_t)dimensions.width * (int64_t)dimensions.height;
+        int64_t pixelCount = (int64_t)stillDimensions.width * (int64_t)stillDimensions.height;
         if (pixelCount < 40000000) { // 约4000万像素以上再考虑，48MP约为8064x6048
             continue;
         }
 
-        CGFloat aspect = (CGFloat)dimensions.width / (CGFloat)dimensions.height;
+        CGFloat aspect = (CGFloat)stillDimensions.width / (CGFloat)stillDimensions.height;
         CGFloat penalty = fabs(aspect - (4.0f / 3.0f));
 
         if (!bestFormat || pixelCount > bestPixelCount || (pixelCount == bestPixelCount && penalty < bestAspectPenalty)) {
@@ -1306,6 +1343,8 @@
             }
         }
     }
+
+    [self configureMaxPhotoDimensionsForSettings:settings];
 
     return settings;
 }
