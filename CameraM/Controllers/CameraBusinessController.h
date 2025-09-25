@@ -83,6 +83,13 @@ NS_ASSUME_NONNULL_BEGIN
 // 水印
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;
 
+// 外部图片处理
+- (void)processImportedImage:(UIImage *)image
+          withConfiguration:(nullable CMWatermarkConfiguration *)configuration
+                  completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
+- (void)processImportedImage:(UIImage *)image
+                  completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
+
 @end
 
 NS_ASSUME_NONNULL_END

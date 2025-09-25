@@ -9,12 +9,22 @@
 #import "Views/CameraControlsView.h"
 #import "Controllers/CameraBusinessController.h"
 #import "Models/CMCameraLensOption.h"
+#import "Views/WatermarkPanelView.h"
+#import <PhotosUI/PhotosUI.h>
 
-@interface CameraViewController () <CameraControlsDelegate, CameraBusinessDelegate>
+@interface CameraViewController () <CameraControlsDelegate, CameraBusinessDelegate, PHPickerViewControllerDelegate, WatermarkPanelViewDelegate>
 
 // 分离的组件 - 高内聚低耦合
 @property (nonatomic, strong) CameraControlsView *controlsView;
 @property (nonatomic, strong) CameraBusinessController *businessController;
+@property (nonatomic, strong) UIView *processingOverlay;
+@property (nonatomic, strong) UIActivityIndicatorView *processingIndicator;
+@property (nonatomic, assign) BOOL isProcessingImportedImage;
+@property (nonatomic, strong) UIView *importCustomizationOverlay;
+@property (nonatomic, strong) UIView *importCustomizationContainer;
+@property (nonatomic, strong) WatermarkPanelView *importWatermarkPanel;
+@property (nonatomic, strong) UIImage *pendingImportedImage;
+@property (nonatomic, strong) CMWatermarkConfiguration *pendingImportConfiguration;
 
 @end
 
@@ -122,10 +132,50 @@
 
 - (void)didTapGalleryButton {
     UIImage *latestImage = self.businessController.latestCapturedImage;
-    if (latestImage) {
-        [self showImagePreview:latestImage];
+
+    if (@available(iOS 14.0, *)) {
+        if (latestImage) {
+            UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
+                                                                           message:nil
+                                                                    preferredStyle:UIAlertControllerStyleActionSheet];
+
+            UIAlertAction *previewAction = [UIAlertAction actionWithTitle:@"查看最新拍摄"
+                                                                     style:UIAlertActionStyleDefault
+                                                                   handler:^(UIAlertAction * _Nonnull action) {
+                [self showImagePreview:latestImage];
+            }];
+
+            UIAlertAction *pickAction = [UIAlertAction actionWithTitle:@"选择系统照片"
+                                                                  style:UIAlertActionStyleDefault
+                                                                handler:^(UIAlertAction * _Nonnull action) {
+                [self presentPhotoPicker];
+            }];
+
+            UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
+                                                                   style:UIAlertActionStyleCancel
+                                                                 handler:nil];
+
+            [sheet addAction:previewAction];
+            [sheet addAction:pickAction];
+            [sheet addAction:cancelAction];
+
+            UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+            if (popover) {
+                popover.sourceView = self.view;
+                popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
+                popover.permittedArrowDirections = UIPopoverArrowDirectionAny;
+            }
+
+            [self presentViewController:sheet animated:YES completion:nil];
+        } else {
+            [self presentPhotoPicker];
+        }
     } else {
-        [self openSystemPhotosApp];
+        if (latestImage) {
+            [self showImagePreview:latestImage];
+        } else {
+            [self openSystemPhotosApp];
+        }
     }
 }
 
@@ -328,6 +378,344 @@
     if ([[UIApplication sharedApplication] canOpenURL:photosURL]) {
         [[UIApplication sharedApplication] openURL:photosURL options:@{} completionHandler:nil];
     }
+}
+
+#pragma mark - Photo Picker
+
+- (void)presentPhotoPicker {
+    if (@available(iOS 14.0, *)) {
+        PHPickerConfiguration *configuration = [[PHPickerConfiguration alloc] init];
+        configuration.filter = [PHPickerFilter imagesFilter];
+        configuration.selectionLimit = 1;
+        configuration.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
+
+        PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:configuration];
+        picker.delegate = self;
+        picker.modalPresentationStyle = UIModalPresentationFullScreen;
+        [self presentViewController:picker animated:YES completion:nil];
+    } else {
+        [self openSystemPhotosApp];
+    }
+}
+
+- (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+
+    PHPickerResult *result = results.firstObject;
+    if (!result) {
+        return;
+    }
+
+    NSItemProvider *provider = result.itemProvider;
+    if (![provider canLoadObjectOfClass:[UIImage class]]) {
+        [self showErrorAlert:@"不支持所选的资源类型"];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [provider loadObjectOfClass:[UIImage class] completionHandler:^(UIImage * _Nullable object, NSError * _Nullable error) {
+        if (error || !object) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSString *message = error.localizedDescription ?: @"无法加载选中的图片";
+                [strongSelf showErrorAlert:message];
+            });
+            return;
+        }
+
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [strongSelf handleImportedImage:object];
+        });
+    }];
+}
+
+- (void)handleImportedImage:(UIImage *)image {
+    if (!image || self.isProcessingImportedImage) {
+        return;
+    }
+
+    self.isProcessingImportedImage = YES;
+    self.pendingImportedImage = image;
+
+    CMWatermarkConfiguration *baseConfiguration = [self.businessController.watermarkConfiguration copy];
+    if (!baseConfiguration) {
+        baseConfiguration = [CMWatermarkConfiguration defaultConfiguration];
+    }
+    self.pendingImportConfiguration = [baseConfiguration copy];
+
+    [self presentImportCustomizationWithConfiguration:baseConfiguration];
+}
+
+- (CGFloat)preferredImportPanelHeight {
+    CGFloat screenHeight = UIScreen.mainScreen.bounds.size.height;
+    [self.view layoutIfNeeded];
+    CGFloat safeTop = self.view.safeAreaInsets.top;
+    CGFloat availableHeight = screenHeight - safeTop - 24.0f;
+    CGFloat minimumHeight = 360.0f;
+    if (availableHeight < minimumHeight) {
+        availableHeight = minimumHeight;
+    }
+    CGFloat targetHeight = screenHeight * 0.7f;
+    targetHeight = MIN(targetHeight, availableHeight);
+    targetHeight = MAX(targetHeight, minimumHeight);
+    return targetHeight;
+}
+
+- (UIButton *)importActionButtonWithTitle:(NSString *)title primary:(BOOL)isPrimary {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    [button setTitle:title forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightSemibold];
+    button.layer.cornerRadius = 12.0f;
+    button.layer.masksToBounds = YES;
+    UIColor *background = isPrimary ? [UIColor systemOrangeColor] : [UIColor colorWithWhite:1.0 alpha:0.12];
+    UIColor *titleColor = isPrimary ? [UIColor blackColor] : [UIColor whiteColor];
+    button.backgroundColor = background;
+    [button setTitleColor:titleColor forState:UIControlStateNormal];
+    button.contentEdgeInsets = UIEdgeInsetsMake(12.0, 0.0, 12.0, 0.0);
+    return button;
+}
+
+- (void)presentImportCustomizationWithConfiguration:(CMWatermarkConfiguration *)configuration {
+    if (!configuration) {
+        configuration = [CMWatermarkConfiguration defaultConfiguration];
+    }
+
+    if (self.importCustomizationOverlay.superview) {
+        [self.importWatermarkPanel applyConfiguration:configuration animated:NO];
+        self.pendingImportConfiguration = [configuration copy];
+        return;
+    }
+
+    UIView *overlay = [[UIView alloc] init];
+    overlay.translatesAutoresizingMaskIntoConstraints = NO;
+    overlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+    overlay.alpha = 0.0f;
+    overlay.accessibilityViewIsModal = YES;
+
+    UIView *container = [[UIView alloc] init];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    container.backgroundColor = [UIColor colorWithWhite:0.06 alpha:1.0];
+    container.layer.cornerRadius = 24.0f;
+    container.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    container.layer.masksToBounds = YES;
+
+    WatermarkPanelView *panel = [[WatermarkPanelView alloc] init];
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    panel.delegate = self;
+    [panel applyConfiguration:configuration animated:NO];
+
+    UIStackView *buttons = [[UIStackView alloc] init];
+    buttons.translatesAutoresizingMaskIntoConstraints = NO;
+    buttons.axis = UILayoutConstraintAxisHorizontal;
+    buttons.alignment = UIStackViewAlignmentFill;
+    buttons.spacing = 16.0f;
+    buttons.distribution = UIStackViewDistributionFillEqually;
+
+    UIButton *cancelButton = [self importActionButtonWithTitle:@"取消" primary:NO];
+    [cancelButton addTarget:self action:@selector(handleImportCancelTap) forControlEvents:UIControlEventTouchUpInside];
+    UIButton *applyButton = [self importActionButtonWithTitle:@"应用" primary:YES];
+    [applyButton addTarget:self action:@selector(handleImportApplyTap) forControlEvents:UIControlEventTouchUpInside];
+
+    [buttons addArrangedSubview:cancelButton];
+    [buttons addArrangedSubview:applyButton];
+
+    [self.view addSubview:overlay];
+    [overlay addSubview:container];
+    [container addSubview:panel];
+    [container addSubview:buttons];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [overlay.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [overlay.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [overlay.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [overlay.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [container.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor],
+        [container.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor],
+        [container.bottomAnchor constraintEqualToAnchor:overlay.bottomAnchor]
+    ]];
+
+    CGFloat panelHeight = [self preferredImportPanelHeight];
+    NSLayoutConstraint *panelHeightConstraint = [panel.heightAnchor constraintEqualToConstant:panelHeight];
+    panelHeightConstraint.active = YES;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [panel.topAnchor constraintEqualToAnchor:container.topAnchor constant:20.0f],
+        [panel.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [panel.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+
+        [buttons.topAnchor constraintEqualToAnchor:panel.bottomAnchor constant:20.0f],
+        [buttons.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0f],
+        [buttons.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-24.0f],
+        [buttons.bottomAnchor constraintEqualToAnchor:container.safeAreaLayoutGuide.bottomAnchor constant:-20.0f]
+    ]];
+
+    [cancelButton.heightAnchor constraintEqualToConstant:48.0f].active = YES;
+    [applyButton.heightAnchor constraintEqualToConstant:48.0f].active = YES;
+
+    [self.view layoutIfNeeded];
+
+    container.transform = CGAffineTransformMakeTranslation(0.0f, panelHeight + 120.0f);
+
+    self.importCustomizationOverlay = overlay;
+    self.importCustomizationContainer = container;
+    self.importWatermarkPanel = panel;
+
+    [UIView animateWithDuration:0.28
+                          delay:0.0
+         usingSpringWithDamping:0.9
+          initialSpringVelocity:0.6
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        overlay.alpha = 1.0f;
+        container.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+- (void)dismissImportCustomizationAnimated:(BOOL)animated completion:(void (^)(void))completion {
+    UIView *overlay = self.importCustomizationOverlay;
+    UIView *container = self.importCustomizationContainer;
+    if (!overlay) {
+        if (completion) {
+            completion();
+        }
+        return;
+    }
+
+    void (^cleanup)(void) = ^{
+        [overlay removeFromSuperview];
+        self.importCustomizationOverlay = nil;
+        self.importCustomizationContainer = nil;
+        self.importWatermarkPanel = nil;
+    };
+
+    if (!animated) {
+        cleanup();
+        if (completion) {
+            completion();
+        }
+        return;
+    }
+
+    CGFloat translation = container.bounds.size.height > 0 ? container.bounds.size.height : 400.0f;
+    [UIView animateWithDuration:0.2
+                     animations:^{
+        overlay.alpha = 0.0f;
+        container.transform = CGAffineTransformMakeTranslation(0.0f, translation);
+    } completion:^(BOOL finished) {
+        cleanup();
+        if (completion) {
+            completion();
+        }
+    }];
+}
+
+- (void)handleImportCancelTap {
+    [self dismissImportCustomizationAnimated:YES completion:^{
+        self.isProcessingImportedImage = NO;
+        self.pendingImportedImage = nil;
+        self.pendingImportConfiguration = nil;
+    }];
+}
+
+- (void)handleImportApplyTap {
+    [self dismissImportCustomizationAnimated:YES completion:^{
+        [self beginProcessingPendingImportedImage];
+    }];
+}
+
+- (void)beginProcessingPendingImportedImage {
+    UIImage *image = self.pendingImportedImage;
+    if (!image) {
+        self.isProcessingImportedImage = NO;
+        return;
+    }
+
+    CMWatermarkConfiguration *configuration = self.pendingImportConfiguration ?: [self.businessController.watermarkConfiguration copy];
+
+    [self showProcessingOverlay];
+
+    __weak typeof(self) weakSelf = self;
+    [self.businessController processImportedImage:image
+                                 withConfiguration:configuration
+                                         completion:^(UIImage * _Nullable processedImage, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+
+        strongSelf.isProcessingImportedImage = NO;
+        strongSelf.pendingImportedImage = nil;
+        strongSelf.pendingImportConfiguration = nil;
+
+        [strongSelf hideProcessingOverlay];
+
+        if (processedImage) {
+            [strongSelf.controlsView updateGalleryButtonWithImage:processedImage];
+            [strongSelf showImagePreview:processedImage];
+        }
+
+        if (error) {
+            NSString *message = error.localizedDescription ?: @"处理图片失败";
+            [strongSelf showErrorAlert:message];
+        }
+    }];
+}
+
+#pragma mark - WatermarkPanelViewDelegate
+
+- (void)watermarkPanelDidRequestDismiss:(WatermarkPanelView *)panel {
+    if (panel == self.importWatermarkPanel) {
+        [self handleImportCancelTap];
+    }
+}
+
+- (void)watermarkPanel:(WatermarkPanelView *)panel didUpdateConfiguration:(CMWatermarkConfiguration *)configuration {
+    if (panel == self.importWatermarkPanel) {
+        self.pendingImportConfiguration = [configuration copy];
+    }
+}
+
+- (void)showProcessingOverlay {
+    if (self.processingOverlay.superview) {
+        [self.processingIndicator startAnimating];
+        return;
+    }
+
+    UIView *overlay = [[UIView alloc] init];
+    overlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.35];
+    overlay.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    indicator.color = [UIColor whiteColor];
+    [indicator startAnimating];
+
+    [overlay addSubview:indicator];
+    [self.view addSubview:overlay];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [overlay.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [overlay.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [overlay.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [overlay.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [indicator.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor]
+    ]];
+
+    self.processingOverlay = overlay;
+    self.processingIndicator = indicator;
+}
+
+- (void)hideProcessingOverlay {
+    [self.processingIndicator stopAnimating];
+    [self.processingOverlay removeFromSuperview];
+    self.processingIndicator = nil;
+    self.processingOverlay = nil;
 }
 
 - (void)showCaptureFlashEffect {

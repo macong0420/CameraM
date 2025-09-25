@@ -10,6 +10,20 @@
 
 static NSString * const kCMWatermarkConfigurationStorageKey = @"com.cameram.watermark.configuration";
 static NSString * const kCMLensSelectionStorageKey = @"com.cameram.lens.selection";
+static NSString * const kCMBusinessControllerErrorDomain = @"com.cameram.business";
+
+static UIImage *CMNormalizeImageOrientation(UIImage *image) {
+    if (!image || image.imageOrientation == UIImageOrientationUp) {
+        return image;
+    }
+
+    UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
+    [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
+    UIImage *normalizedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+
+    return normalizedImage ?: image;
+}
 
 @interface CameraBusinessController () <CameraManagerDelegate>
 
@@ -186,6 +200,85 @@ static NSString * const kCMLensSelectionStorageKey = @"com.cameram.lens.selectio
     [self persistWatermarkConfiguration];
 }
 
+- (void)processImage:(UIImage *)image
+            metadata:(nullable NSDictionary *)metadata
+      configuration:(nullable CMWatermarkConfiguration *)configuration
+           applyCrop:(BOOL)applyCrop
+          completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion {
+    if (!image) {
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:kCMBusinessControllerErrorDomain
+                                                 code:3001
+                                             userInfo:@{NSLocalizedDescriptionKey: @"未获取到有效的图片"}];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, error);
+            });
+        }
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+
+    dispatch_async(self.renderQueue, ^{
+        @autoreleasepool {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+
+            UIImage *workingImage = image;
+            if (applyCrop) {
+                CameraAspectRatio aspectRatio = strongSelf.currentAspectRatio;
+                UIImage *croppedImage = [strongSelf.cameraManager cropImage:image toAspectRatio:aspectRatio];
+                if (croppedImage) {
+                    workingImage = croppedImage;
+                }
+            } else {
+                workingImage = CMNormalizeImageOrientation(image);
+            }
+
+            CMWatermarkConfiguration *configurationSnapshot = configuration ? [configuration copy] : [strongSelf.watermarkConfiguration copy];
+            UIImage *renderedImage = workingImage;
+            if (configurationSnapshot) {
+                UIImage *watermarked = [strongSelf.watermarkRenderer renderImage:workingImage
+                                                              withConfiguration:configurationSnapshot
+                                                                       metadata:metadata];
+                if (watermarked) {
+                    renderedImage = watermarked;
+                }
+            }
+
+            UIImage *finalImage = renderedImage ?: workingImage;
+
+            [strongSelf.cameraManager saveImageToPhotosLibrary:finalImage metadata:metadata completion:^(BOOL success, NSError * _Nullable error) {
+                if (completion) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        completion(finalImage, error);
+                    });
+                } else if (error) {
+                    NSLog(@"⚠️ 保存图片失败: %@", error.localizedDescription);
+                }
+            }];
+        }
+    });
+}
+
+- (void)processImportedImage:(UIImage *)image
+          withConfiguration:(CMWatermarkConfiguration *)configuration
+                  completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion {
+    [self processImage:image metadata:nil configuration:configuration applyCrop:NO completion:^(UIImage * _Nullable processedImage, NSError * _Nullable error) {
+        if (processedImage) {
+            self.latestCapturedImage = processedImage;
+        }
+        if (completion) {
+            completion(processedImage, error);
+        }
+    }];
+}
+
+- (void)processImportedImage:(UIImage *)image
+                  completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion {
+    [self processImportedImage:image withConfiguration:nil completion:completion];
+}
+
 - (void)persistWatermarkConfiguration {
     if (!self.watermarkConfiguration) { return; }
 
@@ -238,32 +331,27 @@ static NSString * const kCMLensSelectionStorageKey = @"com.cameram.lens.selectio
 
 - (void)cameraManager:(CameraManager *)manager didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {
     if (!image) { return; }
-    CMWatermarkConfiguration *configurationSnapshot = [self.watermarkConfiguration copy];
-    CameraAspectRatio aspectRatio = self.currentAspectRatio;
 
-    dispatch_async(self.renderQueue, ^{
-        @autoreleasepool {
-            UIImage *croppedImage = [self.cameraManager cropImage:image toAspectRatio:aspectRatio];
-            UIImage *renderedImage = croppedImage;
-            if (configurationSnapshot) {
-                renderedImage = [self.watermarkRenderer renderImage:croppedImage
-                                                  withConfiguration:configurationSnapshot
-                                                           metadata:metadata] ?: croppedImage;
+    [self processImage:image
+              metadata:metadata
+        configuration:self.watermarkConfiguration
+             applyCrop:YES
+            completion:^(UIImage * _Nullable processedImage, NSError * _Nullable error) {
+        if (processedImage) {
+            self.latestCapturedImage = processedImage;
+
+            if ([self.delegate respondsToSelector:@selector(didCapturePhoto:withMetadata:)]) {
+                [self.delegate didCapturePhoto:processedImage withMetadata:metadata];
             }
-            UIImage *finalImage = renderedImage ?: croppedImage;
-            [self.cameraManager saveImageToPhotosLibrary:finalImage metadata:metadata completion:nil];
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self.latestCapturedImage = finalImage;
-                if ([self.delegate respondsToSelector:@selector(didCapturePhoto:withMetadata:)]) {
-                    [self.delegate didCapturePhoto:finalImage withMetadata:metadata];
-                }
-                if ([self.delegate respondsToSelector:@selector(shouldShowCaptureFlashEffect)]) {
-                    [self.delegate shouldShowCaptureFlashEffect];
-                }
-            });
+            if ([self.delegate respondsToSelector:@selector(shouldShowCaptureFlashEffect)]) {
+                [self.delegate shouldShowCaptureFlashEffect];
+            }
         }
-    });
+
+        if (error && [self.delegate respondsToSelector:@selector(didFailWithError:)]) {
+            [self.delegate didFailWithError:error];
+        }
+    }];
 }
 
 - (void)cameraManager:(CameraManager *)manager didFailWithError:(NSError *)error {
