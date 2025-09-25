@@ -405,7 +405,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     self.lensStackView.translatesAutoresizingMaskIntoConstraints = NO;
     self.lensStackView.axis = UILayoutConstraintAxisHorizontal;
     self.lensStackView.alignment = UIStackViewAlignmentCenter;
-    self.lensStackView.spacing = 12.0;
+    self.lensStackView.spacing = 6.0;
     [self.lensSelectorContainer addSubview:self.lensStackView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -1025,10 +1025,10 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
         button.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
         button.tag = (NSInteger)idx;
         [button addTarget:self action:@selector(lensButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-        button.layer.cornerRadius = 24.0;
+        button.layer.cornerRadius = 15;
         button.clipsToBounds = YES;
         [button.widthAnchor constraintEqualToConstant:56.0].active = YES;
-        [button.heightAnchor constraintEqualToConstant:56.0].active = YES;
+        [button.heightAnchor constraintEqualToConstant:30].active = YES;
         [self.lensStackView addArrangedSubview:button];
         [buttons addObject:button];
     }];
