@@ -131,11 +131,6 @@
 
 - (void)didSelectMode:(NSInteger)modeIndex {
     NSLog(@"模式切换: %ld", (long)modeIndex);
-    
-    // Square模式自动切换到1:1比例
-    if (modeIndex == 2) { // Square模式
-        [self.businessController switchAspectRatio:CameraAspectRatio1to1];
-    }
 }
 
 - (void)didSelectAspectRatio:(CameraAspectRatio)ratio {

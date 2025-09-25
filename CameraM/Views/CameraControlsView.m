@@ -22,6 +22,8 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     return 1.0f;
 }
 
+static const CGFloat CMModeSelectorWidth = 60.0f;
+
 @interface CameraControlsView () <WatermarkPanelViewDelegate>
 
 // 主要容器
@@ -201,30 +203,24 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
 }
 
 - (void)setupModeSelector {
-    NSArray *modes = @[@"Photo", @"Video", @"Square", @"Portrait", @"Pro"];
-    CGFloat buttonWidth = 60;
-    
-    for (NSInteger i = 0; i < modes.count; i++) {
-        UIButton *modeButton = [[UIButton alloc] init];
-        [modeButton setTitle:modes[i] forState:UIControlStateNormal];
-        [modeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        [modeButton setTitleColor:[UIColor systemYellowColor] forState:UIControlStateSelected];
-        modeButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-        modeButton.tag = i;
-        [modeButton addTarget:self action:@selector(modeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-        modeButton.translatesAutoresizingMaskIntoConstraints = NO;
-        
-        if (i == 0) modeButton.selected = YES; // 默认选中Photo
-        
-        [self.modeSelector addSubview:modeButton];
-        
-        [NSLayoutConstraint activateConstraints:@[
-            [modeButton.widthAnchor constraintEqualToConstant:buttonWidth],
-            [modeButton.heightAnchor constraintEqualToConstant:30],
-            [modeButton.centerYAnchor constraintEqualToAnchor:self.modeSelector.centerYAnchor],
-            [modeButton.leadingAnchor constraintEqualToAnchor:self.modeSelector.leadingAnchor constant:i * buttonWidth]
-        ]];
-    }
+    UIButton *photoButton = [[UIButton alloc] init];
+    [photoButton setTitle:@"Photo" forState:UIControlStateNormal];
+    [photoButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [photoButton setTitleColor:[UIColor systemYellowColor] forState:UIControlStateSelected];
+    photoButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    photoButton.tag = 0;
+    [photoButton addTarget:self action:@selector(modeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    photoButton.translatesAutoresizingMaskIntoConstraints = NO;
+    photoButton.selected = YES;
+
+    [self.modeSelector addSubview:photoButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [photoButton.centerXAnchor constraintEqualToAnchor:self.modeSelector.centerXAnchor],
+        [photoButton.centerYAnchor constraintEqualToAnchor:self.modeSelector.centerYAnchor],
+        [photoButton.widthAnchor constraintEqualToConstant:CMModeSelectorWidth],
+        [photoButton.heightAnchor constraintEqualToConstant:30]
+    ]];
 }
 
 - (void)setupProfessionalControls {
@@ -545,7 +541,7 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
     [NSLayoutConstraint activateConstraints:@[
         [self.modeSelector.bottomAnchor constraintEqualToAnchor:self.captureButton.topAnchor constant:-20],
         [self.modeSelector.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
-        [self.modeSelector.widthAnchor constraintEqualToConstant:300],
+        [self.modeSelector.widthAnchor constraintEqualToConstant:CMModeSelectorWidth],
         [self.modeSelector.heightAnchor constraintEqualToConstant:30],
         
         [self.galleryButton.leadingAnchor constraintEqualToAnchor:self.bottomControlsView.leadingAnchor constant:30],
@@ -693,15 +689,6 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         }
     }
     sender.selected = YES;
-    
-    // Square模式自动切换到1:1比例
-    if (sender.tag == 2) { // Square模式
-        [self updateAspectRatioSelection:CameraAspectRatio1to1];
-        if ([self.delegate respondsToSelector:@selector(didSelectAspectRatio:)]) {
-            [self.delegate didSelectAspectRatio:CameraAspectRatio1to1];
-        }
-    }
-    
     if ([self.delegate respondsToSelector:@selector(didSelectMode:)]) {
         [self.delegate didSelectMode:sender.tag];
     }
@@ -1203,7 +1190,7 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         // 模式选择器
         [self.modeSelector.bottomAnchor constraintEqualToAnchor:self.captureButton.topAnchor constant:-20],
         [self.modeSelector.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
-        [self.modeSelector.widthAnchor constraintEqualToConstant:300],
+        [self.modeSelector.widthAnchor constraintEqualToConstant:CMModeSelectorWidth],
         [self.modeSelector.heightAnchor constraintEqualToConstant:30],
         
         // 相册按钮
@@ -1337,7 +1324,7 @@ static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
         // 模式选择器
         [self.modeSelector.bottomAnchor constraintEqualToAnchor:self.captureButton.topAnchor constant:-15],
         [self.modeSelector.centerXAnchor constraintEqualToAnchor:self.bottomControlsView.centerXAnchor],
-        [self.modeSelector.widthAnchor constraintEqualToConstant:300],
+        [self.modeSelector.widthAnchor constraintEqualToConstant:CMModeSelectorWidth],
         [self.modeSelector.heightAnchor constraintEqualToConstant:30],
         
         // 相册按钮
