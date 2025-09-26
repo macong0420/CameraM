@@ -47,6 +47,7 @@
   // 默认选择第一个滤镜（原片）
   if (self.availableFilters.count > 0) {
     self.currentFilter = self.availableFilters.firstObject;
+    self.intensity = self.currentFilter.intensity;
   }
 }
 
