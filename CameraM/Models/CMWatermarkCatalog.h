@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString * const CMWatermarkFrameIdentifierNone;
 FOUNDATION_EXPORT NSString * const CMWatermarkFrameIdentifierStudio;
 FOUNDATION_EXPORT NSString * const CMWatermarkFrameIdentifierPolaroid;
+FOUNDATION_EXPORT NSString * const CMWatermarkFrameIdentifierInfo;
 
 FOUNDATION_EXPORT NSString * const CMWatermarkLogoIdentifierNone;
 

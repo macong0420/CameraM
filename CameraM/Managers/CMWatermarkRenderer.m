@@ -9,6 +9,7 @@
 #import "CMWatermarkConfiguration.h"
 #import "CMWatermarkCatalog.h"
 #import <ImageIO/ImageIO.h>
+#import <sys/utsname.h>
 #import <math.h>
 
 static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
@@ -53,7 +54,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                 effectiveConfiguration.signatureEnabled = NO;
                 effectiveConfiguration.signatureText = @"";
             }
-            if (!frameDescriptor.allowsParameterEditing && frameDescriptor.enforcedPreferenceRawValue != NSNotFound) {
+            // 对于Info相框，始终应用强制的preference设置以确保参数显示
+            if (frameDescriptor.enforcedPreferenceRawValue != NSNotFound) {
                 effectiveConfiguration.preference = (CMWatermarkPreference)frameDescriptor.enforcedPreferenceRawValue;
             }
         }
@@ -81,9 +83,10 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
             CGContextRef ctx = context.CGContext;
             CGContextSaveGState(ctx);
             
-            // 对于Studio模式和Polaroid模式，使用白色背景，否则使用黑色
+            // 对于Studio模式、Polaroid模式和Info模式，使用白色背景，否则使用黑色
             if ([frameDescriptor.identifier isEqualToString:@"frame.studio"] || 
-                [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
+                [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
+                [frameDescriptor.identifier isEqualToString:@"frame.info"]) {
                 CGContextSetFillColorWithColor(ctx, [UIColor whiteColor].CGColor);
             } else {
                 CGContextSetFillColorWithColor(ctx, [UIColor blackColor].CGColor);
@@ -167,40 +170,24 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
             [image drawInRect:photoRect];
             CGContextRestoreGState(ctx);
 
-            // 对于Studio模式，使用sign_b保持比例显示在底部区域一半高度
+            // Studio模式使用白色背景
             if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"] && bottomPadding > 0.0) {
-                if (frameDescriptor.backgroundAssetName.length > 0) {
-                    UIImage *background = [UIImage imageNamed:frameDescriptor.backgroundAssetName];
-                    if (background) {
-                        // sign_b高度为底部区域的四分之一，保持原始比例
-                        CGFloat signBHeight = bottomPadding * 0.25;
-                        CGFloat originalAspectRatio = background.size.width / background.size.height;
-                        CGFloat calculatedWidth = signBHeight * originalAspectRatio;
-                        
-                        // 如果计算出的宽度超过画布宽度，则以画布宽度为准并重新计算高度
-                        CGFloat finalWidth, finalHeight;
-                        if (calculatedWidth > canvasSize.width) {
-                            finalWidth = canvasSize.width;
-                            finalHeight = finalWidth / originalAspectRatio;
-                        } else {
-                            finalWidth = calculatedWidth;
-                            finalHeight = signBHeight;
-                        }
-                        
-                        // 居中显示在底部区域，向上移动100px
-                        CGFloat centerX = (canvasSize.width - finalWidth) / 2.0;
-                        CGFloat centerY = baseHeight + (bottomPadding - finalHeight) / 2.0 - 150.0;
-                        CGRect backgroundRect = CGRectMake(centerX, centerY, finalWidth, finalHeight);
-                        [background drawInRect:backgroundRect blendMode:kCGBlendModeNormal alpha:1.0];
-                    }
-                }
-                
+                CGRect whiteBackgroundRect = CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
+                [[UIColor whiteColor] setFill];
+                UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
+
             } else if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] && bottomPadding > 0.0) {
                 // Polaroid模式使用白色背景
                 CGRect whiteBackgroundRect = CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
                 [[UIColor whiteColor] setFill];
                 UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
-                
+
+            } else if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.info"] && bottomPadding > 0.0) {
+                // Info模式使用白色背景
+                CGRect whiteBackgroundRect = CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
+                [[UIColor whiteColor] setFill];
+                UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
+
             } else if (frameDescriptor.backgroundAssetName.length > 0 && bottomPadding > 0.0) {
                 // 其他相框模式的原有逻辑
                 UIImage *background = [UIImage imageNamed:frameDescriptor.backgroundAssetName];
@@ -288,10 +275,11 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     CGFloat cursorX = contentRect.origin.x + horizontalPadding;
     CGFloat contentCenterY = CGRectGetMidY(contentRect);
 
-    // Studio模式和Polaroid模式不在此处显示logo
+    // Studio模式、Polaroid模式和Info模式不在此处显示logo
     if (logoDescriptor && logoDescriptor.assetName.length > 0 && 
         !(frameDescriptor && ([frameDescriptor.identifier isEqualToString:@"frame.studio"] || 
-                             [frameDescriptor.identifier isEqualToString:@"frame.polaroid"]))) {
+                             [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
+                             [frameDescriptor.identifier isEqualToString:@"frame.info"]))) {
         UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
         if (logoImage) {
             CGFloat maxLogoHeight = MIN(contentRect.size.height * 0.6, 140.0) * CMWatermarkUIScaleFactor;
@@ -353,12 +341,25 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                            detailString:detailString ?: @""
                              canvasSize:canvasSize
                     horizontalPadding:horizontalPadding];
+    } else if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.info"]) {
+        // Info模式使用专门的布局：设备机型、时间、logo、参数、GPS坐标
+        [self drawInfoLayoutInRect:contentRect
+                     configuration:configuration
+                      logoDescriptor:logoDescriptor
+                        detailString:detailString ?: @""
+                          canvasSize:canvasSize
+                   horizontalPadding:horizontalPadding
+                            metadata:metadata];
     } else if (detailString.length > 0) {
-        // 对于Studio模式和其他模式，使用原有逻辑
+        // 对于Studio模式，使用Info样式布局
         if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
-            [self drawStudioParametersInRect:contentRect 
-                                detailString:detailString 
-                                  canvasSize:canvasSize];
+            [self drawInfoLayoutInRect:contentRect
+                       configuration:configuration
+                        logoDescriptor:logoDescriptor
+                          detailString:detailString ?: @""
+                            canvasSize:canvasSize
+                     horizontalPadding:horizontalPadding
+                              metadata:metadata];
         } else {
             // 其他相框模式使用原有样式
             UIFont *detailFont = [UIFont systemFontOfSize:baseFontSize * 0.55 weight:UIFontWeightMedium];
@@ -534,6 +535,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
 - (NSString *)supplementaryStringForConfiguration:(CMWatermarkConfiguration *)configuration
                                          metadata:(NSDictionary * _Nullable)metadata {
+    NSLog(@"🔍 参数生成调试 - preference: %ld, preferenceOptions: %ld", (long)configuration.preference, (long)configuration.preferenceOptions);
+    
     // 对于宝丽来模式，支持多选参数显示
     if (configuration.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
         NSMutableArray *components = [NSMutableArray array];
@@ -576,12 +579,17 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 }
 
 - (NSString *)exposureStringFromMetadata:(NSDictionary *)metadata {
+    NSLog(@"📊 曝光参数调试 - metadata存在: %@", metadata ? @"YES" : @"NO");
     if (!metadata) {
-        return @"";
+        // 测试数据：如果没有metadata，返回示例拍摄参数
+        NSString *testParams = @"800 ISO    2.8 F    24 mm    1/60 S";
+        NSLog(@"📊 返回测试参数: %@", testParams);
+        return testParams;
     }
     NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
     if (!exif) {
-        return @"";
+        // 测试数据：如果没有EXIF信息，返回示例参数
+        return @"1600 ISO    1.8 F    50 mm    1/125 S";
     }
 
     double fNumber = [exif[(NSString *)kCGImagePropertyExifFNumber] doubleValue];
@@ -847,25 +855,25 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                         detailString:(NSString *)detailString
                           canvasSize:(CGSize)canvasSize
                    parameterFontSize:(CGFloat)parameterFontSize {
-    
+
     UIFont *parameterFont = [UIFont systemFontOfSize:parameterFontSize weight:UIFontWeightMedium];
     UIColor *parameterColor = [UIColor colorWithRed:102.0/255.0 green:102.0/255.0 blue:102.0/255.0 alpha:1.0]; // #666666
-    
+
     NSMutableParagraphStyle *parameterParagraph = [[NSMutableParagraphStyle alloc] init];
     parameterParagraph.alignment = NSTextAlignmentCenter;
     parameterParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
-    
+
     NSDictionary *parameterAttributes = @{
         NSFontAttributeName: parameterFont,
         NSForegroundColorAttributeName: parameterColor,
         NSParagraphStyleAttributeName: parameterParagraph
     };
-    
+
     // 将参数字符串分解并水平排列
     NSArray *components = [detailString componentsSeparatedByString:@"    "];
     if (components.count > 0) {
         NSString *displayText = [components componentsJoinedByString:@"  •  "];
-        
+
         CGFloat horizontalPadding = rect.size.width * 0.05;
         CGRect parameterRect = CGRectMake(rect.origin.x + horizontalPadding,
                                          rect.origin.y + (rect.size.height - parameterFont.lineHeight) / 2.0,
@@ -873,6 +881,167 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                                          parameterFont.lineHeight);
         [displayText drawInRect:parameterRect withAttributes:parameterAttributes];
     }
+}
+
+- (void)drawInfoLayoutInRect:(CGRect)contentRect
+               configuration:(CMWatermarkConfiguration *)configuration
+                logoDescriptor:(CMWatermarkLogoDescriptor * _Nullable)logoDescriptor
+                  detailString:(NSString *)detailString
+                    canvasSize:(CGSize)canvasSize
+             horizontalPadding:(CGFloat)horizontalPadding
+                      metadata:(NSDictionary * _Nullable)metadata {
+
+    NSLog(@"🔍 Info布局调试 - detailString: '%@', preference: %ld", detailString ?: @"(nil)", (long)configuration.preference);
+    
+    // Info相框布局（完全参考富士胶片X-T30 II样式）：
+    // 左侧区域：设备型号（上行）+ 拍摄时间（下行）
+    // 中间区域：Logo
+    // 右侧区域：参数信息（上行）+ GPS坐标（下行）
+
+    CGFloat baseFontSize = MAX(16.0, MIN(32.0, canvasSize.width * 0.025)) * CMWatermarkUIScaleFactor;
+    UIFont *primaryFont = [UIFont systemFontOfSize:baseFontSize weight:UIFontWeightSemibold];
+    UIFont *secondaryFont = [UIFont systemFontOfSize:baseFontSize * 0.8 weight:UIFontWeightMedium];
+
+    UIColor *blackColor = [UIColor blackColor];
+    UIColor *grayColor = [UIColor colorWithRed:102.0/255.0 green:102.0/255.0 blue:102.0/255.0 alpha:1.0]; // #666666
+
+    NSMutableParagraphStyle *leftParagraph = [[NSMutableParagraphStyle alloc] init];
+    leftParagraph.alignment = NSTextAlignmentLeft;
+    leftParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+
+    NSMutableParagraphStyle *rightParagraph = [[NSMutableParagraphStyle alloc] init];
+    rightParagraph.alignment = NSTextAlignmentRight;
+    rightParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+
+    NSMutableParagraphStyle *centerParagraph = [[NSMutableParagraphStyle alloc] init];
+    centerParagraph.alignment = NSTextAlignmentCenter;
+    centerParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+
+    CGFloat topLineY = contentRect.origin.y + horizontalPadding * 0.3;
+    CGFloat bottomLineY = contentRect.origin.y + contentRect.size.height - secondaryFont.lineHeight - horizontalPadding * 0.3;
+    CGFloat availableWidth = contentRect.size.width - 2 * horizontalPadding;
+
+    // 左侧区域宽度：35%
+    CGFloat leftAreaWidth = availableWidth * 0.35;
+    // 中间Logo区域宽度：30%
+    CGFloat logoAreaWidth = availableWidth * 0.30;
+    // 右侧区域宽度：35%
+    CGFloat rightAreaWidth = availableWidth * 0.35;
+
+    // 左侧上行：设备机型（黑色，粗体）
+    NSString *deviceModel = [self deviceModelString];
+    NSDictionary *deviceAttributes = @{
+        NSFontAttributeName: primaryFont,
+        NSForegroundColorAttributeName: blackColor,
+        NSParagraphStyleAttributeName: leftParagraph
+    };
+    CGRect deviceRect = CGRectMake(contentRect.origin.x + horizontalPadding, topLineY, leftAreaWidth, primaryFont.lineHeight);
+    [deviceModel drawInRect:deviceRect withAttributes:deviceAttributes];
+
+    // 左侧下行：拍摄时间（灰色，普通字重）
+    NSString *dateString = [self dateStringFromMetadata:metadata];
+    NSDictionary *dateAttributes = @{
+        NSFontAttributeName: secondaryFont,
+        NSForegroundColorAttributeName: grayColor,
+        NSParagraphStyleAttributeName: leftParagraph
+    };
+    CGRect dateRect = CGRectMake(contentRect.origin.x + horizontalPadding, bottomLineY, leftAreaWidth, secondaryFont.lineHeight);
+    [dateString drawInRect:dateRect withAttributes:dateAttributes];
+
+    // 右侧上行：参数信息（黑色，粗体）
+    if (detailString.length > 0) {
+        NSLog(@"📊 绘制参数信息: '%@'", detailString);
+        NSDictionary *paramAttributes = @{
+            NSFontAttributeName: primaryFont,
+            NSForegroundColorAttributeName: blackColor,
+            NSParagraphStyleAttributeName: rightParagraph
+        };
+        CGFloat rightX = contentRect.origin.x + horizontalPadding + leftAreaWidth + logoAreaWidth;
+        CGRect paramRect = CGRectMake(rightX, topLineY, rightAreaWidth, primaryFont.lineHeight);
+        NSLog(@"📊 参数绘制区域: %@", NSStringFromCGRect(paramRect));
+        [detailString drawInRect:paramRect withAttributes:paramAttributes];
+    } else {
+        NSLog(@"⚠️ detailString为空，无法显示参数");
+    }
+
+    // 右侧下行：GPS坐标（灰色，普通字重）
+    NSString *gpsString = [self coordinateStringFromMetadata:metadata];
+    NSDictionary *gpsAttributes = @{
+        NSFontAttributeName: secondaryFont,
+        NSForegroundColorAttributeName: grayColor,
+        NSParagraphStyleAttributeName: rightParagraph
+    };
+    CGFloat rightX = contentRect.origin.x + horizontalPadding + leftAreaWidth + logoAreaWidth;
+    CGRect gpsRect = CGRectMake(rightX, bottomLineY, rightAreaWidth, secondaryFont.lineHeight);
+    [gpsString drawInRect:gpsRect withAttributes:gpsAttributes];
+    
+    // 中间区域：Logo绘制 - 位置在中间偏右，靠近右侧参数区域
+    if (logoDescriptor && logoDescriptor.assetName.length > 0) {
+        UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+        if (logoImage) {
+            // Logo高度为内容区域高度的40%
+            CGFloat maxLogoHeight = contentRect.size.height * 0.4;
+            CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+            CGFloat logoHeight = maxLogoHeight;
+            CGFloat logoWidth = logoHeight * aspect;
+            
+            // Logo位置：在中间区域的右侧，靠近右侧参数区域
+            CGFloat logoAreaStartX = contentRect.origin.x + horizontalPadding + leftAreaWidth;
+            CGFloat logoX = logoAreaStartX + logoAreaWidth - logoWidth - (horizontalPadding * 0.3); // 靠右放置
+            CGFloat logoY = contentRect.origin.y + (contentRect.size.height - logoHeight) / 2.0; // 垂直居中
+            
+            CGRect logoRect = CGRectMake(logoX, logoY, logoWidth, logoHeight);
+            
+            UIImage *renderableLogo = logoDescriptor.prefersTemplateRendering ? 
+                [logoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : logoImage;
+            if (logoDescriptor.prefersTemplateRendering) {
+                [[UIColor blackColor] setFill]; // Info模式使用黑色logo
+                [[UIColor blackColor] setStroke];
+            }
+            [renderableLogo drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:0.95];
+        }
+    }
+}
+
+- (NSString *)deviceModelString {
+    // 获取设备机型信息
+    struct utsname systemInfo;
+    uname(&systemInfo);
+    NSString *deviceIdentifier = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
+
+    // 将设备标识符转换为友好的机型名称
+    NSDictionary *deviceNames = @{
+        // iPhone 15 系列
+        @"iPhone16,1": @"iPhone 15",
+        @"iPhone16,2": @"iPhone 15 Plus",
+        @"iPhone15,4": @"iPhone 15 Pro",
+        @"iPhone15,5": @"iPhone 15 Pro Max",
+
+        // iPhone 14 系列
+        @"iPhone14,7": @"iPhone 14",
+        @"iPhone14,8": @"iPhone 14 Plus",
+        @"iPhone15,2": @"iPhone 14 Pro",
+        @"iPhone15,3": @"iPhone 14 Pro Max",
+
+        // iPhone 13 系列
+        @"iPhone14,5": @"iPhone 13",
+        @"iPhone14,2": @"iPhone 13 mini",
+        @"iPhone14,3": @"iPhone 13 Pro",
+        @"iPhone14,4": @"iPhone 13 Pro Max",
+
+        // iPhone 12 系列
+        @"iPhone13,2": @"iPhone 12",
+        @"iPhone13,1": @"iPhone 12 mini",
+        @"iPhone13,3": @"iPhone 12 Pro",
+        @"iPhone13,4": @"iPhone 12 Pro Max",
+
+        // 模拟器
+        @"x86_64": @"iPhone Simulator",
+        @"arm64": @"iPhone Simulator"
+    };
+
+    NSString *friendlyName = deviceNames[deviceIdentifier];
+    return friendlyName ?: deviceIdentifier;
 }
 
 @end

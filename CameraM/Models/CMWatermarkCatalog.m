@@ -11,6 +11,7 @@
 NSString * const CMWatermarkFrameIdentifierNone = @"frame.none";
 NSString * const CMWatermarkFrameIdentifierStudio = @"frame.studio";
 NSString * const CMWatermarkFrameIdentifierPolaroid = @"frame.polaroid";
+NSString * const CMWatermarkFrameIdentifierInfo = @"frame.info";
 
 NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
 
@@ -146,7 +147,25 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                                             photoContentOffset:CGPointMake(0.035, 0.035)
                                                                          photoCornerRadiusRatio:0.008];
 
-        frames = @[none, studio, polaroid];
+        CMWatermarkFrameDescriptor *info = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierInfo
+                                                                                      displayName:@"Info"
+                                                                                 overlayAssetName:nil
+                                                                              backgroundAssetName:nil
+                                                                              bottomExpansionRatio:0.12
+                                                                                  previewAssetName:@"底部文字"
+                                                                                overlayInsetsRatio:0.0
+                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.0, 0.0, 0.12, 0.0)
+                                                                             photoContentScale:CGSizeMake(1.0, 0.88)
+                                                                            photoContentOffset:CGPointZero
+                                                                         photoCornerRadiusRatio:0.0];
+        info.overlayDrawsAbovePhoto = NO;
+        info.allowsLogoEditing = YES;
+        info.allowsParameterEditing = YES;
+        info.allowsSignatureEditing = NO;
+        info.enforcedPreferenceRawValue = CMWatermarkPreferenceExposure;
+        info.footerContentRect = CGRectMake(0.02, 0.89, 0.96, 0.10);
+
+        frames = @[none, studio, polaroid, info];
     });
     return frames;
 }
