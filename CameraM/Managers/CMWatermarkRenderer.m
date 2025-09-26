@@ -71,7 +71,7 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         const CGSize canvasSize = CGSizeMake(baseWidth, baseHeight + bottomPadding);
         
         NSLog(@"📏 相框渲染 - 模式: %@, 原始图像: %.0fx%.0f, 画布: %.0fx%.0f", 
-              frameDescriptor.identifier ?: @"none", baseWidth, baseHeight, canvasSize.width, canvasSize.height);
+            frameDescriptor.identifier ?: @"none", baseWidth, baseHeight, canvasSize.width, canvasSize.height);
 
         UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
         format.scale = image.scale > 0 ? image.scale : [UIScreen mainScreen].scale;
@@ -170,11 +170,33 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
             [image drawInRect:photoRect];
             CGContextRestoreGState(ctx);
 
-            // Studio模式使用白色背景
+            // 对于Studio模式，使用sign_b保持比例显示在底部区域
             if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"] && bottomPadding > 0.0) {
-                CGRect whiteBackgroundRect = CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
-                [[UIColor whiteColor] setFill];
-                UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
+                if (frameDescriptor.backgroundAssetName.length > 0) {
+                    UIImage *background = [UIImage imageNamed:frameDescriptor.backgroundAssetName];
+                    if (background) {
+                        // sign_b高度为底部区域的四分之一，保持原始比例
+                        CGFloat signBHeight = bottomPadding * 0.25;
+                        CGFloat originalAspectRatio = background.size.width / background.size.height;
+                        CGFloat calculatedWidth = signBHeight * originalAspectRatio;
+                        
+                        // 如果计算出的宽度超过画布宽度，则以画布宽度为准并重新计算高度
+                        CGFloat finalWidth, finalHeight;
+                        if (calculatedWidth > canvasSize.width) {
+                            finalWidth = canvasSize.width;
+                            finalHeight = finalWidth / originalAspectRatio;
+                        } else {
+                            finalWidth = calculatedWidth;
+                            finalHeight = signBHeight;
+                        }
+                        
+                        // 居中显示在底部区域，向上移动100px
+                        CGFloat centerX = (canvasSize.width - finalWidth) / 2.0;
+                        CGFloat centerY = baseHeight + (bottomPadding - finalHeight) / 2.0 - 150.0;
+                        CGRect backgroundRect = CGRectMake(centerX, centerY, finalWidth, finalHeight);
+                        [background drawInRect:backgroundRect blendMode:kCGBlendModeNormal alpha:1.0];
+                    }
+                }
 
             } else if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] && bottomPadding > 0.0) {
                 // Polaroid模式使用白色背景
@@ -351,15 +373,11 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                    horizontalPadding:horizontalPadding
                             metadata:metadata];
     } else if (detailString.length > 0) {
-        // 对于Studio模式，使用Info样式布局
+        // 对于Studio模式，使用专门的参数布局
         if (frameDescriptor && [frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
-            [self drawInfoLayoutInRect:contentRect
-                       configuration:configuration
-                        logoDescriptor:logoDescriptor
-                          detailString:detailString ?: @""
-                            canvasSize:canvasSize
-                     horizontalPadding:horizontalPadding
-                              metadata:metadata];
+            [self drawStudioParametersInRect:contentRect 
+                                detailString:detailString 
+                                  canvasSize:canvasSize];
         } else {
             // 其他相框模式使用原有样式
             UIFont *detailFont = [UIFont systemFontOfSize:baseFontSize * 0.55 weight:UIFontWeightMedium];
