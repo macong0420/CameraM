@@ -1,3 +1,11 @@
+/*
+ * @Author: 马聪聪 macong0420@126.com
+ * @Date: 2025-09-24 17:02:01
+ * @LastEditors: 马聪聪 macong0420@126.com
+ * @LastEditTime: 2025-09-26 15:58:38
+ * @FilePath: /CameraM/CameraM/Views/CameraControlsView.h
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 //
 //  CameraControlsView.h
 //  CameraM
@@ -13,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 前向声明，引用CameraManager中的定义
 @class CameraManager;
+@class MTKView;
 typedef NS_ENUM(NSInteger, CameraAspectRatio);
 typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 
@@ -25,6 +34,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)didTapGalleryButton;
 - (void)didSelectMode:(NSInteger)modeIndex;
 - (void)didSelectAspectRatio:(CameraAspectRatio)ratio;
+- (void)didTapResolutionMode;
 
 // 相机控制
 - (void)didTapFlashButton;
@@ -56,7 +66,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 @property (nonatomic, weak) id<CameraControlsDelegate> delegate;
 
 // UI组件访问接口
-@property (nonatomic, readonly) UIView *previewContainer;
+@property (nonatomic, readonly) MTKView *previewContainer;
 @property (nonatomic, readonly) UIButton *captureButton;
 @property (nonatomic, readonly) UIButton *flashButton;
 @property (nonatomic, readonly) UIButton *gridButton;
@@ -72,6 +82,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)updatePreviewVideoRect:(CGRect)videoRect;
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;
 - (void)updateLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption * _Nullable)currentLens;
+- (void)setResolutionModeEnabled:(BOOL)enabled;
 
 // 横屏适配接口
 - (void)updateLayoutForOrientation:(CameraDeviceOrientation)orientation;
@@ -81,6 +92,11 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)presentWatermarkPanel;
 - (void)dismissWatermarkPanel;
 - (BOOL)isWatermarkPanelVisible;
+
+// 滤镜面板
+- (void)showFilterPanel:(UIView *)filterPanel;
+- (void)hideFilterPanel;
+- (BOOL)isFilterPanelVisible;
 
 @end
 

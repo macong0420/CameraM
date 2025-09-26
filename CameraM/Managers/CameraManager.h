@@ -8,11 +8,14 @@
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
+#import <MetalKit/MetalKit.h>
+#import <Metal/Metal.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
 @class CameraManager;
 @class CMCameraLensOption;
+@class ARFilterDescriptor;
 
 // 相机状态枚举
 typedef NS_ENUM(NSInteger, CameraState) {
@@ -119,10 +122,18 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 - (CGRect)previewRectForAspectRatio:(CameraAspectRatio)ratio inViewSize:(CGSize)viewSize;
 - (CGRect)activeFormatPreviewRectInViewSize:(CGSize)viewSize;
 
+// 方向感知比例计算
+- (CGFloat)aspectRatioValueForRatio:(CameraAspectRatio)ratio inOrientation:(CameraDeviceOrientation)orientation;
+
 // 图片保存
 - (void)saveImageToPhotosLibrary:(UIImage *)image
                         metadata:(nullable NSDictionary *)metadata
                        completion:(void(^ _Nullable)(BOOL success, NSError * _Nullable error))completion;
+
+// 滤镜预览 - 使用MTKView
+- (void)setupFilterPreviewWithMTKView:(MTKView *)mtkView;
+- (void)setPreviewFilter:(ARFilterDescriptor * _Nullable)filter withIntensity:(float)intensity;
+- (void)clearPreviewFilter;
 
 // 内存管理
 - (void)cleanup;

@@ -1,3 +1,11 @@
+/*
+ * @Author: 马聪聪 macong0420@126.com
+ * @Date: 2025-09-24 16:24:09
+ * @LastEditors: 马聪聪 macong0420@126.com
+ * @LastEditTime: 2025-09-26 17:02:31
+ * @FilePath: /CameraM/CameraM/Controllers/CameraBusinessController.h
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 //
 //  CameraBusinessController.h
 //  CameraM
@@ -7,7 +15,9 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <MetalKit/MetalKit.h>
 #import "../Managers/CameraManager.h"
+#import "../Managers/FilterManager.h"
 #import "../Models/CMWatermarkConfiguration.h"
 #import "../Models/CMCameraLensOption.h"
 
@@ -36,6 +46,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, weak) id<CameraBusinessDelegate> delegate;
 
+// 滤镜管理
+@property (nonatomic, readonly) FilterManager *filterManager;
+
 // 状态查询接口
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readonly) FlashMode currentFlashMode;
@@ -52,6 +65,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 相机控制接口
 - (void)setupCameraWithPreviewView:(UIView *)previewView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
+- (void)setupCameraWithMTKView:(MTKView *)mtkView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
 - (void)startSession;
 - (void)stopSession;
 - (void)cleanup;
@@ -82,6 +96,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 水印
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;
+
+// 外部图片处理
+- (void)processImportedImage:(UIImage *)image
+          withConfiguration:(nullable CMWatermarkConfiguration *)configuration
+                  completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
+- (void)processImportedImage:(UIImage *)image
+                  completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
+
+// 滤镜控制
+- (void)setCurrentFilter:(ARFilterDescriptor *)filter withIntensity:(float)intensity;
+- (ARFilterDescriptor *)currentFilter;
+- (float)currentFilterIntensity;
 
 @end
 
