@@ -14,12 +14,14 @@
 @property(nonatomic, strong) UIImageView *thumbnailView;
 @property(nonatomic, strong) UILabel *nameLabel;
 @property(nonatomic, strong) UIView *selectionIndicator;
+@property(nonatomic, strong) UIColor *accentColor;
 @property(nonatomic, strong) NSMutableDictionary *thumbnailCache;
 @property(nonatomic, strong) dispatch_queue_t thumbnailQueue;
 @property(nonatomic, strong) UIImage *sampleImage;
 
 - (void)createSampleImage;
 - (void)setupUI;
+- (void)setAccentColor:(UIColor *)accentColor;
 @end
 
 @implementation FilterCell
@@ -30,6 +32,7 @@
     _thumbnailQueue = dispatch_queue_create("com.cameram.filter.thumbnail",
                                             DISPATCH_QUEUE_CONCURRENT);
     [self createSampleImage];
+    _accentColor = [UIColor systemOrangeColor];
     [self setupUI];
   }
   return self;
@@ -52,8 +55,11 @@
   [self.contentView addSubview:self.nameLabel];
 
   self.selectionIndicator = [[UIView alloc] init];
-  self.selectionIndicator.backgroundColor = [UIColor systemOrangeColor];
+  self.selectionIndicator.backgroundColor =
+      [self.accentColor colorWithAlphaComponent:0.32f];
   self.selectionIndicator.layer.cornerRadius = 10;
+  self.selectionIndicator.layer.borderWidth = 2.0f;
+  self.selectionIndicator.layer.borderColor = self.accentColor.CGColor;
   self.selectionIndicator.hidden = YES;
   self.selectionIndicator.translatesAutoresizingMaskIntoConstraints = NO;
   [self.contentView addSubview:self.selectionIndicator];
@@ -133,6 +139,34 @@
 - (void)setSelected:(BOOL)selected {
   [super setSelected:selected];
   self.selectionIndicator.hidden = !selected;
+  if (selected) {
+    self.selectionIndicator.backgroundColor =
+        [self.accentColor colorWithAlphaComponent:0.32f];
+    self.selectionIndicator.layer.borderColor = self.accentColor.CGColor;
+    self.thumbnailView.layer.borderColor = self.accentColor.CGColor;
+    self.thumbnailView.layer.borderWidth = 1.5f;
+    self.nameLabel.textColor = self.accentColor;
+  } else {
+    self.thumbnailView.layer.borderWidth = 0.0f;
+    self.nameLabel.textColor = [UIColor whiteColor];
+  }
+}
+
+- (void)setAccentColor:(UIColor *)accentColor {
+  _accentColor = accentColor ?: [UIColor systemOrangeColor];
+  if (!self.selectionIndicator.hidden) {
+    self.selectionIndicator.backgroundColor =
+        [self.accentColor colorWithAlphaComponent:0.32f];
+    self.selectionIndicator.layer.borderColor = self.accentColor.CGColor;
+  }
+}
+
+- (void)prepareForReuse {
+  [super prepareForReuse];
+  self.thumbnailView.layer.borderWidth = 0.0f;
+  self.thumbnailView.layer.borderColor = [UIColor clearColor].CGColor;
+  self.nameLabel.textColor = [UIColor whiteColor];
+  self.selectionIndicator.hidden = YES;
 }
 
 @end
@@ -147,6 +181,9 @@
     NSMutableDictionary<NSString *, UIImage *> *thumbnailCache;
 @property(nonatomic, strong) dispatch_queue_t thumbnailQueue;
 @property(nonatomic, strong) UIImage *sampleImage;
+@property(nonatomic, assign) BOOL suppressSelectionHandling;
+
+- (void)applyAccentColorForFilter:(ARFilterDescriptor *)filter;
 @end
 
 @implementation FilterPanelView
@@ -179,7 +216,12 @@
   self.intensitySlider.minimumValue = 0.0;
   self.intensitySlider.maximumValue = 1.0;
   self.intensitySlider.value = 1.0;
-  self.intensitySlider.tintColor = [UIColor systemOrangeColor];
+  UIColor *defaultAccent = [UIColor systemOrangeColor];
+  self.intensitySlider.minimumTrackTintColor = defaultAccent;
+  self.intensitySlider.maximumTrackTintColor =
+      [UIColor colorWithWhite:1.0 alpha:0.15f];
+  self.intensitySlider.tintColor = defaultAccent;
+  self.intensitySlider.thumbTintColor = defaultAccent;
   [self.intensitySlider addTarget:self
                            action:@selector(intensityChanged:)
                  forControlEvents:UIControlEventValueChanged];
@@ -240,10 +282,6 @@
 
   if (filters.count > 0) {
     self.currentFilter = filters.firstObject;
-    [self.collectionView
-        selectItemAtIndexPath:[NSIndexPath indexPathForItem:0 inSection:0]
-                     animated:NO
-               scrollPosition:UICollectionViewScrollPositionNone];
   }
 }
 
@@ -251,9 +289,70 @@
   self.intensitySlider.value = intensity;
 }
 
+- (void)setCurrentFilter:(ARFilterDescriptor *)currentFilter {
+  if (!currentFilter) {
+    return;
+  }
+  if (_currentFilter == currentFilter) {
+    [self applyAccentColorForFilter:currentFilter];
+    return;
+  }
+
+  _currentFilter = currentFilter;
+  self.intensitySlider.value = currentFilter.intensity;
+  [self applyAccentColorForFilter:currentFilter];
+
+  NSUInteger index = [self.filters indexOfObject:currentFilter];
+  if (index != NSNotFound) {
+    NSIndexPath *indexPath = [NSIndexPath indexPathForItem:index inSection:0];
+    self.suppressSelectionHandling = YES;
+    [self.collectionView
+        selectItemAtIndexPath:indexPath
+                    animated:NO
+              scrollPosition:UICollectionViewScrollPositionCenteredHorizontally];
+    self.suppressSelectionHandling = NO;
+    FilterCell *cell =
+        (FilterCell *)[self.collectionView cellForItemAtIndexPath:indexPath];
+    if ([cell isKindOfClass:[FilterCell class]]) {
+      [cell setAccentColor:currentFilter.accentColor];
+      [cell setSelected:YES];
+    }
+    [self.collectionView
+        scrollToItemAtIndexPath:indexPath
+              atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
+                      animated:YES];
+  }
+}
+
 - (void)intensityChanged:(UISlider *)slider {
+  if (self.currentFilter) {
+    self.currentFilter.intensity = slider.value;
+  }
   if ([self.delegate respondsToSelector:@selector(didChangeFilterIntensity:)]) {
     [self.delegate didChangeFilterIntensity:slider.value];
+  }
+}
+
+- (void)applyAccentColorForFilter:(ARFilterDescriptor *)filter {
+  UIColor *accent = filter.accentColor ?: [UIColor systemOrangeColor];
+  self.intensitySlider.minimumTrackTintColor = accent;
+  self.intensitySlider.thumbTintColor = accent;
+  self.intensitySlider.tintColor = accent;
+
+  for (FilterCell *cell in self.collectionView.visibleCells) {
+    if (![cell isKindOfClass:[FilterCell class]]) {
+      continue;
+    }
+    NSIndexPath *indexPath = [self.collectionView indexPathForCell:cell];
+    if (!indexPath || indexPath.item >= self.filters.count) {
+      continue;
+    }
+    ARFilterDescriptor *descriptor = self.filters[indexPath.item];
+    UIColor *cellAccent = descriptor.accentColor ?: accent;
+    [cell setAccentColor:cellAccent];
+    if (descriptor == self.currentFilter) {
+      [cell setSelected:YES];
+    }
   }
 }
 
@@ -272,6 +371,12 @@
   ARFilterDescriptor *filter = self.filters[indexPath.item];
 
   cell.nameLabel.text = filter.displayName;
+  [cell setAccentColor:filter.accentColor];
+  if (filter == self.currentFilter) {
+    [cell setSelected:YES];
+  } else {
+    [cell setSelected:NO];
+  }
 
   // 设置缩略图（异步生成）
   if (filter.thumbnail) {
@@ -290,9 +395,20 @@
 
 - (void)collectionView:(UICollectionView *)collectionView
     didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+  if (self.suppressSelectionHandling) {
+    return;
+  }
+
   ARFilterDescriptor *filter = self.filters[indexPath.item];
-  self.currentFilter = filter;
+  _currentFilter = filter;
   self.intensitySlider.value = filter.intensity;
+  [self applyAccentColorForFilter:filter];
+  FilterCell *cell =
+      (FilterCell *)[collectionView cellForItemAtIndexPath:indexPath];
+  if ([cell isKindOfClass:[FilterCell class]]) {
+    [cell setAccentColor:filter.accentColor];
+    [cell setSelected:YES];
+  }
 
   if ([self.delegate respondsToSelector:@selector(didSelectFilter:)]) {
     [self.delegate didSelectFilter:filter];
@@ -408,12 +524,14 @@
     return nil;
   }
 
-  // 设置滤镜强度为1.0以获得最佳预览效果
-  filter.pipeline.intensity = 1.0f;
+  float originalIntensity = filter.pipeline.intensity;
+  float previewIntensity = filter.intensity > 0.0f ? filter.intensity : 1.0f;
+  filter.pipeline.intensity = previewIntensity;
 
   // 应用滤镜
   CIImage *filteredImage = [filter.pipeline process:inputImage];
   if (!filteredImage) {
+    filter.pipeline.intensity = originalIntensity;
     return self.sampleImage;
   }
 
@@ -426,11 +544,14 @@
   CGImageRef cgImage = [context createCGImage:filteredImage
                                      fromRect:filteredImage.extent];
   if (!cgImage) {
+    filter.pipeline.intensity = originalIntensity;
     return self.sampleImage;
   }
 
   UIImage *thumbnail = [UIImage imageWithCGImage:cgImage];
   CGImageRelease(cgImage);
+
+  filter.pipeline.intensity = originalIntensity;
 
   return thumbnail ?: self.sampleImage;
 }

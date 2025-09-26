@@ -28,10 +28,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) float intensity; // 0..1 全局强度
 @property (nonatomic, strong, nullable) UIImage *thumbnail; // 异步生成
 @property (nonatomic, assign) BOOL isFavorite;
+@property (nonatomic, strong, nullable) UIColor *accentColor;
 
 + (instancetype)descriptorWithId:(NSString *)identifier
                             name:(NSString *)name
                         pipeline:(ARFilterPipeline *)pipeline;
+
++ (instancetype)descriptorWithId:(NSString *)identifier
+                             name:(NSString *)name
+                         pipeline:(ARFilterPipeline *)pipeline
+                       accentColor:(nullable UIColor *)accentColor;
 
 @end
 

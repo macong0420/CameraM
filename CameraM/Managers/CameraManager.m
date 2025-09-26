@@ -14,6 +14,7 @@
 #import <CoreMotion/CoreMotion.h>
 #import <ImageIO/ImageIO.h>
 #import <Photos/Photos.h>
+#import <float.h>
 #import <math.h>
 
 @interface CameraManager () <AVCapturePhotoCaptureDelegate,
@@ -1919,50 +1920,60 @@
     }
   }
 
-  // 计算适配到视图的变换
-  CGRect viewBounds = view.bounds;
   CGRect imageExtent = outputImage.extent;
-
-  if (CGRectIsEmpty(imageExtent) || CGRectIsEmpty(viewBounds)) {
+  if (CGRectIsEmpty(imageExtent)) {
     return;
   }
 
-  // 全屏填充缩放 - 按比例缩放并居中裁剪
+  CGSize drawableSize = view.drawableSize;
+  if (drawableSize.width <= 0.0f || drawableSize.height <= 0.0f) {
+    CGSize boundsSize = view.bounds.size;
+    drawableSize = CGSizeMake(MAX(boundsSize.width, 1.0f),
+                              MAX(boundsSize.height, 1.0f));
+  }
+  CGRect targetRect = CGRectMake(0, 0, drawableSize.width, drawableSize.height);
+  if (CGRectIsEmpty(targetRect)) {
+    return;
+  }
+
+  CIImage *normalizedImage =
+      [outputImage imageByApplyingTransform:CGAffineTransformMakeTranslation(
+                                             -imageExtent.origin.x,
+                                             -imageExtent.origin.y)];
+
   CGFloat imageAspect = imageExtent.size.width / imageExtent.size.height;
-  CGFloat viewAspect = viewBounds.size.width / viewBounds.size.height;
-
-  CGFloat scaleX, scaleY;
-  if (imageAspect > viewAspect) {
-    // 图像更宽，按高度缩放
-    scaleY = viewBounds.size.height / imageExtent.size.height;
-    scaleX = scaleY;
+  CGFloat targetAspect = targetRect.size.width / targetRect.size.height;
+  CGFloat scale = 1.0f;
+  if (imageAspect > targetAspect) {
+    scale = targetRect.size.height / imageExtent.size.height;
   } else {
-    // 图像更高，按宽度缩放
-    scaleX = viewBounds.size.width / imageExtent.size.width;
-    scaleY = scaleX;
+    scale = targetRect.size.width / imageExtent.size.width;
   }
 
-  // 缩放并居中
-  CIImage *scaledImage = [outputImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
+  CIImage *scaledImage =
+      [normalizedImage imageByApplyingTransform:CGAffineTransformMakeScale(scale, scale)];
 
-  // 计算居中偏移
-  CGFloat scaledWidth = imageExtent.size.width * scaleX;
-  CGFloat scaledHeight = imageExtent.size.height * scaleY;
-  CGFloat offsetX = (viewBounds.size.width - scaledWidth) / 2.0;
-  CGFloat offsetY = (viewBounds.size.height - scaledHeight) / 2.0;
+  CGFloat scaledWidth = imageExtent.size.width * scale;
+  CGFloat scaledHeight = imageExtent.size.height * scale;
+  CGFloat offsetX = (targetRect.size.width - scaledWidth) * 0.5f;
+  CGFloat offsetY = (targetRect.size.height - scaledHeight) * 0.5f;
 
-  if (offsetX != 0 || offsetY != 0) {
-    scaledImage = [scaledImage imageByApplyingTransform:CGAffineTransformMakeTranslation(offsetX, offsetY)];
+  if (fabs(offsetX) > FLT_EPSILON || fabs(offsetY) > FLT_EPSILON) {
+    scaledImage =
+        [scaledImage imageByApplyingTransform:CGAffineTransformMakeTranslation(
+                                             offsetX, offsetY)];
   }
+
+  CIImage *finalImage = [scaledImage imageByCroppingToRect:targetRect];
 
   // 渲染到MTKView
   id<CAMetalDrawable> drawable = view.currentDrawable;
   if (drawable && self.filterContext) {
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    [self.filterContext render:scaledImage
+    [self.filterContext render:finalImage
                   toMTLTexture:drawable.texture
                  commandBuffer:nil
-                        bounds:viewBounds
+                        bounds:targetRect
                     colorSpace:colorSpace];
     CGColorSpaceRelease(colorSpace);
 

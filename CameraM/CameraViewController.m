@@ -836,7 +836,7 @@
   // 通过业务控制器设置滤镜，这样会同时更新 FilterManager 和应用到相机预览
   [self.businessController
       setCurrentFilter:filter
-         withIntensity:self.businessController.currentFilterIntensity];
+         withIntensity:filter.intensity];
 
   // 更新 UI 状态
   self.filterPanel.currentFilter = filter;

@@ -13,11 +13,22 @@
 + (instancetype)descriptorWithId:(NSString *)identifier
                             name:(NSString *)name
                         pipeline:(ARFilterPipeline *)pipeline {
+  return [self descriptorWithId:identifier
+                            name:name
+                         pipeline:pipeline
+                       accentColor:nil];
+}
+
++ (instancetype)descriptorWithId:(NSString *)identifier
+                             name:(NSString *)name
+                         pipeline:(ARFilterPipeline *)pipeline
+                       accentColor:(UIColor *)accentColor {
   ARFilterDescriptor *d = [ARFilterDescriptor new];
   d.identifier = identifier;
   d.displayName = name;
   d.pipeline = pipeline;
-  d.intensity = 1.0;
+  d.intensity = 1.0f;
+  d.accentColor = accentColor ?: [UIColor systemOrangeColor];
   return d;
 }
 
