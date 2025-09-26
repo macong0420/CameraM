@@ -109,6 +109,22 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
                                       completion:completion];
 }
 
+- (void)setupCameraWithMTKView:(MTKView *)mtkView
+                    completion:(void (^)(BOOL success,
+                                         NSError *_Nullable error))completion {
+  // 首先设置MTKView滤镜预览
+  [self.cameraManager setupFilterPreviewWithMTKView:mtkView];
+
+  // 然后设置相机预览（使用MTKView的父视图）
+  UIView *previewContainer = mtkView.superview;
+  if (!previewContainer) {
+    previewContainer = mtkView; // 如果没有父视图，直接使用MTKView
+  }
+
+  [self.cameraManager setupCameraWithPreviewView:previewContainer
+                                      completion:completion];
+}
+
 - (void)startSession {
   [self.cameraManager startSession];
 }
@@ -528,6 +544,9 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 - (void)setCurrentFilter:(ARFilterDescriptor *)filter
            withIntensity:(float)intensity {
   [self.filterManager setCurrentFilter:filter withIntensity:intensity];
+
+  // 同时设置相机预览滤镜
+  [self.cameraManager setPreviewFilter:filter withIntensity:intensity];
 }
 
 - (ARFilterDescriptor *)currentFilter {

@@ -103,21 +103,20 @@
 
 - (void)setupCamera {
   [self.businessController
-      setupCameraWithPreviewView:self.controlsView.previewContainer
-                      completion:^(BOOL success, NSError *_Nullable error) {
-                        if (success) {
-                          NSLog(@"相机设置成功");
-                          [self updateUIState];
-                          [self updatePreviewLayerFrame];
+      setupCameraWithMTKView:self.controlsView.previewContainer
+                  completion:^(BOOL success, NSError *_Nullable error) {
+                    if (success) {
+                      NSLog(@"相机设置成功");
+                      [self updateUIState];
+                      [self updatePreviewLayerFrame];
 
-                          // 启动方向监听
-                          [self.businessController startOrientationMonitoring];
-                        } else {
-                          NSLog(@"相机设置失败: %@",
-                                error.localizedDescription);
-                          [self showErrorAlert:error.localizedDescription];
-                        }
-                      }];
+                      // 启动方向监听
+                      [self.businessController startOrientationMonitoring];
+                    } else {
+                      NSLog(@"相机设置失败: %@", error.localizedDescription);
+                      [self showErrorAlert:error.localizedDescription];
+                    }
+                  }];
 }
 
 - (void)updateUIState {
@@ -834,15 +833,26 @@
 #pragma mark - FilterPanelDelegate
 
 - (void)didSelectFilter:(ARFilterDescriptor *)filter {
-  FilterManager *filterManager = [FilterManager sharedManager];
-  [filterManager setCurrentFilter:filter withIntensity:filterManager.intensity];
+  // 通过业务控制器设置滤镜，这样会同时更新 FilterManager 和应用到相机预览
+  [self.businessController
+      setCurrentFilter:filter
+         withIntensity:self.businessController.currentFilterIntensity];
+
+  // 更新 UI 状态
   self.filterPanel.currentFilter = filter;
   NSLog(@"选择滤镜: %@", filter.displayName);
 }
 
 - (void)didChangeFilterIntensity:(float)intensity {
-  FilterManager *filterManager = [FilterManager sharedManager];
-  filterManager.intensity = intensity;
+  // 通过业务控制器设置滤镜强度，这样会同时更新 FilterManager 和 CameraManager
+  ARFilterDescriptor *currentFilter = self.businessController.currentFilter;
+  if (currentFilter) {
+    [self.businessController setCurrentFilter:currentFilter
+                                withIntensity:intensity];
+  } else {
+    FilterManager *filterManager = [FilterManager sharedManager];
+    filterManager.intensity = intensity;
+  }
   NSLog(@"滤镜强度变化: %.2f", intensity);
 }
 

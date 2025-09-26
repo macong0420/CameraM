@@ -2,7 +2,7 @@
  * @Author: 马聪聪 macong0420@126.com
  * @Date: 2025-09-24 16:24:09
  * @LastEditors: 马聪聪 macong0420@126.com
- * @LastEditTime: 2025-09-26 16:04:53
+ * @LastEditTime: 2025-09-26 17:02:31
  * @FilePath: /CameraM/CameraM/Controllers/CameraBusinessController.h
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -15,6 +15,7 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <MetalKit/MetalKit.h>
 #import "../Managers/CameraManager.h"
 #import "../Managers/FilterManager.h"
 #import "../Models/CMWatermarkConfiguration.h"
@@ -64,6 +65,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 相机控制接口
 - (void)setupCameraWithPreviewView:(UIView *)previewView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
+- (void)setupCameraWithMTKView:(MTKView *)mtkView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
 - (void)startSession;
 - (void)stopSession;
 - (void)cleanup;

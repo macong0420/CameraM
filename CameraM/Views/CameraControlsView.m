@@ -8,6 +8,7 @@
 #import "CameraControlsView.h"
 #import "../Managers/CameraManager.h"
 #import "WatermarkPanelView.h"
+#import <MetalKit/MetalKit.h>
 #import <math.h>
 
 static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio,
@@ -33,7 +34,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 @interface CameraControlsView () <WatermarkPanelViewDelegate>
 
 // 主要容器
-@property(nonatomic, strong) UIView *previewContainer;
+@property(nonatomic, strong) MTKView *previewContainer;
 
 // 顶部控制栏
 @property(nonatomic, strong) UIView *topControlsView;
@@ -137,10 +138,24 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 }
 
 - (void)setupPreviewContainer {
-  self.previewContainer = [[UIView alloc] init];
+  // 创建Metal设备
+  id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice();
+
+  self.previewContainer = [[MTKView alloc] initWithFrame:self.bounds device:metalDevice];
+  self.previewContainer.device = metalDevice;
   self.previewContainer.backgroundColor = [UIColor blackColor];
   self.previewContainer.translatesAutoresizingMaskIntoConstraints = NO;
+
+  // 确保MTKView填充整个容器
+  self.previewContainer.contentMode = UIViewContentModeScaleAspectFill;
+  self.previewContainer.clipsToBounds = YES;
+
   [self addSubview:self.previewContainer];
+
+  // 调试：打印MTKView信息
+  NSLog(@"🔍 MTKView创建 - frame: %@, bounds: %@",
+        NSStringFromCGRect(self.previewContainer.frame),
+        NSStringFromCGRect(self.previewContainer.bounds));
 
   // 添加手势
   UITapGestureRecognizer *tapGesture =
@@ -156,6 +171,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   [tapGesture requireGestureRecognizerToFail:doubleTapGesture];
 }
+
 
 - (void)setupTopControls {
   self.topControlsView = [[UIView alloc] init];
@@ -599,6 +615,13 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.previewContainer.bottomAnchor
         constraintEqualToAnchor:self.bottomAnchor]
   ]];
+
+  // 调试：在下一个运行循环中检查约束是否生效
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSLog(@"🔍 约束设置后 - CameraControlsView: %@, MTKView: %@",
+          NSStringFromCGRect(self.frame),
+          NSStringFromCGRect(self.previewContainer.frame));
+  });
 
   // 顶部控制栏
   [NSLayoutConstraint activateConstraints:@[
@@ -1834,6 +1857,20 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
 - (void)layoutSubviews {
   [super layoutSubviews];
+
+  // 确保MTKView的drawable size与实际尺寸匹配
+  if (self.previewContainer && !CGRectIsEmpty(self.previewContainer.bounds)) {
+    CGFloat scale = [UIScreen mainScreen].scale;
+    CGSize viewSize = self.previewContainer.bounds.size;
+    CGSize newDrawableSize = CGSizeMake(viewSize.width * scale, viewSize.height * scale);
+
+    if (!CGSizeEqualToSize(self.previewContainer.drawableSize, newDrawableSize)) {
+      self.previewContainer.drawableSize = newDrawableSize;
+      NSLog(@"🔍 MTKView layoutSubviews - 更新drawableSize: %@, bounds: %@",
+            NSStringFromCGSize(newDrawableSize),
+            NSStringFromCGRect(self.previewContainer.bounds));
+    }
+  }
 
   // 重新创建网格线以适应屏幕尺寸
   if (self.gridLinesView.subviews.count == 0) {
