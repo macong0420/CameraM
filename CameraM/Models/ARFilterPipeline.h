@@ -23,6 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, strong, readonly) NSArray<id<ARFilterOperation>> *operations;
 @property (nonatomic, assign) float intensity; // 0..1
+@property (nonatomic, assign) float grainIntensity; // 0..1, 当存在胶片颗粒操作时有效
+@property (nonatomic, assign, readonly) BOOL supportsGrainAdjustment;
 
 - (instancetype)initWithOperations:(NSArray<id<ARFilterOperation>> *)ops;
 - (CIImage *)process:(CIImage *)image;

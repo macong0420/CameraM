@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *displayName;
 @property (nonatomic, strong) ARFilterPipeline *pipeline;
 @property (nonatomic, assign) float intensity; // 0..1 全局强度
+@property (nonatomic, assign) float grainIntensity; // 0..1 颗粒强度
+@property (nonatomic, assign, readonly) BOOL supportsGrainAdjustment;
 @property (nonatomic, strong, nullable) UIImage *thumbnail; // 异步生成
 @property (nonatomic, assign) BOOL isFavorite;
 @property (nonatomic, strong, nullable) UIColor *accentColor;

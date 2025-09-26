@@ -6,6 +6,12 @@
 //
 
 #import "ARFilterPipeline.h"
+#import "CMFilmLookOperations.h"
+
+@interface ARFilterPipeline ()
+@property(nonatomic, strong, readwrite)
+    NSArray<id<ARFilterOperation>> *operations;
+@end
 
 @implementation ARFilterPipeline
 
@@ -15,6 +21,31 @@
     _intensity = 1.0f;
   }
   return self;
+}
+
+- (CMFilmGrainOperation *)grainOperation {
+  for (id<ARFilterOperation> op in self.operations) {
+    if ([op isKindOfClass:[CMFilmGrainOperation class]]) {
+      return (CMFilmGrainOperation *)op;
+    }
+  }
+  return nil;
+}
+
+- (BOOL)supportsGrainAdjustment {
+  return [self grainOperation] != nil;
+}
+
+- (float)grainIntensity {
+  CMFilmGrainOperation *grain = [self grainOperation];
+  return grain ? grain.intensity : 0.0f;
+}
+
+- (void)setGrainIntensity:(float)grainIntensity {
+  CMFilmGrainOperation *grain = [self grainOperation];
+  if (grain) {
+    grain.intensity = MAX(0.0f, MIN(1.0f, grainIntensity));
+  }
 }
 
 - (CIImage *)process:(CIImage *)image {

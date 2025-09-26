@@ -28,8 +28,20 @@
   d.displayName = name;
   d.pipeline = pipeline;
   d.intensity = 1.0f;
+  d.grainIntensity = pipeline.grainIntensity;
   d.accentColor = accentColor ?: [UIColor systemOrangeColor];
   return d;
+}
+
+- (BOOL)supportsGrainAdjustment {
+  return [self.pipeline supportsGrainAdjustment];
+}
+
+- (void)setGrainIntensity:(float)grainIntensity {
+  _grainIntensity = MAX(0.0f, MIN(1.0f, grainIntensity));
+  if (self.pipeline.supportsGrainAdjustment) {
+    self.pipeline.grainIntensity = _grainIntensity;
+  }
 }
 
 @end

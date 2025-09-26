@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 @optional
 - (void)didSelectFilter:(ARFilterDescriptor *)filter;
 - (void)didChangeFilterIntensity:(float)intensity;
+- (void)didChangeFilterGrainIntensity:(float)grainIntensity;
 - (void)didToggleFilterFavorite:(ARFilterDescriptor *)filter;
 @end
 
@@ -33,6 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)updateWithFilters:(NSArray<ARFilterDescriptor *> *)filters;
 - (void)setIntensity:(float)intensity;
+- (void)setGrainIntensity:(float)grainIntensity;
 
 @end
 

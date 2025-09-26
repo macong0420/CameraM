@@ -332,7 +332,6 @@ CMHSLAdjustment CMHSLAdjustmentMake(CGFloat startHue, CGFloat endHue, CGFloat hu
 #pragma mark - CMFilmGrainOperation
 
 @interface CMFilmGrainOperation ()
-@property(nonatomic, assign) CGFloat intensity;
 @property(nonatomic, assign) CGFloat shadowWeight;
 @property(nonatomic, assign) CGFloat highlightWeight;
 @property(nonatomic, assign) CGFloat grainScale;
@@ -354,6 +353,10 @@ CMHSLAdjustment CMHSLAdjustmentMake(CGFloat startHue, CGFloat endHue, CGFloat hu
     _monochrome = monochrome;
   }
   return self;
+}
+
+- (void)setIntensity:(CGFloat)intensity {
+  _intensity = CMClamp(intensity, 0.0f, 1.0f);
 }
 
 - (CIImage *)applyToImage:(CIImage *)image {
