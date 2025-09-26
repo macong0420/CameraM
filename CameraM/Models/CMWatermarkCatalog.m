@@ -11,7 +11,6 @@
 NSString * const CMWatermarkFrameIdentifierNone = @"frame.none";
 NSString * const CMWatermarkFrameIdentifierStudio = @"frame.studio";
 NSString * const CMWatermarkFrameIdentifierPolaroid = @"frame.polaroid";
-NSString * const CMWatermarkFrameIdentifierMinimal = @"frame.minimal";
 
 NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
 
@@ -147,19 +146,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                                             photoContentOffset:CGPointMake(0.035, 0.035)
                                                                          photoCornerRadiusRatio:0.008];
 
-        CMWatermarkFrameDescriptor *minimal = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierMinimal
-                                                                                        displayName:@"Minimal"
-                                                                                   overlayAssetName:nil
-                                                                                backgroundAssetName:@"master_bg"
-                                                                                bottomExpansionRatio:0.14
-                                                                                    previewAssetName:@"master_bg"
-                                                                                  overlayInsetsRatio:0.0
-                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.02, 0.05, 0.20, 0.05)
-                                                                             photoContentScale:CGSizeMake(0.9, 0.78)
-                                                                            photoContentOffset:CGPointMake(0.05, 0.06)
-                                                                         photoCornerRadiusRatio:0.016];
-
-        frames = @[none, studio, polaroid, minimal];
+        frames = @[none, studio, polaroid];
     });
     return frames;
 }
