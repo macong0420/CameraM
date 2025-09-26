@@ -10,14 +10,19 @@
 #import "WatermarkPanelView.h"
 #import <math.h>
 
-static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio) {
+static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio, CameraDeviceOrientation orientation) {
+    BOOL isPortrait = (orientation == CameraDeviceOrientationPortrait);
+
     switch (ratio) {
         case CameraAspectRatio4to3:
-            return 4.0f / 3.0f;
+            // 竖屏: 3:4 (0.75), 横屏: 4:3 (1.33)
+            return isPortrait ? (3.0f / 4.0f) : (4.0f / 3.0f);
         case CameraAspectRatio1to1:
+            // 正方形在任何方向都是1:1
             return 1.0f;
         case CameraAspectRatioXpan:
-            return 2.7f;
+            // 竖屏: 24:65 (0.37), 横屏: 65:24 (2.7)
+            return isPortrait ? (24.0f / 65.0f) : (65.0f / 24.0f);
     }
     return 1.0f;
 }
@@ -938,26 +943,30 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
         return;
     }
 
-    CGRect videoRect = self.previewVideoRect;
-    if (CGRectIsEmpty(videoRect) || !CGRectContainsRect(bounds, videoRect)) {
-        videoRect = bounds;
-    }
+    const CGFloat targetAspect = CMAspectRatioValue(ratio, self.currentOrientation);
+    const CGFloat screenAspect = bounds.size.width / bounds.size.height;
 
-    const CGFloat targetAspect = CMAspectRatioValue(ratio);
-    const CGFloat videoAspect = videoRect.size.width / videoRect.size.height;
+    // 计算最大化利用屏幕的活动区域
+    CGRect activeRect = bounds;
 
-    CGRect activeRect = videoRect;
-    if (fabs(videoAspect - targetAspect) >= 0.0001f) {
-        if (videoAspect > targetAspect) {
-            const CGFloat targetWidth = videoRect.size.height * targetAspect;
-            const CGFloat xOffset = CGRectGetMidX(videoRect) - (targetWidth / 2.0f);
-            activeRect = CGRectMake(xOffset, CGRectGetMinY(videoRect), targetWidth, videoRect.size.height);
+    if (fabs(screenAspect - targetAspect) >= 0.0001f) {
+        if (screenAspect > targetAspect) {
+            // 屏幕比目标更宽，在左右裁剪（横屏4:3 vs 屏幕16:9）
+            const CGFloat targetWidth = bounds.size.height * targetAspect;
+            const CGFloat xOffset = (bounds.size.width - targetWidth) / 2.0f;
+            activeRect = CGRectMake(xOffset, 0.0f, targetWidth, bounds.size.height);
         } else {
-            const CGFloat targetHeight = videoRect.size.width / targetAspect;
-            const CGFloat yOffset = CGRectGetMidY(videoRect) - (targetHeight / 2.0f);
-            activeRect = CGRectMake(CGRectGetMinX(videoRect), yOffset, videoRect.size.width, targetHeight);
+            // 屏幕比目标更窄，在上下裁剪（竖屏3:4 vs 屏幕19.5:9）
+            // 这种情况下，充分利用屏幕宽度，在上下裁剪
+            const CGFloat targetHeight = bounds.size.width / targetAspect;
+            const CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0f;
+            activeRect = CGRectMake(0.0f, yOffset, bounds.size.width, targetHeight);
         }
     }
+
+    NSLog(@"🎯 比例遮罩计算 - 屏幕: %.1fx%.1f (%.2f), 目标比例: %.2f, 活动区域: %.1fx%.1f",
+          bounds.size.width, bounds.size.height, screenAspect, targetAspect,
+          activeRect.size.width, activeRect.size.height);
 
     UIBezierPath *maskPath = [UIBezierPath bezierPathWithRect:bounds];
     UIBezierPath *activePath = [UIBezierPath bezierPathWithRect:CGRectIntegral(activeRect)];
@@ -972,19 +981,8 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio {
     self.activeAspectRatio = ratio;
-    // 更新顶部按钮显示
-    NSString *ratioText;
-    switch (ratio) {
-        case CameraAspectRatio4to3:
-            ratioText = @"4:3";
-            break;
-        case CameraAspectRatio1to1:
-            ratioText = @"1:1";
-            break;
-        case CameraAspectRatioXpan:
-            ratioText = @"Xpan";
-            break;
-    }
+    // 更新顶部按钮显示 - 根据方向动态调整文本
+    NSString *ratioText = [self ratioTextForRatio:ratio orientation:self.currentOrientation];
     [self.aspectRatioButton setTitle:ratioText forState:UIControlStateNormal];
     
     // 更新弹层中的选中状态
@@ -1000,6 +998,20 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
             }
         }
     }
+}
+
+- (NSString *)ratioTextForRatio:(CameraAspectRatio)ratio orientation:(CameraDeviceOrientation)orientation {
+    BOOL isPortrait = (orientation == CameraDeviceOrientationPortrait);
+
+    switch (ratio) {
+        case CameraAspectRatio4to3:
+            return isPortrait ? @"3:4" : @"4:3";
+        case CameraAspectRatio1to1:
+            return @"1:1"; // 正方形在任何方向都是1:1
+        case CameraAspectRatioXpan:
+            return isPortrait ? @"24:65" : @"Xpan"; // 竖屏显示具体比例，横屏显示名称
+    }
+    return @"4:3";
 }
 
 - (void)updateLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption * _Nullable)currentLens {
@@ -1099,6 +1111,16 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
         // 更新比例弹层约束
         [self updateAspectRatioPopoverConstraintsForOrientation:orientation];
         [self updateWatermarkPanelHeightConstraints];
+
+        // 重新计算比例遮罩，因为比例值可能已根据新方向改变
+        if (self.aspectRatioMaskLayer) {
+            [self updateAspectRatioMask:self.activeAspectRatio];
+        }
+
+        // 更新比例按钮文本显示
+        NSString *ratioText = [self ratioTextForRatio:self.activeAspectRatio orientation:orientation];
+        [self.aspectRatioButton setTitle:ratioText forState:UIControlStateNormal];
+
         NSLog(@"UI布局切换完成: %ld", (long)orientation);
     }];
 }

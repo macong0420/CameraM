@@ -470,7 +470,7 @@
         return CGRectZero;
     }
 
-    const CGFloat targetAspect = [self aspectRatioValueForRatio:ratio];
+    const CGFloat targetAspect = [self aspectRatioValueForRatio:ratio inOrientation:self.currentDeviceOrientation];
     if (targetAspect <= 0.0f) {
         return CGRectMake(0.0f, 0.0f, imageWidth, imageHeight);
     }
@@ -549,13 +549,22 @@
 }
 
 - (CGFloat)aspectRatioValueForRatio:(CameraAspectRatio)ratio {
+    return [self aspectRatioValueForRatio:ratio inOrientation:self.currentDeviceOrientation];
+}
+
+- (CGFloat)aspectRatioValueForRatio:(CameraAspectRatio)ratio inOrientation:(CameraDeviceOrientation)orientation {
+    BOOL isPortrait = (orientation == CameraDeviceOrientationPortrait);
+
     switch (ratio) {
         case CameraAspectRatio4to3:
-            return 4.0f / 3.0f;
+            // 竖屏: 3:4 (0.75), 横屏: 4:3 (1.33)
+            return isPortrait ? (3.0f / 4.0f) : (4.0f / 3.0f);
         case CameraAspectRatio1to1:
+            // 正方形在任何方向都是1:1
             return 1.0f;
         case CameraAspectRatioXpan:
-            return 2.7f;
+            // 竖屏: 24:65 (0.37), 横屏: 65:24 (2.7)
+            return isPortrait ? (24.0f / 65.0f) : (65.0f / 24.0f);
     }
     return 1.0f;
 }
@@ -587,7 +596,7 @@
         return CGRectZero;
     }
 
-    const CGFloat targetAspect = [self aspectRatioValueForRatio:ratio];
+    const CGFloat targetAspect = [self aspectRatioValueForRatio:ratio inOrientation:self.currentDeviceOrientation];
     const CGFloat viewAspect = viewWidth / viewHeight;
 
     CGRect rect = CGRectMake(0.0f, 0.0f, viewWidth, viewHeight);
@@ -949,7 +958,7 @@
 - (void)setupPreviewLayerWithView:(UIView *)view {
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
     self.previewLayer.frame = view.bounds;
-    self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+    self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
     [view.layer insertSublayer:self.previewLayer atIndex:0];
     
     // 设置初始方向
