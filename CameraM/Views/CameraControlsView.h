@@ -1,3 +1,11 @@
+/*
+ * @Author: 马聪聪 macong0420@126.com
+ * @Date: 2025-09-24 17:02:01
+ * @LastEditors: 马聪聪 macong0420@126.com
+ * @LastEditTime: 2025-09-26 15:58:38
+ * @FilePath: /CameraM/CameraM/Views/CameraControlsView.h
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 //
 //  CameraControlsView.h
 //  CameraM
@@ -83,6 +91,11 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)presentWatermarkPanel;
 - (void)dismissWatermarkPanel;
 - (BOOL)isWatermarkPanelVisible;
+
+// 滤镜面板
+- (void)showFilterPanel:(UIView *)filterPanel;
+- (void)hideFilterPanel;
+- (BOOL)isFilterPanelVisible;
 
 @end
 
