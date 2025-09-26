@@ -892,114 +892,150 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                       metadata:(NSDictionary * _Nullable)metadata {
 
     NSLog(@"🔍 Info布局调试 - detailString: '%@', preference: %ld", detailString ?: @"(nil)", (long)configuration.preference);
+    NSLog(@"📏 字体大小调试 - 画布尺寸: %.0fx%.0f, 底部区域: %.0fx%.0f", canvasSize.width, canvasSize.height, contentRect.size.width, contentRect.size.height);
     
-    // Info相框布局（完全参考富士胶片X-T30 II样式）：
-    // 左侧区域：设备型号（上行）+ 拍摄时间（下行）
-    // 中间区域：Logo
-    // 右侧区域：参数信息（上行）+ GPS坐标（下行）
-
-    CGFloat baseFontSize = MAX(16.0, MIN(32.0, canvasSize.width * 0.025)) * CMWatermarkUIScaleFactor;
-    UIFont *primaryFont = [UIFont systemFontOfSize:baseFontSize weight:UIFontWeightSemibold];
-    UIFont *secondaryFont = [UIFont systemFontOfSize:baseFontSize * 0.8 weight:UIFontWeightMedium];
-
+    // 动态设计参数 - 增大字体大小
+    const CGFloat textSpacing = 20.0; // 文字间距20px
+    // 增大字体大小：从15%和2%调整为20%和3%
+    CGFloat baseFontSize = MIN(contentRect.size.height * 0.20, canvasSize.width * 0.03); // 底部区域高度的20%或画布宽度的3%，取较小值
+    CGFloat primaryFontSize = baseFontSize * CMWatermarkUIScaleFactor;
+    CGFloat secondaryFontSize = primaryFontSize * 0.85;
+    CGFloat logoHeight = contentRect.size.height * 0.6; // Logo高度为底部区域高度的60%
+    
+    NSLog(@"📏 字体大小调试 - baseFontSize: %.1f, primaryFontSize: %.1f, secondaryFontSize: %.1f, logoHeight: %.1f", baseFontSize, primaryFontSize, secondaryFontSize, logoHeight);
+    
+    UIFont *primaryFont = [UIFont systemFontOfSize:primaryFontSize weight:UIFontWeightSemibold];
+    UIFont *secondaryFont = [UIFont systemFontOfSize:secondaryFontSize weight:UIFontWeightMedium];
+    
     UIColor *blackColor = [UIColor blackColor];
-    UIColor *grayColor = [UIColor colorWithRed:102.0/255.0 green:102.0/255.0 blue:102.0/255.0 alpha:1.0]; // #666666
-
-    NSMutableParagraphStyle *leftParagraph = [[NSMutableParagraphStyle alloc] init];
-    leftParagraph.alignment = NSTextAlignmentLeft;
-    leftParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
-
-    NSMutableParagraphStyle *rightParagraph = [[NSMutableParagraphStyle alloc] init];
-    rightParagraph.alignment = NSTextAlignmentRight;
-    rightParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
-
-    NSMutableParagraphStyle *centerParagraph = [[NSMutableParagraphStyle alloc] init];
-    centerParagraph.alignment = NSTextAlignmentCenter;
-    centerParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
-
-    CGFloat topLineY = contentRect.origin.y + horizontalPadding * 0.3;
-    CGFloat bottomLineY = contentRect.origin.y + contentRect.size.height - secondaryFont.lineHeight - horizontalPadding * 0.3;
-    CGFloat availableWidth = contentRect.size.width - 2 * horizontalPadding;
-
-    // 左侧区域宽度：35%
-    CGFloat leftAreaWidth = availableWidth * 0.35;
-    // 中间Logo区域宽度：30%
-    CGFloat logoAreaWidth = availableWidth * 0.30;
-    // 右侧区域宽度：35%
-    CGFloat rightAreaWidth = availableWidth * 0.35;
-
-    // 左侧上行：设备机型（黑色，粗体）
+    UIColor *grayColor = [UIColor colorWithRed:102.0/255.0 green:102.0/255.0 blue:102.0/255.0 alpha:1.0];
+    
+    // 重新计算所有内容的总高度 - 确保包含文字的实际高度
+    CGFloat textContentHeight = primaryFont.lineHeight + textSpacing + secondaryFont.lineHeight;
+    CGFloat totalContentHeight = MAX(textContentHeight, logoHeight);
+    
+    // 确保内容块在底部区域垂直居中 - 使用更精确的计算
+    CGFloat availableHeight = contentRect.size.height;
+    CGFloat contentStartY = contentRect.origin.y + (availableHeight - totalContentHeight) / 2.0;
+    CGFloat contentCenterY = contentStartY + totalContentHeight / 2.0;
+    
+    NSLog(@"📏 垂直居中调试 - 文字内容高度: %.1f, 总内容高度: %.1f, 可用高度: %.1f, 开始Y: %.1f, 中心Y: %.1f", textContentHeight, totalContentHeight, availableHeight, contentStartY, contentCenterY);
+    
+    // 左侧区域：设备型号和时间
     NSString *deviceModel = [self deviceModelString];
+    NSString *dateString = [self dateStringFromMetadata:metadata];
+    
+    // 计算左侧文字的实际宽度（自适应）
     NSDictionary *deviceAttributes = @{
         NSFontAttributeName: primaryFont,
-        NSForegroundColorAttributeName: blackColor,
-        NSParagraphStyleAttributeName: leftParagraph
+        NSForegroundColorAttributeName: blackColor
     };
-    CGRect deviceRect = CGRectMake(contentRect.origin.x + horizontalPadding, topLineY, leftAreaWidth, primaryFont.lineHeight);
-    [deviceModel drawInRect:deviceRect withAttributes:deviceAttributes];
-
-    // 左侧下行：拍摄时间（灰色，普通字重）
-    NSString *dateString = [self dateStringFromMetadata:metadata];
     NSDictionary *dateAttributes = @{
         NSFontAttributeName: secondaryFont,
-        NSForegroundColorAttributeName: grayColor,
-        NSParagraphStyleAttributeName: leftParagraph
+        NSForegroundColorAttributeName: grayColor
     };
-    CGRect dateRect = CGRectMake(contentRect.origin.x + horizontalPadding, bottomLineY, leftAreaWidth, secondaryFont.lineHeight);
+    
+    CGSize deviceSize = [deviceModel sizeWithAttributes:deviceAttributes];
+    CGSize dateSize = [dateString sizeWithAttributes:dateAttributes];
+    CGFloat leftMaxWidth = MAX(deviceSize.width, dateSize.width);
+    
+    // 计算左侧内容的垂直居中位置 - 直接基于可用高度居中
+    CGFloat leftContentHeight = primaryFont.lineHeight + textSpacing + secondaryFont.lineHeight;
+    CGFloat leftStartY = contentRect.origin.y + (contentRect.size.height - leftContentHeight) / 2.0;
+    
+    // 绘制设备型号（上行）- 使用自适应宽度
+    CGRect deviceRect = CGRectMake(contentRect.origin.x + horizontalPadding, leftStartY, leftMaxWidth, primaryFont.lineHeight);
+    [deviceModel drawInRect:deviceRect withAttributes:deviceAttributes];
+    
+    // 绘制时间（下行）- 使用自适应宽度
+    CGRect dateRect = CGRectMake(contentRect.origin.x + horizontalPadding, leftStartY + primaryFont.lineHeight + textSpacing, leftMaxWidth, secondaryFont.lineHeight);
     [dateString drawInRect:dateRect withAttributes:dateAttributes];
-
-    // 右侧上行：参数信息（黑色，粗体）
+    
+    // 右侧区域：参数和GPS坐标
     if (detailString.length > 0) {
         NSLog(@"📊 绘制参数信息: '%@'", detailString);
+        
+        NSString *gpsString = [self coordinateStringFromMetadata:metadata];
+        
+        // 计算右侧文字的实际宽度（自适应）
         NSDictionary *paramAttributes = @{
             NSFontAttributeName: primaryFont,
             NSForegroundColorAttributeName: blackColor,
-            NSParagraphStyleAttributeName: rightParagraph
+            NSParagraphStyleAttributeName: ({
+                NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+                style.alignment = NSTextAlignmentRight;
+                style;
+            })
         };
-        CGFloat rightX = contentRect.origin.x + horizontalPadding + leftAreaWidth + logoAreaWidth;
-        CGRect paramRect = CGRectMake(rightX, topLineY, rightAreaWidth, primaryFont.lineHeight);
+        NSDictionary *gpsAttributes = @{
+            NSFontAttributeName: secondaryFont,
+            NSForegroundColorAttributeName: grayColor,
+            NSParagraphStyleAttributeName: ({
+                NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+                style.alignment = NSTextAlignmentRight;
+                style;
+            })
+        };
+        
+        CGSize paramSize = [detailString sizeWithAttributes:paramAttributes];
+        CGSize gpsSize = [gpsString sizeWithAttributes:gpsAttributes];
+        CGFloat rightMaxWidth = MAX(paramSize.width, gpsSize.width);
+        
+        // 计算右侧内容的垂直居中位置 - 直接基于可用高度居中，与左侧保持一致
+        CGFloat rightContentHeight = primaryFont.lineHeight + textSpacing + secondaryFont.lineHeight;
+        CGFloat rightStartY = contentRect.origin.y + (contentRect.size.height - rightContentHeight) / 2.0;
+        
+        NSLog(@"📏 垂直居中修复调试 - 左侧StartY: %.1f, 右侧StartY: %.1f, 内容高度: %.1f, 可用高度: %.1f", leftStartY, rightStartY, rightContentHeight, contentRect.size.height);
+        
+        // 计算右侧区域的位置（从右边开始布局）- 使用自适应宽度
+        CGFloat rightX = contentRect.origin.x + contentRect.size.width - horizontalPadding - rightMaxWidth;
+        
+        // 绘制参数（上行）- 使用自适应宽度
+        CGRect paramRect = CGRectMake(rightX, rightStartY, rightMaxWidth, primaryFont.lineHeight);
         NSLog(@"📊 参数绘制区域: %@", NSStringFromCGRect(paramRect));
         [detailString drawInRect:paramRect withAttributes:paramAttributes];
+        
+        // 绘制GPS坐标（下行）- 使用自适应宽度
+        CGRect gpsRect = CGRectMake(rightX, rightStartY + primaryFont.lineHeight + textSpacing, rightMaxWidth, secondaryFont.lineHeight);
+        [gpsString drawInRect:gpsRect withAttributes:gpsAttributes];
+        
+        // Logo绘制 - 紧靠右侧参数左边，垂直居中
+        if (logoDescriptor && logoDescriptor.assetName.length > 0) {
+            UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+            if (logoImage) {
+                CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+                CGFloat logoWidth = logoHeight * aspect;
+                
+                // 灰色分隔线参数
+                const CGFloat separatorWidth = 2.0;
+                const CGFloat separatorHeight = MIN(logoHeight * 0.8, 80.0); // 分隔线高度与logo成比例
+                const CGFloat separatorMargin = 8.0; // 分隔线与logo和参数的间距
+                
+                // Logo位置：考虑分隔线的位置，垂直居中在整个底部区域
+                CGFloat logoX = rightX - logoWidth - separatorMargin - separatorWidth - separatorMargin;
+                CGFloat logoY = contentRect.origin.y + (contentRect.size.height - logoHeight) / 2.0;
+                
+                CGRect logoRect = CGRectMake(logoX, logoY, logoWidth, logoHeight);
+                
+                UIImage *renderableLogo = logoDescriptor.prefersTemplateRendering ? 
+                    [logoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : logoImage;
+                if (logoDescriptor.prefersTemplateRendering) {
+                    [[UIColor blackColor] setFill];
+                    [[UIColor blackColor] setStroke];
+                }
+                [renderableLogo drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:0.95];
+                
+                // 绘制灰色分隔线 - 在logo和参数之间，垂直居中在整个底部区域
+                CGFloat separatorX = logoX + logoWidth + separatorMargin;
+                CGFloat separatorY = contentRect.origin.y + (contentRect.size.height - separatorHeight) / 2.0;
+                CGRect separatorRect = CGRectMake(separatorX, separatorY, separatorWidth, separatorHeight);
+                
+                [[UIColor colorWithRed:180.0/255.0 green:180.0/255.0 blue:180.0/255.0 alpha:1.0] setFill];
+                UIRectFill(separatorRect);
+            }
+        }
     } else {
         NSLog(@"⚠️ detailString为空，无法显示参数");
-    }
-
-    // 右侧下行：GPS坐标（灰色，普通字重）
-    NSString *gpsString = [self coordinateStringFromMetadata:metadata];
-    NSDictionary *gpsAttributes = @{
-        NSFontAttributeName: secondaryFont,
-        NSForegroundColorAttributeName: grayColor,
-        NSParagraphStyleAttributeName: rightParagraph
-    };
-    CGFloat rightX = contentRect.origin.x + horizontalPadding + leftAreaWidth + logoAreaWidth;
-    CGRect gpsRect = CGRectMake(rightX, bottomLineY, rightAreaWidth, secondaryFont.lineHeight);
-    [gpsString drawInRect:gpsRect withAttributes:gpsAttributes];
-    
-    // 中间区域：Logo绘制 - 位置在中间偏右，靠近右侧参数区域
-    if (logoDescriptor && logoDescriptor.assetName.length > 0) {
-        UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
-        if (logoImage) {
-            // Logo高度为内容区域高度的40%
-            CGFloat maxLogoHeight = contentRect.size.height * 0.4;
-            CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
-            CGFloat logoHeight = maxLogoHeight;
-            CGFloat logoWidth = logoHeight * aspect;
-            
-            // Logo位置：在中间区域的右侧，靠近右侧参数区域
-            CGFloat logoAreaStartX = contentRect.origin.x + horizontalPadding + leftAreaWidth;
-            CGFloat logoX = logoAreaStartX + logoAreaWidth - logoWidth - (horizontalPadding * 0.3); // 靠右放置
-            CGFloat logoY = contentRect.origin.y + (contentRect.size.height - logoHeight) / 2.0; // 垂直居中
-            
-            CGRect logoRect = CGRectMake(logoX, logoY, logoWidth, logoHeight);
-            
-            UIImage *renderableLogo = logoDescriptor.prefersTemplateRendering ? 
-                [logoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : logoImage;
-            if (logoDescriptor.prefersTemplateRendering) {
-                [[UIColor blackColor] setFill]; // Info模式使用黑色logo
-                [[UIColor blackColor] setStroke];
-            }
-            [renderableLogo drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:0.95];
-        }
     }
 }
 

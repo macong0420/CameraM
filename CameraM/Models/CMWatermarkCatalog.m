@@ -151,11 +151,11 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                                                       displayName:@"Info"
                                                                                  overlayAssetName:nil
                                                                               backgroundAssetName:nil
-                                                                              bottomExpansionRatio:0.12
+                                                                              bottomExpansionRatio:0.16
                                                                                   previewAssetName:@"底部文字"
                                                                                 overlayInsetsRatio:0.0
-                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.0, 0.0, 0.12, 0.0)
-                                                                             photoContentScale:CGSizeMake(1.0, 0.88)
+                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.0, 0.0, 0.1, 0.0)
+                                                                             photoContentScale:CGSizeMake(1.0, 0.95)
                                                                             photoContentOffset:CGPointZero
                                                                          photoCornerRadiusRatio:0.0];
         info.overlayDrawsAbovePhoto = NO;
@@ -163,7 +163,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
         info.allowsParameterEditing = YES;
         info.allowsSignatureEditing = NO;
         info.enforcedPreferenceRawValue = CMWatermarkPreferenceExposure;
-        info.footerContentRect = CGRectMake(0.02, 0.89, 0.96, 0.10);
+        info.footerContentRect = CGRectMake(0.02, 0.96, 0.96, 0.03);
 
         frames = @[none, studio, polaroid, info];
     });
