@@ -939,9 +939,11 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     CGSize dateSize = [dateString sizeWithAttributes:dateAttributes];
     CGFloat leftMaxWidth = MAX(deviceSize.width, dateSize.width);
     
-    // 计算左侧内容的垂直居中位置 - 直接基于可用高度居中
+    // 计算左侧内容的垂直居中位置 - 使用统一的contentStartY并向上调整
     CGFloat leftContentHeight = primaryFont.lineHeight + textSpacing + secondaryFont.lineHeight;
-    CGFloat leftStartY = contentRect.origin.y + (contentRect.size.height - leftContentHeight) / 2.0;
+    // 向上调整偏移量，让内容更居中
+    CGFloat verticalOffset = contentRect.size.height * 0.7; // 向上偏移10%
+    CGFloat leftStartY = contentStartY - verticalOffset;
     
     // 绘制设备型号（上行）- 使用自适应宽度
     CGRect deviceRect = CGRectMake(contentRect.origin.x + horizontalPadding, leftStartY, leftMaxWidth, primaryFont.lineHeight);
@@ -981,11 +983,10 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         CGSize gpsSize = [gpsString sizeWithAttributes:gpsAttributes];
         CGFloat rightMaxWidth = MAX(paramSize.width, gpsSize.width);
         
-        // 计算右侧内容的垂直居中位置 - 直接基于可用高度居中，与左侧保持一致
-        CGFloat rightContentHeight = primaryFont.lineHeight + textSpacing + secondaryFont.lineHeight;
-        CGFloat rightStartY = contentRect.origin.y + (contentRect.size.height - rightContentHeight) / 2.0;
+        // 计算右侧内容的垂直居中位置 - 使用统一的contentStartY并向上调整，与左侧保持一致
+        CGFloat rightStartY = contentStartY - verticalOffset;
         
-        NSLog(@"📏 垂直居中修复调试 - 左侧StartY: %.1f, 右侧StartY: %.1f, 内容高度: %.1f, 可用高度: %.1f", leftStartY, rightStartY, rightContentHeight, contentRect.size.height);
+        NSLog(@"📏 垂直居中修复调试 - 左侧StartY: %.1f, 右侧StartY: %.1f, 向上偏移: %.1f, 可用高度: %.1f", leftStartY, rightStartY, verticalOffset, contentRect.size.height);
         
         // 计算右侧区域的位置（从右边开始布局）- 使用自适应宽度
         CGFloat rightX = contentRect.origin.x + contentRect.size.width - horizontalPadding - rightMaxWidth;
@@ -999,7 +1000,7 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         CGRect gpsRect = CGRectMake(rightX, rightStartY + primaryFont.lineHeight + textSpacing, rightMaxWidth, secondaryFont.lineHeight);
         [gpsString drawInRect:gpsRect withAttributes:gpsAttributes];
         
-        // Logo绘制 - 紧靠右侧参数左边，垂直居中
+        // Logo绘制 - 紧靠右侧参数左边，垂直居中并向上调整
         if (logoDescriptor && logoDescriptor.assetName.length > 0) {
             UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
             if (logoImage) {
@@ -1008,12 +1009,12 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                 
                 // 灰色分隔线参数
                 const CGFloat separatorWidth = 2.0;
-                const CGFloat separatorHeight = MIN(logoHeight * 0.8, 80.0); // 分隔线高度与logo成比例
-                const CGFloat separatorMargin = 8.0; // 分隔线与logo和参数的间距
+                const CGFloat separatorHeight = logoHeight*2; // 分隔线高度与logo成比例
+                const CGFloat separatorMargin = 88.0; // 分隔线与logo和参数的间距
                 
-                // Logo位置：考虑分隔线的位置，垂直居中在整个底部区域
+                // Logo位置：考虑分隔线的位置，垂直居中并向上调整
                 CGFloat logoX = rightX - logoWidth - separatorMargin - separatorWidth - separatorMargin;
-                CGFloat logoY = contentRect.origin.y + (contentRect.size.height - logoHeight) / 2.0;
+                CGFloat logoY = contentRect.origin.y + (contentRect.size.height - logoHeight) / 2.0 - verticalOffset;
                 
                 CGRect logoRect = CGRectMake(logoX, logoY, logoWidth, logoHeight);
                 
@@ -1025,9 +1026,9 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                 }
                 [renderableLogo drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:0.95];
                 
-                // 绘制灰色分隔线 - 在logo和参数之间，垂直居中在整个底部区域
+                // 绘制灰色分隔线 - 在logo和参数之间，垂直居中并向上调整
                 CGFloat separatorX = logoX + logoWidth + separatorMargin;
-                CGFloat separatorY = contentRect.origin.y + (contentRect.size.height - separatorHeight) / 2.0;
+                CGFloat separatorY = contentRect.origin.y + (contentRect.size.height - separatorHeight) / 2.0 - verticalOffset;
                 CGRect separatorRect = CGRectMake(separatorX, separatorY, separatorWidth, separatorHeight);
                 
                 [[UIColor colorWithRed:180.0/255.0 green:180.0/255.0 blue:180.0/255.0 alpha:1.0] setFill];
