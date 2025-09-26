@@ -176,6 +176,8 @@
 @property(nonatomic, strong) UICollectionView *collectionView;
 @property(nonatomic, strong) UISlider *intensitySlider;
 @property(nonatomic, strong) UILabel *intensityLabel;
+@property(nonatomic, strong) UISlider *grainSlider;
+@property(nonatomic, strong) UILabel *grainLabel;
 @property(nonatomic, strong) NSArray<ARFilterDescriptor *> *filters;
 @property(nonatomic, strong)
     NSMutableDictionary<NSString *, UIImage *> *thumbnailCache;
@@ -184,6 +186,7 @@
 @property(nonatomic, assign) BOOL suppressSelectionHandling;
 
 - (void)applyAccentColorForFilter:(ARFilterDescriptor *)filter;
+- (void)updateGrainControlsForFilter:(ARFilterDescriptor *)filter;
 @end
 
 @implementation FilterPanelView
@@ -213,9 +216,9 @@
 
   // 强度滑杆
   self.intensitySlider = [[UISlider alloc] init];
-  self.intensitySlider.minimumValue = 0.0;
-  self.intensitySlider.maximumValue = 1.0;
-  self.intensitySlider.value = 1.0;
+  self.intensitySlider.minimumValue = 0.0f;
+  self.intensitySlider.maximumValue = 1.0f;
+  self.intensitySlider.value = 1.0f;
   UIColor *defaultAccent = [UIColor systemOrangeColor];
   self.intensitySlider.minimumTrackTintColor = defaultAccent;
   self.intensitySlider.maximumTrackTintColor =
@@ -223,10 +226,35 @@
   self.intensitySlider.tintColor = defaultAccent;
   self.intensitySlider.thumbTintColor = defaultAccent;
   [self.intensitySlider addTarget:self
-                           action:@selector(intensityChanged:)
-                 forControlEvents:UIControlEventValueChanged];
+                            action:@selector(intensityChanged:)
+                  forControlEvents:UIControlEventValueChanged];
   self.intensitySlider.translatesAutoresizingMaskIntoConstraints = NO;
   [self addSubview:self.intensitySlider];
+
+  // 颗粒标签
+  self.grainLabel = [[UILabel alloc] init];
+  self.grainLabel.text = @"颗粒";
+  self.grainLabel.font = [UIFont systemFontOfSize:14
+                                            weight:UIFontWeightMedium];
+  self.grainLabel.textColor = [UIColor whiteColor];
+  self.grainLabel.translatesAutoresizingMaskIntoConstraints = NO;
+  [self addSubview:self.grainLabel];
+
+  // 颗粒滑杆
+  self.grainSlider = [[UISlider alloc] init];
+  self.grainSlider.minimumValue = 0.0f;
+  self.grainSlider.maximumValue = 1.0f;
+  self.grainSlider.value = 0.3f;
+  self.grainSlider.minimumTrackTintColor = defaultAccent;
+  self.grainSlider.maximumTrackTintColor =
+      [UIColor colorWithWhite:1.0 alpha:0.15f];
+  self.grainSlider.tintColor = defaultAccent;
+  self.grainSlider.thumbTintColor = defaultAccent;
+  [self.grainSlider addTarget:self
+                        action:@selector(grainChanged:)
+              forControlEvents:UIControlEventValueChanged];
+  self.grainSlider.translatesAutoresizingMaskIntoConstraints = NO;
+  [self addSubview:self.grainSlider];
 
   // 滤镜集合视图
   UICollectionViewFlowLayout *layout =
@@ -263,8 +291,24 @@
         constraintEqualToAnchor:self.trailingAnchor
                        constant:-16],
 
+    [self.grainLabel.topAnchor
+        constraintEqualToAnchor:self.intensityLabel.bottomAnchor
+                         constant:12],
+    [self.grainLabel.leadingAnchor
+        constraintEqualToAnchor:self.leadingAnchor
+                       constant:16],
+
+    [self.grainSlider.centerYAnchor
+        constraintEqualToAnchor:self.grainLabel.centerYAnchor],
+    [self.grainSlider.leadingAnchor
+        constraintEqualToAnchor:self.grainLabel.trailingAnchor
+                       constant:12],
+    [self.grainSlider.trailingAnchor
+        constraintEqualToAnchor:self.trailingAnchor
+                       constant:-16],
+
     [self.collectionView.topAnchor
-        constraintEqualToAnchor:self.intensitySlider.bottomAnchor
+        constraintEqualToAnchor:self.grainSlider.bottomAnchor
                        constant:16],
     [self.collectionView.leadingAnchor
         constraintEqualToAnchor:self.leadingAnchor],
@@ -289,18 +333,26 @@
   self.intensitySlider.value = intensity;
 }
 
+- (void)setGrainIntensity:(float)grainIntensity {
+  self.grainSlider.value = grainIntensity;
+}
+
 - (void)setCurrentFilter:(ARFilterDescriptor *)currentFilter {
   if (!currentFilter) {
     return;
   }
   if (_currentFilter == currentFilter) {
     [self applyAccentColorForFilter:currentFilter];
+    [self setGrainIntensity:currentFilter.grainIntensity];
+    [self updateGrainControlsForFilter:currentFilter];
     return;
   }
 
   _currentFilter = currentFilter;
   self.intensitySlider.value = currentFilter.intensity;
+  [self setGrainIntensity:currentFilter.grainIntensity];
   [self applyAccentColorForFilter:currentFilter];
+  [self updateGrainControlsForFilter:currentFilter];
 
   NSUInteger index = [self.filters indexOfObject:currentFilter];
   if (index != NSNotFound) {
@@ -333,11 +385,35 @@
   }
 }
 
+- (void)grainChanged:(UISlider *)slider {
+  if (self.currentFilter && self.currentFilter.supportsGrainAdjustment) {
+    self.currentFilter.grainIntensity = slider.value;
+  }
+  if ([self.delegate
+          respondsToSelector:@selector(didChangeFilterGrainIntensity:)]) {
+    [self.delegate didChangeFilterGrainIntensity:slider.value];
+  }
+}
+
+- (void)updateGrainControlsForFilter:(ARFilterDescriptor *)filter {
+  BOOL supports = filter.supportsGrainAdjustment;
+  self.grainSlider.enabled = supports;
+  CGFloat alpha = supports ? 1.0f : 0.35f;
+  self.grainSlider.alpha = alpha;
+  self.grainLabel.alpha = alpha;
+  if (!supports) {
+    self.grainSlider.value = 0.0f;
+  }
+}
+
 - (void)applyAccentColorForFilter:(ARFilterDescriptor *)filter {
   UIColor *accent = filter.accentColor ?: [UIColor systemOrangeColor];
   self.intensitySlider.minimumTrackTintColor = accent;
   self.intensitySlider.thumbTintColor = accent;
   self.intensitySlider.tintColor = accent;
+  self.grainSlider.minimumTrackTintColor = accent;
+  self.grainSlider.thumbTintColor = accent;
+  self.grainSlider.tintColor = accent;
 
   for (FilterCell *cell in self.collectionView.visibleCells) {
     if (![cell isKindOfClass:[FilterCell class]]) {

@@ -108,6 +108,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setCurrentFilter:(ARFilterDescriptor *)filter withIntensity:(float)intensity;
 - (ARFilterDescriptor *)currentFilter;
 - (float)currentFilterIntensity;
+- (void)setFilterGrainIntensity:(float)grainIntensity;
+- (float)currentFilterGrainIntensity;
 
 @end
 

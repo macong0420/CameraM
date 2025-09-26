@@ -25,6 +25,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) NSArray<ARFilterDescriptor *> *availableFilters;
 @property (nonatomic, strong, nullable) ARFilterDescriptor *currentFilter;
 @property (nonatomic, assign) float intensity;
+@property (nonatomic, assign) float grainIntensity;
 
 + (instancetype)sharedManager;
 

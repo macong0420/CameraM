@@ -65,6 +65,7 @@
 @property(nonatomic, strong) CIImage *latestCIImage;
 @property(nonatomic, strong) ARFilterDescriptor *previewFilter;
 @property(nonatomic, assign) float previewFilterIntensity;
+@property(nonatomic, assign) float previewFilterGrainIntensity;
 @property(nonatomic, strong) dispatch_queue_t videoDataQueue;
 @property(nonatomic, strong) AVCaptureVideoDataOutput *videoDataOutput;
 
@@ -144,6 +145,7 @@
       dispatch_queue_create("com.cameram.videodata", DISPATCH_QUEUE_SERIAL);
   _metalDevice = MTLCreateSystemDefaultDevice();
   _previewFilterIntensity = 1.0f;
+  _previewFilterGrainIntensity = 0.3f;
 
   // 创建CIContext使用Metal后端
   if (_metalDevice) {
@@ -1834,15 +1836,24 @@
 }
 
 - (void)setPreviewFilter:(ARFilterDescriptor *)filter
-           withIntensity:(float)intensity {
+           withIntensity:(float)intensity
+         grainIntensity:(float)grainIntensity {
   dispatch_async(dispatch_get_main_queue(), ^{
     self.previewFilter = filter;
     self.previewFilterIntensity = MAX(0.0f, MIN(1.0f, intensity));
+    self.previewFilterGrainIntensity = MAX(0.0f, MIN(1.0f, grainIntensity));
+
+    if (filter && filter.supportsGrainAdjustment) {
+      filter.grainIntensity = self.previewFilterGrainIntensity;
+    }
 
     // 记录滤镜切换日志
     if (filter) {
       NSLog(@"🎨 设置预览滤镜: %@ (强度: %.2f)", filter.displayName,
             self.previewFilterIntensity);
+      if (filter.supportsGrainAdjustment) {
+        NSLog(@"🎞️ 颗粒强度: %.2f", self.previewFilterGrainIntensity);
+      }
     } else {
       NSLog(@"🎨 清除预览滤镜");
     }
@@ -1912,6 +1923,10 @@
 
     if (self.previewFilter.pipeline) {
       self.previewFilter.pipeline.intensity = self.previewFilterIntensity;
+      if (self.previewFilter.supportsGrainAdjustment) {
+        self.previewFilter.pipeline.grainIntensity =
+            self.previewFilterGrainIntensity;
+      }
       outputImage = [self.previewFilter.pipeline process:sourceImage];
 
       if (!outputImage) {

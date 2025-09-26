@@ -33,6 +33,7 @@
   self = [super init];
   if (self) {
     _intensity = 1.0f;
+    _grainIntensity = 0.3f;
     _ciContext = [CIContext contextWithOptions:@{
       kCIContextUseSoftwareRenderer : @NO,
       kCIContextPriorityRequestLow : @NO
@@ -48,6 +49,7 @@
   if (self.availableFilters.count > 0) {
     self.currentFilter = self.availableFilters.firstObject;
     self.intensity = self.currentFilter.intensity;
+    self.grainIntensity = self.currentFilter.grainIntensity;
   }
 }
 
@@ -58,6 +60,9 @@
 
   // 设置管道强度
   self.currentFilter.pipeline.intensity = self.intensity;
+  if (self.currentFilter.supportsGrainAdjustment) {
+    self.currentFilter.pipeline.grainIntensity = self.grainIntensity;
+  }
 
   // 应用滤镜
   CIImage *filteredImage = [self.currentFilter.pipeline process:image];
@@ -69,10 +74,25 @@
            withIntensity:(float)intensity {
   self.currentFilter = filter;
   self.intensity = MAX(0.0f, MIN(1.0f, intensity)); // 确保强度在0-1范围内
+  if (filter.supportsGrainAdjustment) {
+    self.grainIntensity = filter.grainIntensity;
+  } else {
+    self.grainIntensity = 0.0f;
+  }
 }
 
 - (void)setIntensity:(float)intensity {
   _intensity = MAX(0.0f, MIN(1.0f, intensity)); // 确保强度在0-1范围内
+  if (self.currentFilter) {
+    self.currentFilter.intensity = _intensity;
+  }
+}
+
+- (void)setGrainIntensity:(float)grainIntensity {
+  _grainIntensity = MAX(0.0f, MIN(1.0f, grainIntensity));
+  if (self.currentFilter && self.currentFilter.supportsGrainAdjustment) {
+    self.currentFilter.grainIntensity = _grainIntensity;
+  }
 }
 
 @end

@@ -546,7 +546,9 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   [self.filterManager setCurrentFilter:filter withIntensity:intensity];
 
   // 同时设置相机预览滤镜
-  [self.cameraManager setPreviewFilter:filter withIntensity:intensity];
+  [self.cameraManager setPreviewFilter:filter
+                          withIntensity:intensity
+                        grainIntensity:self.filterManager.grainIntensity];
 }
 
 - (ARFilterDescriptor *)currentFilter {
@@ -555,6 +557,20 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 
 - (float)currentFilterIntensity {
   return self.filterManager.intensity;
+}
+
+- (void)setFilterGrainIntensity:(float)grainIntensity {
+  [self.filterManager setGrainIntensity:grainIntensity];
+  ARFilterDescriptor *filter = self.filterManager.currentFilter;
+  if (filter) {
+    [self.cameraManager setPreviewFilter:filter
+                            withIntensity:self.filterManager.intensity
+                          grainIntensity:self.filterManager.grainIntensity];
+  }
+}
+
+- (float)currentFilterGrainIntensity {
+  return self.filterManager.grainIntensity;
 }
 
 @end

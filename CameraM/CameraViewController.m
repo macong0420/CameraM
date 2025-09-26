@@ -815,6 +815,7 @@
     [self.filterPanel updateWithFilters:filterManager.availableFilters];
     self.filterPanel.currentFilter = filterManager.currentFilter;
     [self.filterPanel setIntensity:filterManager.intensity];
+    [self.filterPanel setGrainIntensity:filterManager.grainIntensity];
   }
 
   [self.controlsView showFilterPanel:self.filterPanel];
@@ -854,6 +855,17 @@
     filterManager.intensity = intensity;
   }
   NSLog(@"滤镜强度变化: %.2f", intensity);
+}
+
+- (void)didChangeFilterGrainIntensity:(float)grainIntensity {
+  ARFilterDescriptor *currentFilter = self.businessController.currentFilter;
+  if (currentFilter) {
+    [self.businessController setFilterGrainIntensity:grainIntensity];
+  } else {
+    FilterManager *filterManager = [FilterManager sharedManager];
+    filterManager.grainIntensity = grainIntensity;
+  }
+  NSLog(@"滤镜颗粒变化: %.2f", grainIntensity);
 }
 
 - (void)didToggleFilterFavorite:(ARFilterDescriptor *)filter {

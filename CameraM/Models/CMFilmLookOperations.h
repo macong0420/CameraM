@@ -53,6 +53,8 @@ FOUNDATION_EXPORT CMHSLAdjustment CMHSLAdjustmentMake(CGFloat startHue,
                    highlightWeight:(CGFloat)highlightWeight
                          grainScale:(CGFloat)grainScale
                          monochrome:(BOOL)monochrome;
+
+@property (nonatomic, assign) CGFloat intensity;
 @end
 
 @interface CMFilmHalationOperation : NSObject <ARFilterOperation>

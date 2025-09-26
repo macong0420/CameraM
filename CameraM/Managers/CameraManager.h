@@ -132,7 +132,9 @@ typedef NS_ENUM(NSInteger, CameraResolutionMode) {
 
 // 滤镜预览 - 使用MTKView
 - (void)setupFilterPreviewWithMTKView:(MTKView *)mtkView;
-- (void)setPreviewFilter:(ARFilterDescriptor * _Nullable)filter withIntensity:(float)intensity;
+- (void)setPreviewFilter:(ARFilterDescriptor * _Nullable)filter
+           withIntensity:(float)intensity
+         grainIntensity:(float)grainIntensity;
 - (void)clearPreviewFilter;
 
 // 内存管理
