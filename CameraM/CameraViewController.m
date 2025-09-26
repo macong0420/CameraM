@@ -131,52 +131,7 @@
 }
 
 - (void)didTapGalleryButton {
-    UIImage *latestImage = self.businessController.latestCapturedImage;
-
-    if (@available(iOS 14.0, *)) {
-        if (latestImage) {
-            UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
-                                                                           message:nil
-                                                                    preferredStyle:UIAlertControllerStyleActionSheet];
-
-            UIAlertAction *previewAction = [UIAlertAction actionWithTitle:@"查看最新拍摄"
-                                                                     style:UIAlertActionStyleDefault
-                                                                   handler:^(UIAlertAction * _Nonnull action) {
-                [self showImagePreview:latestImage];
-            }];
-
-            UIAlertAction *pickAction = [UIAlertAction actionWithTitle:@"选择系统照片"
-                                                                  style:UIAlertActionStyleDefault
-                                                                handler:^(UIAlertAction * _Nonnull action) {
-                [self presentPhotoPicker];
-            }];
-
-            UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
-                                                                   style:UIAlertActionStyleCancel
-                                                                 handler:nil];
-
-            [sheet addAction:previewAction];
-            [sheet addAction:pickAction];
-            [sheet addAction:cancelAction];
-
-            UIPopoverPresentationController *popover = sheet.popoverPresentationController;
-            if (popover) {
-                popover.sourceView = self.view;
-                popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
-                popover.permittedArrowDirections = UIPopoverArrowDirectionAny;
-            }
-
-            [self presentViewController:sheet animated:YES completion:nil];
-        } else {
-            [self presentPhotoPicker];
-        }
-    } else {
-        if (latestImage) {
-            [self showImagePreview:latestImage];
-        } else {
-            [self openSystemPhotosApp];
-        }
-    }
+    [self openSystemPhotosApp];
 }
 
 - (void)didSelectMode:(NSInteger)modeIndex {
