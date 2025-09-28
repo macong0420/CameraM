@@ -127,6 +127,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, UIView *> *sectionContentViews;
 @property (nonatomic, assign) WatermarkPanelSection activeSection;
+@property (nonatomic, weak) UIView *activeContentView;
 
 
 @property (nonatomic, strong) UIView *previewContainer;
@@ -436,21 +437,21 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     UIView *preferenceSection = [self buildPreferenceSectionView];
     UIView *placementSection = [self buildPlacementSectionView];
 
-    if (frameSection) {
-        self.sectionContentViews[@(WatermarkPanelSectionFrames)] = frameSection;
+    [self registerSectionContentView:frameSection forSection:WatermarkPanelSectionFrames];
+    [self registerSectionContentView:logoSection forSection:WatermarkPanelSectionLogos];
+    [self registerSectionContentView:textSection forSection:WatermarkPanelSectionText];
+    [self registerSectionContentView:preferenceSection forSection:WatermarkPanelSectionPreferences];
+    [self registerSectionContentView:placementSection forSection:WatermarkPanelSectionPlacement];
+}
+
+- (void)registerSectionContentView:(UIView *)view forSection:(WatermarkPanelSection)section {
+    if (!view) {
+        return;
     }
-    if (logoSection) {
-        self.sectionContentViews[@(WatermarkPanelSectionLogos)] = logoSection;
-    }
-    if (textSection) {
-        self.sectionContentViews[@(WatermarkPanelSectionText)] = textSection;
-    }
-    if (preferenceSection) {
-        self.sectionContentViews[@(WatermarkPanelSectionPreferences)] = preferenceSection;
-    }
-    if (placementSection) {
-        self.sectionContentViews[@(WatermarkPanelSectionPlacement)] = placementSection;
-    }
+    view.hidden = YES;
+    view.alpha = 0.0;
+    self.sectionContentViews[@(section)] = view;
+    [self.contentStack addArrangedSubview:view];
 }
 
 - (void)applySelectionState:(BOOL)isSelected toToolbarButton:(UIButton *)button {
@@ -491,12 +492,13 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 }
 
 - (void)activateSection:(WatermarkPanelSection)section animated:(BOOL)animated {
-    if (self.activeSection == section) {
+    UIView *targetView = self.sectionContentViews[@(section)];
+    if (!targetView) {
         return;
     }
 
-    UIView *targetView = self.sectionContentViews[@(section)];
-    if (!targetView) {
+    BOOL isSameSection = (self.activeSection == section);
+    if (isSameSection && !targetView.hidden) {
         return;
     }
 
@@ -505,23 +507,32 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         previousView = self.sectionContentViews[@(self.activeSection)];
     }
 
-    if (previousView && previousView.superview == self.contentStack) {
-        [self.contentStack removeArrangedSubview:previousView];
-        [previousView removeFromSuperview];
-    }
-
-    if (targetView.superview) {
-        [targetView removeFromSuperview];
-    }
-
-    targetView.alpha = animated ? 0.0 : 1.0;
-    [self.contentStack addArrangedSubview:targetView];
-    [self.contentStack layoutIfNeeded];
+    self.activeSection = section;
+    self.activeContentView = targetView;
 
     if (animated) {
-        [UIView animateWithDuration:0.22 animations:^{
-            targetView.alpha = 1.0;
-        }];
+        targetView.hidden = NO;
+        targetView.alpha = 0.0;
+        [UIView animateWithDuration:0.22
+                         animations:^{
+                             if (previousView && previousView != targetView) {
+                                 previousView.alpha = 0.0;
+                             }
+                             targetView.alpha = 1.0;
+                         }
+                         completion:^(BOOL finished) {
+                             if (previousView && previousView != targetView) {
+                                 previousView.hidden = YES;
+                                 previousView.alpha = 1.0;
+                             }
+                         }];
+    } else {
+        if (previousView && previousView != targetView) {
+            previousView.hidden = YES;
+            previousView.alpha = 1.0;
+        }
+        targetView.hidden = NO;
+        targetView.alpha = 1.0;
     }
 
     if (animated) {
@@ -530,7 +541,6 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         self.scrollView.contentOffset = CGPointZero;
     }
 
-    self.activeSection = section;
     [self updateToolbarSelectionForSection:section];
 }
 
