@@ -10,11 +10,14 @@
 #import "Models/CMCameraLensOption.h"
 #import "Views/CameraControlsView.h"
 #import "Views/WatermarkPanelView.h"
+#import "Controllers/GalleryViewController.h"
+#import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
 @interface CameraViewController () <
     CameraControlsDelegate, CameraBusinessDelegate,
-    PHPickerViewControllerDelegate, WatermarkPanelViewDelegate>
+    PHPickerViewControllerDelegate, WatermarkPanelViewDelegate,
+    GalleryViewControllerDelegate>
 
 // 分离的组件 - 高内聚低耦合
 @property(nonatomic, strong) CameraControlsView *controlsView;
@@ -28,6 +31,9 @@
 @property(nonatomic, strong) UIImage *pendingImportedImage;
 @property(nonatomic, strong)
     CMWatermarkConfiguration *pendingImportConfiguration;
+@property(nonatomic, strong) NSDictionary *pendingImportMetadata;
+@property(nonatomic, assign) BOOL hasCapturedPhotoInSession;
+@property(nonatomic, strong) NSDictionary *latestCaptureMetadata;
 
 @end
 
@@ -39,6 +45,8 @@
   [super viewDidLoad];
   [self setupComponents];
   [self setupCamera];
+  self.hasCapturedPhotoInSession =
+      (self.businessController.latestCapturedImage != nil);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -93,6 +101,9 @@
     [self.controlsView.bottomAnchor
         constraintEqualToAnchor:self.view.bottomAnchor]
   ]];
+
+  [self.controlsView
+      showGridLines:[self.businessController isGridLinesVisible]];
 }
 
 - (void)setupCamera {
@@ -144,11 +155,17 @@
 #pragma mark - CameraControlsDelegate (UI事件转发)
 
 - (void)didTapCaptureButton {
+  [self.controlsView setCaptureButtonLoading:YES];
   [self.businessController capturePhoto];
 }
 
 - (void)didTapGalleryButton {
-  [self openSystemPhotosApp];
+  if (self.hasCapturedPhotoInSession &&
+      self.businessController.latestCapturedImage) {
+    [self presentEditorForCapturedImage];
+  } else {
+    [self presentCustomGallery];
+  }
 }
 
 - (void)didSelectMode:(NSInteger)modeIndex {
@@ -287,15 +304,19 @@
 
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {
   NSLog(@"拍照成功，图片尺寸: %.0fx%.0f", image.size.width, image.size.height);
+  self.hasCapturedPhotoInSession = YES;
+  self.latestCaptureMetadata = metadata;
+  [self.controlsView setCaptureButtonLoading:NO];
   [self.controlsView updateGalleryButtonWithImage:image];
 }
 
 - (void)didFailWithError:(NSError *)error {
+  [self.controlsView setCaptureButtonLoading:NO];
   [self showErrorAlert:error.localizedDescription];
 }
 
 - (void)shouldUpdateCaptureButtonEnabled:(BOOL)enabled {
-  self.controlsView.captureButton.enabled = enabled;
+  [self.controlsView setCaptureButtonEnabled:enabled];
 }
 
 - (void)shouldShowCaptureFlashEffect {
@@ -376,6 +397,128 @@
   }
 }
 
+#pragma mark - 自定义相册
+
+- (void)presentEditorForCapturedImage {
+  if (self.isProcessingImportedImage) {
+    return;
+  }
+
+  UIImage *latestImage = self.businessController.latestCapturedImage;
+  if (!latestImage) {
+    [self presentCustomGallery];
+    return;
+  }
+
+  [self handleImportedImage:latestImage metadata:self.latestCaptureMetadata];
+}
+
+- (void)presentCustomGallery {
+  if (self.isProcessingImportedImage) {
+    return;
+  }
+
+  if (self.presentedViewController) {
+    return;
+  }
+
+  PHAuthorizationStatus status;
+  if (@available(iOS 14, *)) {
+    status = [PHPhotoLibrary authorizationStatusForAccessLevel:
+                                          PHAccessLevelReadWrite];
+  } else {
+    status = [PHPhotoLibrary authorizationStatus];
+  }
+
+  switch (status) {
+  case PHAuthorizationStatusAuthorized:
+  case PHAuthorizationStatusLimited:
+    [self showGalleryController];
+    break;
+  case PHAuthorizationStatusNotDetermined: {
+    if (@available(iOS 14, *)) {
+      __weak typeof(self) weakSelf = self;
+      [PHPhotoLibrary
+          requestAuthorizationForAccessLevel:PHAccessLevelReadWrite
+                                      handler:^(PHAuthorizationStatus status) {
+                                        dispatch_async(dispatch_get_main_queue(), ^{
+                                          __strong typeof(weakSelf) strongSelf =
+                                              weakSelf;
+                                          if (!strongSelf) {
+                                            return;
+                                          }
+                                          if (status == PHAuthorizationStatusAuthorized ||
+                                              status == PHAuthorizationStatusLimited) {
+                                            [strongSelf showGalleryController];
+                                          } else {
+                                            [strongSelf
+                                                showGalleryAuthorizationAlert];
+                                          }
+                                        });
+                                      }];
+    } else {
+      __weak typeof(self) weakSelf = self;
+      [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          __strong typeof(weakSelf) strongSelf = weakSelf;
+          if (!strongSelf) {
+            return;
+          }
+          if (status == PHAuthorizationStatusAuthorized) {
+            [strongSelf showGalleryController];
+          } else {
+            [strongSelf showGalleryAuthorizationAlert];
+          }
+        });
+      }];
+    }
+    break;
+  }
+  default:
+    [self showGalleryAuthorizationAlert];
+    break;
+  }
+}
+
+- (void)showGalleryController {
+  if ([self.presentedViewController isKindOfClass:[GalleryViewController class]]) {
+    return;
+  }
+  GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
+  galleryVC.delegate = self;
+  galleryVC.modalPresentationStyle = UIModalPresentationFullScreen;
+  [self presentViewController:galleryVC animated:YES completion:nil];
+}
+
+- (void)showGalleryAuthorizationAlert {
+  UIAlertController *alert =
+      [UIAlertController alertControllerWithTitle:@"无法访问相册"
+                                          message:@"请在设置中允许CameraM访问照片，以浏览和编辑相册内容。"
+                                   preferredStyle:UIAlertControllerStyleAlert];
+
+  UIAlertAction *cancelAction =
+      [UIAlertAction actionWithTitle:@"取消"
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+  [alert addAction:cancelAction];
+
+  NSURL *settingsURL = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
+  if ([[UIApplication sharedApplication] canOpenURL:settingsURL]) {
+    UIAlertAction *settingsAction = [UIAlertAction
+        actionWithTitle:@"前往设置"
+                  style:UIAlertActionStyleDefault
+                handler:^(UIAlertAction *_Nonnull action) {
+                  [[UIApplication sharedApplication]
+                      openURL:settingsURL
+                      options:@{}
+            completionHandler:nil];
+                }];
+    [alert addAction:settingsAction];
+  }
+
+  [self presentViewController:alert animated:YES completion:nil];
+}
+
 #pragma mark - Photo Picker
 
 - (void)presentPhotoPicker {
@@ -440,12 +583,18 @@
 }
 
 - (void)handleImportedImage:(UIImage *)image {
+  [self handleImportedImage:image metadata:nil];
+}
+
+- (void)handleImportedImage:(UIImage *)image
+                    metadata:(NSDictionary *_Nullable)metadata {
   if (!image || self.isProcessingImportedImage) {
     return;
   }
 
   self.isProcessingImportedImage = YES;
   self.pendingImportedImage = image;
+  self.pendingImportMetadata = metadata;
 
   CMWatermarkConfiguration *baseConfiguration =
       [self.businessController.watermarkConfiguration copy];
@@ -654,6 +803,7 @@
                                   self.isProcessingImportedImage = NO;
                                   self.pendingImportedImage = nil;
                                   self.pendingImportConfiguration = nil;
+                                  self.pendingImportMetadata = nil;
                                 }];
 }
 
@@ -680,9 +830,10 @@
   __weak typeof(self) weakSelf = self;
   [self.businessController
       processImportedImage:image
-         withConfiguration:configuration
-                completion:^(UIImage *_Nullable processedImage,
-                             NSError *_Nullable error) {
+                     metadata:self.pendingImportMetadata
+            withConfiguration:configuration
+                    completion:^(UIImage *_Nullable processedImage,
+                                 NSError *_Nullable error) {
                   __strong typeof(weakSelf) strongSelf = weakSelf;
                   if (!strongSelf) {
                     return;
@@ -691,6 +842,7 @@
                   strongSelf.isProcessingImportedImage = NO;
                   strongSelf.pendingImportedImage = nil;
                   strongSelf.pendingImportConfiguration = nil;
+                  strongSelf.pendingImportMetadata = nil;
 
                   [strongSelf hideProcessingOverlay];
 
@@ -706,6 +858,27 @@
                     [strongSelf showErrorAlert:message];
                   }
                 }];
+}
+
+#pragma mark - GalleryViewControllerDelegate
+
+- (void)galleryViewControllerDidCancel:(GalleryViewController *)controller {
+  [controller dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)galleryViewController:(GalleryViewController *)controller
+                 didSelectImage:(UIImage *)image {
+  __weak typeof(self) weakSelf = self;
+  [controller dismissViewControllerAnimated:YES
+                                   completion:^{
+                                     __strong typeof(weakSelf) strongSelf =
+                                         weakSelf;
+                                     if (!strongSelf) {
+                                       return;
+                                     }
+                                     [strongSelf handleImportedImage:image
+                                                            metadata:nil];
+                                   }];
 }
 
 #pragma mark - WatermarkPanelViewDelegate

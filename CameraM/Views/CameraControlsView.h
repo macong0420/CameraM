@@ -76,6 +76,8 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)updateGalleryButtonWithImage:(UIImage * _Nullable)image;
 - (void)showGridLines:(BOOL)show;
 - (void)showFocusIndicatorAtPoint:(CGPoint)point;
+- (void)setCaptureButtonLoading:(BOOL)isLoading;
+- (void)setCaptureButtonEnabled:(BOOL)enabled;
 - (void)updateAspectRatioMask:(CameraAspectRatio)ratio;
 - (void)updatePreviewVideoRect:(CGRect)videoRect;
 - (void)updateAspectRatioSelection:(CameraAspectRatio)ratio;

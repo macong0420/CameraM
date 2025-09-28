@@ -96,6 +96,11 @@ NS_ASSUME_NONNULL_BEGIN
           withConfiguration:(nullable CMWatermarkConfiguration *)configuration
                   completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
 - (void)processImportedImage:(UIImage *)image
+                     metadata:(nullable NSDictionary *)metadata
+            withConfiguration:(nullable CMWatermarkConfiguration *)configuration
+                    completion:(void (^)(UIImage *_Nullable processedImage,
+                                         NSError *_Nullable error))completion;
+- (void)processImportedImage:(UIImage *)image
                   completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
 
 @end

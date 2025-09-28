@@ -12,6 +12,12 @@ static NSString *const kCMWatermarkConfigurationStorageKey =
     @"com.cameram.watermark.configuration";
 static NSString *const kCMLensSelectionStorageKey =
     @"com.cameram.lens.selection";
+static NSString *const kCMFlashModeStorageKey =
+    @"com.cameram.flash.mode";
+static NSString *const kCMGridVisibilityStorageKey =
+    @"com.cameram.grid.visibility";
+static NSString *const kCMResolutionModeStorageKey =
+    @"com.cameram.resolution.mode";
 static NSString *const kCMBusinessControllerErrorDomain =
     @"com.cameram.business";
 
@@ -43,6 +49,10 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 - (void)persistWatermarkConfiguration;
 - (void)loadPersistedWatermarkConfiguration;
 - (void)persistCurrentLensSelection;
+- (void)loadPersistedSettings;
+- (void)persistFlashMode;
+- (void)persistGridVisibility;
+- (void)persistCurrentResolutionMode;
 
 @end
 
@@ -55,6 +65,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     _isGridLinesVisible = NO;
     _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
     [self loadPersistedWatermarkConfiguration];
+    [self loadPersistedSettings];
     _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
     _renderQueue =
         dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
@@ -166,6 +177,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   }
 
   [self.cameraManager switchFlashMode:nextMode];
+  [self persistFlashMode];
 }
 
 - (void)switchAspectRatio:(CameraAspectRatio)ratio {
@@ -194,6 +206,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 
 - (void)toggleGridLines {
   self.isGridLinesVisible = !self.isGridLinesVisible;
+  [self persistGridVisibility];
 }
 
 - (BOOL)isGridLinesVisible {
@@ -297,8 +310,25 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
            withConfiguration:(CMWatermarkConfiguration *)configuration
                   completion:(void (^)(UIImage *_Nullable processedImage,
                                        NSError *_Nullable error))completion {
+  [self processImportedImage:image
+                     metadata:nil
+            withConfiguration:configuration
+                    completion:completion];
+}
+
+- (void)processImportedImage:(UIImage *)image
+                  completion:(void (^)(UIImage *_Nullable processedImage,
+                                       NSError *_Nullable error))completion {
+  [self processImportedImage:image withConfiguration:nil completion:completion];
+}
+
+- (void)processImportedImage:(UIImage *)image
+                     metadata:(NSDictionary *)metadata
+            withConfiguration:(CMWatermarkConfiguration *)configuration
+                    completion:(void (^)(UIImage *_Nullable processedImage,
+                                         NSError *_Nullable error))completion {
   [self processImage:image
-            metadata:nil
+            metadata:metadata
        configuration:configuration
            applyCrop:NO
           completion:^(UIImage *_Nullable processedImage,
@@ -312,10 +342,65 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
           }];
 }
 
-- (void)processImportedImage:(UIImage *)image
-                  completion:(void (^)(UIImage *_Nullable processedImage,
-                                       NSError *_Nullable error))completion {
-  [self processImportedImage:image withConfiguration:nil completion:completion];
+- (void)loadPersistedSettings {
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
+  if ([defaults objectForKey:kCMGridVisibilityStorageKey] != nil) {
+    _isGridLinesVisible =
+        [defaults boolForKey:kCMGridVisibilityStorageKey];
+  } else {
+    [self persistGridVisibility];
+  }
+
+  if ([defaults objectForKey:kCMFlashModeStorageKey] != nil) {
+    NSInteger rawValue = [defaults integerForKey:kCMFlashModeStorageKey];
+    FlashMode storedMode = (FlashMode)rawValue;
+    if (storedMode < FlashModeAuto || storedMode > FlashModeOff) {
+      storedMode = FlashModeAuto;
+    }
+    if (storedMode != self.cameraManager.currentFlashMode) {
+      [self.cameraManager switchFlashMode:storedMode];
+    } else {
+      [self persistFlashMode];
+    }
+  } else {
+    [self persistFlashMode];
+  }
+
+  if ([defaults objectForKey:kCMResolutionModeStorageKey] != nil) {
+    NSInteger rawValue = [defaults integerForKey:kCMResolutionModeStorageKey];
+    CameraResolutionMode storedMode = (CameraResolutionMode)rawValue;
+    if (storedMode == CameraResolutionModeUltraHigh &&
+        !self.cameraManager.isUltraHighResolutionSupported) {
+      storedMode = CameraResolutionModeStandard;
+    }
+
+    if (storedMode != self.cameraManager.currentResolutionMode) {
+      [self.cameraManager switchResolutionMode:storedMode];
+    } else {
+      [self persistCurrentResolutionMode];
+    }
+  } else {
+    [self persistCurrentResolutionMode];
+  }
+}
+
+- (void)persistFlashMode {
+  [[NSUserDefaults standardUserDefaults]
+      setInteger:self.cameraManager.currentFlashMode
+            forKey:kCMFlashModeStorageKey];
+}
+
+- (void)persistGridVisibility {
+  [[NSUserDefaults standardUserDefaults]
+      setBool:self.isGridLinesVisible
+        forKey:kCMGridVisibilityStorageKey];
+}
+
+- (void)persistCurrentResolutionMode {
+  [[NSUserDefaults standardUserDefaults]
+      setInteger:self.cameraManager.currentResolutionMode
+            forKey:kCMResolutionModeStorageKey];
 }
 
 - (void)persistWatermarkConfiguration {
@@ -430,6 +515,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
             respondsToSelector:@selector(didChangeResolutionMode:)]) {
       [self.delegate didChangeResolutionMode:mode];
     }
+    [self persistCurrentResolutionMode];
   });
 }
 
@@ -439,6 +525,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     if ([self.delegate respondsToSelector:@selector(didChangeFlashMode:)]) {
       [self.delegate didChangeFlashMode:mode];
     }
+    [self persistFlashMode];
   });
 }
 
