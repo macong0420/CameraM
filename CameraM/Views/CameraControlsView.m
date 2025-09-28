@@ -1152,11 +1152,11 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 }
 
 - (void)setCaptureButtonLoading:(BOOL)isLoading {
-  if (self.captureButtonLoading == isLoading) {
+  if (_captureButtonLoading == isLoading) {
     return;
   }
 
-  self.captureButtonLoading = isLoading;
+  _captureButtonLoading = isLoading;
 
   if (isLoading) {
     [self.captureLoadingIndicator startAnimating];

@@ -347,7 +347,7 @@ static NSString *const kGalleryCellReuseIdentifier = @"GalleryCell";
                                                     options:options
                                               resultHandler:^(NSData *_Nullable imageData,
                                                               NSString *_Nullable dataUTI,
-                                                              UIImageOrientation orientation,
+                                                              CGImagePropertyOrientation orientation,
                                                               NSDictionary *_Nullable info) {
                                                 dispatch_async(dispatch_get_main_queue(), ^{
                                                   __strong typeof(weakSelf) strongSelf =

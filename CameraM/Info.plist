@@ -9,6 +9,10 @@
 	<!-- 相册权限 -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>此应用需要访问相册来保存拍摄的照片和视频</string>
+
+	<!-- 相册读取权限 -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>此应用需要访问相册来选择和预览照片</string>
 	
 	<!-- 麦克风权限 -->
 	<key>NSMicrophoneUsageDescription</key>
