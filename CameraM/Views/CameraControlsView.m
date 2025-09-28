@@ -552,6 +552,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   self.watermarkPanel.translatesAutoresizingMaskIntoConstraints = NO;
   self.watermarkPanel.delegate = self;
   self.watermarkPanel.hidden = YES;
+  [self.watermarkPanel updatePreviewWithImage:nil metadata:nil];
   [self addSubview:self.watermarkPanel];
 
   self.watermarkPanelBottomConstraint = [self.watermarkPanel.bottomAnchor
@@ -573,8 +574,8 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
 - (CGFloat)desiredWatermarkPanelHeight {
   CGFloat screenHeight = UIScreen.mainScreen.bounds.size.height;
-  CGFloat targetHeight = screenHeight * 0.7f;
-  CGFloat minimumHeight = 360.0f;
+  CGFloat targetHeight = screenHeight * 0.82f;
+  CGFloat minimumHeight = 520.0f;
   CGFloat availableHeight = screenHeight - self.safeAreaInsets.top - 24.0f;
   if (availableHeight < minimumHeight) {
     availableHeight = minimumHeight;
