@@ -8,15 +8,7 @@
 #import "WatermarkPanelView.h"
 #import "CMWatermarkCatalog.h"
 #import "CMWatermarkRenderer.h"
-
-typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
-    WatermarkPanelSectionFrames = 0,
-    WatermarkPanelSectionLogos,
-    WatermarkPanelSectionText,
-    WatermarkPanelSectionPreferences,
-    WatermarkPanelSectionPlacement
-};
-
+#import <math.h>
 
 @interface WatermarkOptionCell : UICollectionViewCell
 
@@ -106,9 +98,6 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 @property (nonatomic, strong) UILabel *enableLabel;
 @property (nonatomic, strong) UISwitch *enableSwitch;
 @property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UIView *toolbarView;
-@property (nonatomic, strong) UIStackView *toolbarStack;
-@property (nonatomic, strong) NSArray<UIButton *> *toolbarButtons;
 @property (nonatomic, strong) UICollectionView *frameCollectionView;
 @property (nonatomic, strong) UICollectionView *logoCollectionView;
 @property (nonatomic, strong) UITextField *captionField;
@@ -125,16 +114,21 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 @property (nonatomic, strong) UIView *signatureRow;
 @property (nonatomic, strong) UIView *placementRow;
 
-@property (nonatomic, strong) NSMutableDictionary<NSNumber *, UIView *> *sectionContentViews;
-@property (nonatomic, assign) WatermarkPanelSection activeSection;
-@property (nonatomic, weak) UIView *activeContentView;
+@property (nonatomic, strong) UIView *logosSectionContainer;
+@property (nonatomic, strong) UIView *preferencesSectionContainer;
+@property (nonatomic, strong) UIView *placementSectionContainer;
 
+
+@property (nonatomic, strong) UIView *controlsContainer;
+@property (nonatomic, strong) NSLayoutConstraint *controlsMinHeightConstraint;
 
 @property (nonatomic, strong) UIView *previewContainer;
 @property (nonatomic, strong) UIImageView *previewImageView;
 @property (nonatomic, strong) UILabel *previewPlaceholderLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *previewActivityIndicator;
-@property (nonatomic, strong) NSLayoutConstraint *previewHeightConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *previewAspectConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *previewMaxHeightConstraint;
+@property (nonatomic, assign) CGFloat previewAspectRatio;
 
 @property (nonatomic, strong) UIImage *userPreviewImage;
 @property (nonatomic, copy) NSDictionary *userPreviewMetadata;
@@ -171,19 +165,57 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         _previewNeedsRender = YES;
 
         [self setupHeader];
+        [self setupControlsContainer];
         [self setupPreviewSection];
-        [self setupToolbar];
         [self setupContentStack];
         [self buildSectionContentViews];
-        self.activeSection = (WatermarkPanelSection)NSNotFound;
-        [self activateSection:WatermarkPanelSectionFrames animated:NO];
         (void)[self updateUIFromConfigurationAnimated:NO];
         [self schedulePreviewRenderIfNeeded];
     }
     return self;
 }
 
-#pragma mark - Setup
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [self updatePreviewMaxHeightForCurrentLayout];
+}
+
+- (void)safeAreaInsetsDidChange {
+    [super safeAreaInsetsDidChange];
+    [self setNeedsLayout];
+}
+
+- (void)setupControlsContainer {
+    if (self.controlsContainer) {
+        return;
+    }
+
+    UIView *container = [[UIView alloc] init];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    container.backgroundColor = [UIColor colorWithWhite:0.03 alpha:0.96];
+    container.layer.cornerRadius = 20.0;
+    if (@available(iOS 11.0, *)) {
+        container.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    }
+    container.layer.masksToBounds = YES;
+    [self addSubview:container];
+
+    UILayoutGuide *safeGuide = self.safeAreaLayoutGuide;
+    self.controlsMinHeightConstraint = [container.heightAnchor constraintGreaterThanOrEqualToConstant:220.0];
+    self.controlsMinHeightConstraint.priority = UILayoutPriorityDefaultHigh;
+    self.controlsMinHeightConstraint.active = YES;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [container.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [container.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [container.bottomAnchor constraintEqualToAnchor:safeGuide.bottomAnchor]
+    ]];
+
+    [container setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
+    [container setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisVertical];
+
+    self.controlsContainer = container;
+}
 
 - (void)setupPreviewSection {
     self.previewContainer = [[UIView alloc] init];
@@ -227,12 +259,18 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     [NSLayoutConstraint activateConstraints:@[
         [self.previewContainer.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:12.0],
         [self.previewContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
-        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0]
+        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
+        [self.previewContainer.bottomAnchor constraintEqualToAnchor:self.controlsContainer.topAnchor constant:-16.0]
     ]];
 
-    self.previewHeightConstraint = [self.previewContainer.heightAnchor constraintEqualToAnchor:self.previewContainer.widthAnchor multiplier:4.0/3.0];
-    self.previewHeightConstraint.priority = UILayoutPriorityDefaultHigh;
-    self.previewHeightConstraint.active = YES;
+    self.previewAspectRatio = 4.0 / 3.0;
+    self.previewAspectConstraint = [self.previewContainer.heightAnchor constraintEqualToAnchor:self.previewContainer.widthAnchor multiplier:self.previewAspectRatio];
+    self.previewAspectConstraint.priority = UILayoutPriorityDefaultHigh;
+    self.previewAspectConstraint.active = YES;
+
+    self.previewMaxHeightConstraint = [self.previewContainer.heightAnchor constraintLessThanOrEqualToConstant:0.0];
+    self.previewMaxHeightConstraint.priority = UILayoutPriorityRequired;
+    self.previewMaxHeightConstraint.active = YES;
 
     [NSLayoutConstraint activateConstraints:@[
         [self.previewImageView.topAnchor constraintEqualToAnchor:self.previewContainer.topAnchor],
@@ -248,98 +286,60 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         [self.previewActivityIndicator.centerXAnchor constraintEqualToAnchor:self.previewContainer.centerXAnchor],
         [self.previewActivityIndicator.centerYAnchor constraintEqualToAnchor:self.previewContainer.centerYAnchor]
     ]];
+
+    [self.previewContainer setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisVertical];
+    [self.previewContainer setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisVertical];
 }
 
-- (UIButton *)toolbarButtonWithTitle:(NSString *)title iconName:(NSString *)iconName section:(WatermarkPanelSection)section {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.tag = section;
-    button.layer.cornerRadius = 14.0;
-    button.layer.masksToBounds = YES;
-    button.layer.borderWidth = 0.0;
-    button.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.1].CGColor;
-    button.tintColor = [UIColor colorWithWhite:0.9 alpha:1.0];
-    button.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
-    button.adjustsImageWhenHighlighted = NO;
-    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
-    button.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
-    [button setTitleColor:[UIColor colorWithWhite:0.82 alpha:1.0] forState:UIControlStateNormal];
-    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateSelected];
+- (void)updatePreviewAspectConstraintForImage:(UIImage *)image {
+    CGFloat aspect = 4.0f / 3.0f;
+    if (image.size.width > 0.0f) {
+        aspect = image.size.height / image.size.width;
+    }
+    aspect = MIN(MAX(aspect, 0.6f), 2.6f);
 
-    UIImageSymbolConfiguration *symbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightMedium];
-    UIImage *iconImage = iconName.length > 0 ? [UIImage systemImageNamed:iconName withConfiguration:symbolConfig] : nil;
-
-    if (@available(iOS 15.0, *)) {
-        UIButtonConfiguration *configuration = [UIButtonConfiguration plainButtonConfiguration];
-        configuration.image = iconImage;
-        configuration.title = title;
-        configuration.imagePlacement = NSDirectionalRectEdgeTop;
-        configuration.imagePadding = 6.0;
-        configuration.contentInsets = NSDirectionalEdgeInsetsMake(10.0, 6.0, 10.0, 6.0);
-        configuration.baseForegroundColor = [UIColor colorWithWhite:0.82 alpha:1.0];
-        button.configuration = configuration;
-    } else {
-        [button setImage:iconImage forState:UIControlStateNormal];
-        [button setTitle:title forState:UIControlStateNormal];
-        button.contentEdgeInsets = UIEdgeInsetsMake(14.0, 6.0, 10.0, 6.0);
-        CGFloat imageWidth = iconImage.size.width;
-        button.titleEdgeInsets = UIEdgeInsetsMake(36.0, -imageWidth, 0.0, 0.0);
-        button.imageEdgeInsets = UIEdgeInsetsMake(-6.0, 0.0, 0.0, 0.0);
+    BOOL hasExistingConstraint = (self.previewAspectConstraint != nil);
+    CGFloat delta = fabs(aspect - self.previewAspectRatio);
+    if (hasExistingConstraint && delta < 0.01f) {
+        return;
     }
 
-    [button addTarget:self action:@selector(handleToolbarButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-    button.userInteractionEnabled = YES;
-    button.enabled = YES;
-    return button;
-}
-
-- (void)setupToolbar {
-    self.toolbarView = [[UIView alloc] init];
-    self.toolbarView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.toolbarView.backgroundColor = [[UIColor colorWithWhite:1.0 alpha:0.06] colorWithAlphaComponent:0.4];
-    self.toolbarView.layer.cornerRadius = 18.0;
-    self.toolbarView.layer.masksToBounds = YES;
-    [self addSubview:self.toolbarView];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.toolbarView.topAnchor constraintEqualToAnchor:self.previewContainer.bottomAnchor constant:12.0],
-        [self.toolbarView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
-        [self.toolbarView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0]
-    ]];
-
-    self.toolbarStack = [[UIStackView alloc] init];
-    self.toolbarStack.translatesAutoresizingMaskIntoConstraints = NO;
-    self.toolbarStack.axis = UILayoutConstraintAxisHorizontal;
-    self.toolbarStack.distribution = UIStackViewDistributionFillEqually;
-    self.toolbarStack.spacing = 8.0;
-    [self.toolbarView addSubview:self.toolbarStack];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.toolbarStack.topAnchor constraintEqualToAnchor:self.toolbarView.topAnchor constant:12.0],
-        [self.toolbarStack.bottomAnchor constraintEqualToAnchor:self.toolbarView.bottomAnchor constant:-12.0],
-        [self.toolbarStack.leadingAnchor constraintEqualToAnchor:self.toolbarView.leadingAnchor constant:12.0],
-        [self.toolbarStack.trailingAnchor constraintEqualToAnchor:self.toolbarView.trailingAnchor constant:-12.0]
-    ]];
-
-    NSArray<NSDictionary *> *items = @[
-        @{ @"title": @"模板", @"icon": @"square.grid.2x2", @"section": @(WatermarkPanelSectionFrames) },
-        @{ @"title": @"Logo", @"icon": @"seal", @"section": @(WatermarkPanelSectionLogos) },
-        @{ @"title": @"文字", @"icon": @"textformat", @"section": @(WatermarkPanelSectionText) },
-        @{ @"title": @"参数", @"icon": @"slider.horizontal.3", @"section": @(WatermarkPanelSectionPreferences) },
-        @{ @"title": @"位置", @"icon": @"square.split.2x2", @"section": @(WatermarkPanelSectionPlacement) }
-    ];
-
-    NSMutableArray<UIButton *> *buttons = [NSMutableArray arrayWithCapacity:items.count];
-    for (NSDictionary *item in items) {
-        NSString *title = item[@"title"];
-        NSString *icon = item[@"icon"];
-        WatermarkPanelSection section = [item[@"section"] unsignedIntegerValue];
-        UIButton *button = [self toolbarButtonWithTitle:title iconName:icon section:section];
-        [self.toolbarStack addArrangedSubview:button];
-        [buttons addObject:button];
+    if (self.previewAspectConstraint) {
+        self.previewAspectConstraint.active = NO;
     }
-    self.toolbarButtons = buttons;
+
+    self.previewAspectConstraint = [self.previewContainer.heightAnchor constraintEqualToAnchor:self.previewContainer.widthAnchor multiplier:aspect];
+    self.previewAspectConstraint.priority = UILayoutPriorityDefaultHigh;
+    self.previewAspectConstraint.active = YES;
+    self.previewAspectRatio = aspect;
+
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
 }
+
+- (void)updatePreviewMaxHeightForCurrentLayout {
+    CGFloat totalHeight = CGRectGetHeight(self.bounds);
+    CGFloat totalWidth = CGRectGetWidth(self.bounds);
+    if (totalHeight <= 0.0f || totalWidth <= 0.0f) {
+        return;
+    }
+
+    CGFloat headerReserved = 12.0f + 44.0f + 12.0f; // top inset + header height + spacing
+    CGFloat bottomSpacing = 16.0f + self.safeAreaInsets.bottom;
+    CGFloat currentControlsHeight = CGRectGetHeight(self.controlsContainer.bounds);
+    CGFloat minimumControls = self.controlsMinHeightConstraint.constant + 12.0f; // include bottom padding inside controls container
+    if (currentControlsHeight > 0.0f) {
+        minimumControls = MAX(minimumControls, currentControlsHeight + 12.0f);
+    }
+
+    CGFloat maxHeight = totalHeight - headerReserved - bottomSpacing - minimumControls;
+    maxHeight = MAX(maxHeight, 160.0f);
+
+    if (fabs(maxHeight - self.previewMaxHeightConstraint.constant) > 1.0f) {
+        self.previewMaxHeightConstraint.constant = maxHeight;
+    }
+}
+
 
 - (void)setupHeader {
     self.headerView = [[UIView alloc] init];
@@ -401,17 +401,16 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
     self.scrollView.showsVerticalScrollIndicator = NO;
-    [self addSubview:self.scrollView];
+    [self.controlsContainer addSubview:self.scrollView];
 
     UILayoutGuide *frameGuide = self.scrollView.frameLayoutGuide;
     UILayoutGuide *contentGuide = self.scrollView.contentLayoutGuide;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.scrollView.topAnchor constraintEqualToAnchor:self.toolbarView.bottomAnchor constant:16.0],
-
-        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.controlsContainer.topAnchor constant:12.0],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.controlsContainer.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.controlsContainer.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.controlsContainer.bottomAnchor constant:-12.0]
     ]];
 
     self.contentStack = [[UIStackView alloc] init];
@@ -429,124 +428,25 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 }
 
 - (void)buildSectionContentViews {
-    self.sectionContentViews = [NSMutableDictionary dictionary];
-
-    UIView *frameSection = [self buildFrameSectionView];
-    UIView *logoSection = [self buildLogoSectionView];
+    UIView *framesSection = [self buildFrameSectionView];
+    self.logosSectionContainer = [self buildLogoSectionView];
     UIView *textSection = [self buildTextSectionView];
-    UIView *preferenceSection = [self buildPreferenceSectionView];
-    UIView *placementSection = [self buildPlacementSectionView];
+    self.preferencesSectionContainer = [self buildPreferenceSectionView];
+    self.placementSectionContainer = [self buildPlacementSectionView];
 
-    [self registerSectionContentView:frameSection forSection:WatermarkPanelSectionFrames];
-    [self registerSectionContentView:logoSection forSection:WatermarkPanelSectionLogos];
-    [self registerSectionContentView:textSection forSection:WatermarkPanelSectionText];
-    [self registerSectionContentView:preferenceSection forSection:WatermarkPanelSectionPreferences];
-    [self registerSectionContentView:placementSection forSection:WatermarkPanelSectionPlacement];
-}
+    NSArray<UIView *> *sections = @[ framesSection,
+                                     self.logosSectionContainer,
+                                     textSection,
+                                     self.preferencesSectionContainer,
+                                     self.placementSectionContainer ];
 
-- (void)registerSectionContentView:(UIView *)view forSection:(WatermarkPanelSection)section {
-    if (!view) {
-        return;
-    }
-    view.hidden = YES;
-    view.alpha = 0.0;
-    self.sectionContentViews[@(section)] = view;
-    [self.contentStack addArrangedSubview:view];
-}
-
-- (void)applySelectionState:(BOOL)isSelected toToolbarButton:(UIButton *)button {
-    UIColor *activeBackground = [[UIColor colorWithRed:1.0 green:0.35 blue:0.1 alpha:1.0] colorWithAlphaComponent:0.25];
-    UIColor *inactiveBackground = [UIColor colorWithWhite:1.0 alpha:0.05];
-    UIColor *inactiveForeground = [UIColor colorWithWhite:0.82 alpha:1.0];
-
-    button.backgroundColor = isSelected ? activeBackground : inactiveBackground;
-    button.layer.borderColor = isSelected ? [UIColor colorWithRed:1.0 green:0.45 blue:0.2 alpha:0.9].CGColor : [UIColor colorWithWhite:1.0 alpha:0.1].CGColor;
-    button.layer.borderWidth = isSelected ? 1.0 : 0.0;
-
-    if (@available(iOS 15.0, *)) {
-        UIButtonConfiguration *configuration = button.configuration;
-        configuration.baseForegroundColor = isSelected ? [UIColor whiteColor] : inactiveForeground;
-        button.configuration = configuration;
-    } else {
-        UIColor *foreground = isSelected ? [UIColor whiteColor] : inactiveForeground;
-        [button setTitleColor:foreground forState:UIControlStateNormal];
-        button.tintColor = foreground;
-    }
-}
-
-- (void)updateToolbarSelectionForSection:(WatermarkPanelSection)section {
-    for (UIButton *button in self.toolbarButtons) {
-        BOOL selected = (button.tag == section);
-        button.selected = selected;
-        [self applySelectionState:selected toToolbarButton:button];
-    }
-}
-
-- (UIButton *)toolbarButtonForSection:(WatermarkPanelSection)section {
-    for (UIButton *button in self.toolbarButtons) {
-        if (button.tag == section) {
-            return button;
+    for (UIView *sectionView in sections) {
+        if (sectionView) {
+            sectionView.hidden = NO;
+            sectionView.alpha = 1.0;
+            [self.contentStack addArrangedSubview:sectionView];
         }
     }
-    return nil;
-}
-
-- (void)activateSection:(WatermarkPanelSection)section animated:(BOOL)animated {
-    UIView *targetView = self.sectionContentViews[@(section)];
-    if (!targetView) {
-        return;
-    }
-
-    BOOL isSameSection = (self.activeSection == section);
-    if (isSameSection && !targetView.hidden) {
-        return;
-    }
-
-    UIView *previousView = nil;
-    if (self.activeSection != (WatermarkPanelSection)NSNotFound) {
-        previousView = self.sectionContentViews[@(self.activeSection)];
-    }
-
-    self.activeSection = section;
-    self.activeContentView = targetView;
-
-    if (animated) {
-        targetView.hidden = NO;
-        targetView.alpha = 0.0;
-        [UIView animateWithDuration:0.22
-                         animations:^{
-                             if (previousView && previousView != targetView) {
-                                 previousView.alpha = 0.0;
-                             }
-                             targetView.alpha = 1.0;
-                         }
-                         completion:^(BOOL finished) {
-                             if (previousView && previousView != targetView) {
-                                 previousView.hidden = YES;
-                                 previousView.alpha = 1.0;
-                             }
-                         }];
-    } else {
-        if (previousView && previousView != targetView) {
-            previousView.hidden = YES;
-            previousView.alpha = 1.0;
-        }
-        targetView.hidden = NO;
-        targetView.alpha = 1.0;
-    }
-
-    if (animated) {
-        [self.scrollView setContentOffset:CGPointZero animated:YES];
-    } else {
-        self.scrollView.contentOffset = CGPointZero;
-    }
-
-    [self updateToolbarSelectionForSection:section];
-}
-
-- (void)handleToolbarButtonTap:(UIButton *)sender {
-    WatermarkPanelSection section = (WatermarkPanelSection)sender.tag;
-    [self activateSection:section animated:YES];
 }
 
 - (UIView *)buildFrameSectionView {
@@ -842,6 +742,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
     CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
     UIImage *sourceImage = [self effectivePreviewSourceImageForConfiguration:self.internalConfiguration descriptor:descriptor];
+    [self updatePreviewAspectConstraintForImage:sourceImage];
 
     if (!sourceImage) {
         self.previewPlaceholderLabel.hidden = NO;
@@ -913,12 +814,11 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         if (self.previewContainer) {
             self.previewContainer.alpha = enabled ? 1.0 : 0.55;
         }
-        if (self.toolbarView) {
-            self.toolbarView.alpha = enabled ? 1.0 : 0.55;
+        if (self.controlsContainer) {
+            self.controlsContainer.alpha = enabled ? 1.0 : 0.6;
         }
-        for (UIButton *button in self.toolbarButtons) {
-            button.userInteractionEnabled = enabled;
-            button.alpha = enabled ? 1.0 : 0.35;
+        if (self.scrollView) {
+            self.scrollView.userInteractionEnabled = enabled;
         }
 
     };
@@ -934,6 +834,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 - (void)updatePreviewWithImage:(UIImage *)image metadata:(NSDictionary *)metadata {
     self.userPreviewImage = [self preparedPreviewImageFromImage:image];
     self.userPreviewMetadata = metadata;
+    [self updatePreviewAspectConstraintForImage:self.userPreviewImage];
     [self markPreviewNeedsRender];
 }
 
@@ -1014,19 +915,14 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     BOOL panelEnabled = self.internalConfiguration.isEnabled;
 
     BOOL allowsLogo = descriptor ? descriptor.allowsLogoEditing : YES;
-    if (self.logoSectionLabel) {
-        self.logoSectionLabel.hidden = !allowsLogo;
-        self.logoSectionLabel.alpha = allowsLogo ? (panelEnabled ? 1.0 : 0.35) : 0.0;
+    if (self.logosSectionContainer) {
+        self.logosSectionContainer.hidden = !allowsLogo;
+        self.logosSectionContainer.alpha = allowsLogo ? (panelEnabled ? 1.0 : 0.35) : 0.0;
     }
     if (self.logoCollectionView) {
         self.logoCollectionView.hidden = !allowsLogo;
         self.logoCollectionView.alpha = allowsLogo ? (panelEnabled ? 1.0 : 0.35) : 0.0;
         self.logoCollectionView.userInteractionEnabled = allowsLogo && panelEnabled;
-    }
-    UIButton *logoButton = [self toolbarButtonForSection:WatermarkPanelSectionLogos];
-    if (logoButton) {
-        logoButton.enabled = allowsLogo && panelEnabled;
-        logoButton.alpha = allowsLogo ? (panelEnabled ? 1.0 : 0.35) : 0.35;
     }
     if (!allowsLogo) {
         BOOL needsReset = self.internalConfiguration.logoEnabled || ![self.internalConfiguration.logoIdentifier isEqualToString:CMWatermarkLogoIdentifierNone];
@@ -1036,23 +932,19 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
             configurationChanged = YES;
             [self.logoCollectionView reloadData];
         }
-        if (self.activeSection == WatermarkPanelSectionLogos) {
-            [self activateSection:WatermarkPanelSectionFrames animated:NO];
-        }
     }
 
     BOOL allowsParameters = descriptor ? descriptor.allowsParameterEditing : YES;
+    if (self.preferencesSectionContainer) {
+        self.preferencesSectionContainer.hidden = !allowsParameters;
+        self.preferencesSectionContainer.alpha = allowsParameters ? (panelEnabled ? 1.0 : 0.35) : 0.0;
+    }
     if (self.preferenceRow) {
         self.preferenceRow.hidden = !allowsParameters;
         self.preferenceRow.alpha = allowsParameters ? (panelEnabled ? 1.0 : 0.35) : 0.0;
     }
     if (self.preferenceControl) {
         self.preferenceControl.userInteractionEnabled = allowsParameters && panelEnabled;
-    }
-    UIButton *preferenceButton = [self toolbarButtonForSection:WatermarkPanelSectionPreferences];
-    if (preferenceButton) {
-        preferenceButton.enabled = allowsParameters && panelEnabled;
-        preferenceButton.alpha = allowsParameters ? (panelEnabled ? 1.0 : 0.35) : 0.35;
     }
     NSInteger enforcedPreference = descriptor ? descriptor.enforcedPreferenceRawValue : NSNotFound;
     if (!allowsParameters && enforcedPreference != NSNotFound && self.preferenceControl.selectedSegmentIndex != enforcedPreference) {
@@ -1062,11 +954,6 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     if (!allowsParameters && enforcedPreference != NSNotFound) {
         self.preferenceControl.selectedSegmentIndex = enforcedPreference;
     }
-    if (!allowsParameters && self.activeSection == WatermarkPanelSectionPreferences) {
-        [self activateSection:WatermarkPanelSectionFrames animated:NO];
-    }
-
-    [self updateToolbarSelectionForSection:self.activeSection];
 
     // 署名功能已删除
     // BOOL allowsSignature = descriptor ? descriptor.allowsSignatureEditing : YES;
@@ -1092,6 +979,10 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     
     // 宝丽来模式不允许位置设置
     BOOL allowsPlacement = !(descriptor && [descriptor.identifier isEqualToString:@"frame.polaroid"]);
+    if (self.placementSectionContainer) {
+        self.placementSectionContainer.hidden = !allowsPlacement;
+        self.placementSectionContainer.alpha = allowsPlacement ? (panelEnabled ? 1.0 : 0.35) : 0.0;
+    }
     if (self.placementRow) {
         self.placementRow.hidden = !allowsPlacement;
         self.placementRow.alpha = allowsPlacement ? (panelEnabled ? 1.0 : 0.35) : 0.0;
@@ -1100,6 +991,8 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         self.placementControl.userInteractionEnabled = allowsPlacement && panelEnabled;
         self.placementControl.enabled = allowsPlacement && panelEnabled;
     }
+
+    [self setNeedsLayout];
 
     return configurationChanged;
 }

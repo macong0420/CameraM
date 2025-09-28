@@ -606,21 +606,6 @@
   [self presentImportCustomizationWithConfiguration:baseConfiguration];
 }
 
-- (CGFloat)preferredImportPanelHeight {
-  CGFloat screenHeight = UIScreen.mainScreen.bounds.size.height;
-  [self.view layoutIfNeeded];
-  CGFloat safeTop = self.view.safeAreaInsets.top;
-  CGFloat availableHeight = screenHeight - safeTop - 24.0f;
-  CGFloat minimumHeight = 520.0f;
-  if (availableHeight < minimumHeight) {
-    availableHeight = minimumHeight;
-  }
-  CGFloat targetHeight = screenHeight * 0.82f;
-  targetHeight = MIN(targetHeight, availableHeight);
-  targetHeight = MAX(targetHeight, minimumHeight);
-  return targetHeight;
-}
-
 - (UIButton *)importActionButtonWithTitle:(NSString *)title
                                   primary:(BOOL)isPrimary {
   UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -708,31 +693,27 @@
   ]];
 
   [NSLayoutConstraint activateConstraints:@[
+    [container.topAnchor constraintEqualToAnchor:overlay.topAnchor],
     [container.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor],
     [container.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor],
     [container.bottomAnchor constraintEqualToAnchor:overlay.bottomAnchor]
   ]];
 
-  CGFloat panelHeight = [self preferredImportPanelHeight];
-  NSLayoutConstraint *panelHeightConstraint =
-      [panel.heightAnchor constraintEqualToConstant:panelHeight];
-  panelHeightConstraint.active = YES;
-
+  UILayoutGuide *containerSafe = container.safeAreaLayoutGuide;
   [NSLayoutConstraint activateConstraints:@[
-    [panel.topAnchor constraintEqualToAnchor:container.topAnchor
-                                    constant:20.0f],
+    [panel.topAnchor constraintEqualToAnchor:containerSafe.topAnchor
+                                    constant:12.0f],
     [panel.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
     [panel.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
 
     [buttons.topAnchor constraintEqualToAnchor:panel.bottomAnchor
-                                      constant:20.0f],
+                                      constant:16.0f],
     [buttons.leadingAnchor constraintEqualToAnchor:container.leadingAnchor
                                           constant:24.0f],
     [buttons.trailingAnchor constraintEqualToAnchor:container.trailingAnchor
                                            constant:-24.0f],
-    [buttons.bottomAnchor
-        constraintEqualToAnchor:container.safeAreaLayoutGuide.bottomAnchor
-                       constant:-20.0f]
+    [buttons.bottomAnchor constraintEqualToAnchor:containerSafe.bottomAnchor
+                                         constant:-20.0f]
   ]];
 
   [cancelButton.heightAnchor constraintEqualToConstant:48.0f].active = YES;
@@ -740,8 +721,10 @@
 
   [self.view layoutIfNeeded];
 
-  container.transform =
-      CGAffineTransformMakeTranslation(0.0f, panelHeight + 120.0f);
+  CGFloat translation = container.bounds.size.height > 0.0f
+                             ? container.bounds.size.height
+                             : self.view.bounds.size.height;
+  container.transform = CGAffineTransformMakeTranslation(0.0f, translation);
 
   self.importCustomizationOverlay = overlay;
   self.importCustomizationContainer = container;
