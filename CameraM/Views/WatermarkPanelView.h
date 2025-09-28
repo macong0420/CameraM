@@ -26,6 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)applyConfiguration:(CMWatermarkConfiguration *)configuration animated:(BOOL)animated;
 - (void)setPanelEnabled:(BOOL)enabled animated:(BOOL)animated;
+- (void)updatePreviewWithImage:(nullable UIImage *)image metadata:(nullable NSDictionary *)metadata;
 
 @end
 

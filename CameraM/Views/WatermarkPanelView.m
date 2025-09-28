@@ -7,6 +7,7 @@
 
 #import "WatermarkPanelView.h"
 #import "CMWatermarkCatalog.h"
+#import "CMWatermarkRenderer.h"
 
 @interface WatermarkOptionCell : UICollectionViewCell
 
@@ -25,7 +26,7 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.contentView.layer.cornerRadius = 12.0;
+        self.contentView.layer.cornerRadius = 14.0;
         self.contentView.layer.borderWidth = 1.0;
         self.contentView.layer.borderColor = [[UIColor colorWithWhite:1.0 alpha:0.15] CGColor];
         self.contentView.backgroundColor = [[UIColor colorWithWhite:1.0 alpha:0.05] colorWithAlphaComponent:0.08];
@@ -36,18 +37,18 @@
 
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
+        self.titleLabel.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightSemibold];
         self.titleLabel.textAlignment = NSTextAlignmentCenter;
         self.titleLabel.textColor = [UIColor colorWithWhite:0.92 alpha:0.9];
         [self.contentView addSubview:self.titleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.imageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10.0],
+            [self.imageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12.0],
             [self.imageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:10.0],
             [self.imageView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10.0],
-            [self.imageView.heightAnchor constraintEqualToAnchor:self.contentView.heightAnchor multiplier:0.6],
+            [self.imageView.heightAnchor constraintEqualToAnchor:self.contentView.heightAnchor multiplier:0.68],
 
-            [self.titleLabel.topAnchor constraintEqualToAnchor:self.imageView.bottomAnchor constant:6.0],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.imageView.bottomAnchor constant:8.0],
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:6.0],
             [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-6.0],
             [self.titleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-6.0]
@@ -112,6 +113,20 @@
 @property (nonatomic, strong) UIView *signatureRow;
 @property (nonatomic, strong) UIView *placementRow;
 
+@property (nonatomic, strong) UIView *previewContainer;
+@property (nonatomic, strong) UIImageView *previewImageView;
+@property (nonatomic, strong) UILabel *previewPlaceholderLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *previewActivityIndicator;
+@property (nonatomic, strong) NSLayoutConstraint *previewHeightConstraint;
+
+@property (nonatomic, strong) UIImage *userPreviewImage;
+@property (nonatomic, copy) NSDictionary *userPreviewMetadata;
+@property (nonatomic, strong) NSCache<NSString *, UIImage *> *previewImageCache;
+@property (nonatomic, strong) dispatch_queue_t previewRenderQueue;
+@property (nonatomic, strong) CMWatermarkRenderer *previewRenderer;
+@property (nonatomic, strong) NSUUID *previewRenderToken;
+@property (nonatomic, assign) BOOL previewNeedsRender;
+
 @property (nonatomic, copy) NSArray<CMWatermarkFrameDescriptor *> *frameDescriptors;
 @property (nonatomic, copy) NSArray<CMWatermarkLogoDescriptor *> *logoDescriptors;
 
@@ -132,8 +147,14 @@
         _frameDescriptors = [CMWatermarkCatalog frameDescriptors];
         _logoDescriptors = [CMWatermarkCatalog logoDescriptors];
         _internalConfiguration = [CMWatermarkConfiguration defaultConfiguration];
+        _previewImageCache = [[NSCache alloc] init];
+        _previewImageCache.countLimit = 12;
+        _previewRenderQueue = dispatch_queue_create("com.cameram.watermark.preview", DISPATCH_QUEUE_SERIAL);
+        _previewRenderer = [[CMWatermarkRenderer alloc] init];
+        _previewNeedsRender = YES;
 
         [self setupHeader];
+        [self setupPreviewSection];
         [self setupContentStack];
         [self setupFrameSection];
         [self setupLogoSection];
@@ -142,11 +163,77 @@
         [self setupPreferenceSection];
         [self setupPlacementSection];
         (void)[self updateUIFromConfigurationAnimated:NO];
+        [self schedulePreviewRenderIfNeeded];
     }
     return self;
 }
 
 #pragma mark - Setup
+
+- (void)setupPreviewSection {
+    self.previewContainer = [[UIView alloc] init];
+    self.previewContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.previewContainer.backgroundColor = [UIColor colorWithWhite:0.06 alpha:1.0];
+    self.previewContainer.layer.cornerRadius = 18.0;
+    self.previewContainer.layer.masksToBounds = YES;
+    [self addSubview:self.previewContainer];
+
+    self.previewImageView = [[UIImageView alloc] init];
+    self.previewImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.previewImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.previewImageView.backgroundColor = [UIColor blackColor];
+    [self.previewContainer addSubview:self.previewImageView];
+
+    self.previewPlaceholderLabel = [[UILabel alloc] init];
+    self.previewPlaceholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.previewPlaceholderLabel.text = @"选择照片后可实时预览效果";
+    self.previewPlaceholderLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
+    self.previewPlaceholderLabel.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium];
+    self.previewPlaceholderLabel.numberOfLines = 2;
+    self.previewPlaceholderLabel.textAlignment = NSTextAlignmentCenter;
+    [self.previewContainer addSubview:self.previewPlaceholderLabel];
+
+    UIActivityIndicatorViewStyle indicatorStyle;
+#if defined(__IPHONE_13_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_13_0)
+    if (@available(iOS 13.0, *)) {
+        indicatorStyle = UIActivityIndicatorViewStyleMedium;
+    } else {
+        indicatorStyle = UIActivityIndicatorViewStyleWhite;
+    }
+#else
+    indicatorStyle = UIActivityIndicatorViewStyleWhite;
+#endif
+    self.previewActivityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:indicatorStyle];
+    self.previewActivityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.previewActivityIndicator.hidesWhenStopped = YES;
+    self.previewActivityIndicator.color = [UIColor whiteColor];
+    [self.previewContainer addSubview:self.previewActivityIndicator];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.previewContainer.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:12.0],
+        [self.previewContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
+        [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0]
+    ]];
+
+    self.previewHeightConstraint = [self.previewContainer.heightAnchor constraintEqualToAnchor:self.previewContainer.widthAnchor multiplier:4.0/3.0];
+    self.previewHeightConstraint.priority = UILayoutPriorityDefaultHigh;
+    self.previewHeightConstraint.active = YES;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.previewImageView.topAnchor constraintEqualToAnchor:self.previewContainer.topAnchor],
+        [self.previewImageView.leadingAnchor constraintEqualToAnchor:self.previewContainer.leadingAnchor],
+        [self.previewImageView.trailingAnchor constraintEqualToAnchor:self.previewContainer.trailingAnchor],
+        [self.previewImageView.bottomAnchor constraintEqualToAnchor:self.previewContainer.bottomAnchor],
+
+        [self.previewPlaceholderLabel.centerXAnchor constraintEqualToAnchor:self.previewContainer.centerXAnchor],
+        [self.previewPlaceholderLabel.centerYAnchor constraintEqualToAnchor:self.previewContainer.centerYAnchor],
+        [self.previewPlaceholderLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.previewContainer.leadingAnchor constant:24.0],
+        [self.previewPlaceholderLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.previewContainer.trailingAnchor constant:-24.0],
+
+        [self.previewActivityIndicator.centerXAnchor constraintEqualToAnchor:self.previewContainer.centerXAnchor],
+        [self.previewActivityIndicator.centerYAnchor constraintEqualToAnchor:self.previewContainer.centerYAnchor]
+    ]];
+}
 
 - (void)setupHeader {
     self.headerView = [[UIView alloc] init];
@@ -214,7 +301,7 @@
     UILayoutGuide *contentGuide = self.scrollView.contentLayoutGuide;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.scrollView.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:12.0],
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.previewContainer.bottomAnchor constant:16.0],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
@@ -251,7 +338,7 @@
     self.frameCollectionView.delegate = self;
     [self.frameCollectionView registerClass:[WatermarkOptionCell class] forCellWithReuseIdentifier:@"frame.cell"];
     [self.contentStack addArrangedSubview:self.frameCollectionView];
-    [self.frameCollectionView.heightAnchor constraintEqualToConstant:110.0].active = YES;
+    [self.frameCollectionView.heightAnchor constraintEqualToConstant:128.0].active = YES;
 }
 
 - (void)setupLogoSection {
@@ -271,7 +358,7 @@
     self.logoCollectionView.delegate = self;
     [self.logoCollectionView registerClass:[WatermarkOptionCell class] forCellWithReuseIdentifier:@"logo.cell"];
     [self.contentStack addArrangedSubview:self.logoCollectionView];
-    [self.logoCollectionView.heightAnchor constraintEqualToConstant:92.0].active = YES;
+    [self.logoCollectionView.heightAnchor constraintEqualToConstant:104.0].active = YES;
 }
 
 - (void)setupTextSection {
@@ -404,6 +491,144 @@
     return row;
 }
 
+#pragma mark - Preview Rendering
+
+- (UIImage *)normalizedPreviewImageFromImage:(UIImage *)image {
+    if (!image) {
+        return nil;
+    }
+    if (image.imageOrientation == UIImageOrientationUp) {
+        return image;
+    }
+    UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
+    [image drawInRect:CGRectMake(0.0, 0.0, image.size.width, image.size.height)];
+    UIImage *normalized = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return normalized ?: image;
+}
+
+- (UIImage *)scaledPreviewImageFromImage:(UIImage *)image {
+    if (!image) {
+        return nil;
+    }
+    CGFloat maxDimension = 1080.0;
+    CGFloat longestSide = MAX(image.size.width, image.size.height);
+    if (longestSide <= maxDimension) {
+        return image;
+    }
+    CGFloat scale = maxDimension / longestSide;
+    CGSize targetSize = CGSizeMake(image.size.width * scale, image.size.height * scale);
+    UIGraphicsBeginImageContextWithOptions(targetSize, YES, 1.0);
+    [image drawInRect:CGRectMake(0.0, 0.0, targetSize.width, targetSize.height)];
+    UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return scaled ?: image;
+}
+
+- (UIImage *)preparedPreviewImageFromImage:(UIImage *)image {
+    if (!image) {
+        return nil;
+    }
+    UIImage *normalized = [self normalizedPreviewImageFromImage:image];
+    return [self scaledPreviewImageFromImage:normalized];
+}
+
+- (UIImage *)fallbackPreviewImageForFrameDescriptor:(CMWatermarkFrameDescriptor * _Nullable)descriptor {
+    if (!descriptor.previewAssetName.length) {
+        return nil;
+    }
+    UIImage *cached = [self.previewImageCache objectForKey:descriptor.previewAssetName];
+    if (cached) {
+        return cached;
+    }
+    UIImage *assetImage = [UIImage imageNamed:descriptor.previewAssetName];
+    UIImage *prepared = [self preparedPreviewImageFromImage:assetImage];
+    if (prepared) {
+        [self.previewImageCache setObject:prepared forKey:descriptor.previewAssetName];
+    }
+    return prepared;
+}
+
+- (UIImage *)effectivePreviewSourceImageForConfiguration:(CMWatermarkConfiguration *)configuration descriptor:(CMWatermarkFrameDescriptor * _Nullable)descriptor {
+    if (self.userPreviewImage) {
+        return self.userPreviewImage;
+    }
+    return [self fallbackPreviewImageForFrameDescriptor:descriptor];
+}
+
+- (void)markPreviewNeedsRender {
+    self.previewNeedsRender = YES;
+    [self schedulePreviewRenderIfNeeded];
+}
+
+- (void)updatePreviewLoadingState:(BOOL)isLoading {
+    if (isLoading) {
+        if (!self.previewActivityIndicator.isAnimating) {
+            [self.previewActivityIndicator startAnimating];
+        }
+    } else {
+        [self.previewActivityIndicator stopAnimating];
+    }
+}
+
+- (void)schedulePreviewRenderIfNeeded {
+    if (!self.previewNeedsRender) {
+        return;
+    }
+    self.previewNeedsRender = NO;
+
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    UIImage *sourceImage = [self effectivePreviewSourceImageForConfiguration:self.internalConfiguration descriptor:descriptor];
+
+    if (!sourceImage) {
+        self.previewPlaceholderLabel.hidden = NO;
+        self.previewImageView.image = nil;
+        [self updatePreviewLoadingState:NO];
+        self.previewRenderToken = nil;
+        return;
+    }
+
+    self.previewPlaceholderLabel.hidden = YES;
+    self.previewImageView.image = sourceImage;
+
+    CMWatermarkConfiguration *configurationSnapshot = [self.internalConfiguration copy];
+    NSDictionary *metadataSnapshot = self.userPreviewMetadata ? [self.userPreviewMetadata copy] : nil;
+
+    if (!configurationSnapshot.isEnabled) {
+        [self updatePreviewLoadingState:NO];
+        self.previewRenderToken = nil;
+        return;
+    }
+
+    [self updatePreviewLoadingState:YES];
+
+    NSUUID *token = [NSUUID UUID];
+    self.previewRenderToken = token;
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(self.previewRenderQueue, ^{
+        @autoreleasepool {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+            UIImage *rendered = [strongSelf.previewRenderer renderImage:sourceImage withConfiguration:configurationSnapshot metadata:metadataSnapshot];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) innerStrongSelf = weakSelf;
+                if (!innerStrongSelf) {
+                    return;
+                }
+                if (![innerStrongSelf.previewRenderToken isEqual:token]) {
+                    return;
+                }
+                [innerStrongSelf updatePreviewLoadingState:NO];
+                innerStrongSelf.previewImageView.image = rendered ?: sourceImage;
+            });
+        }
+    });
+}
+
 #pragma mark - Public API
 
 - (CMWatermarkConfiguration *)configuration {
@@ -414,6 +639,7 @@
     if (!configuration) { return; }
     self.internalConfiguration = [configuration copy];
     (void)[self updateUIFromConfigurationAnimated:animated];
+    [self markPreviewNeedsRender];
 }
 
 - (void)setPanelEnabled:(BOOL)enabled animated:(BOOL)animated {
@@ -422,6 +648,9 @@
             subview.alpha = enabled ? 1.0 : 0.35;
             subview.userInteractionEnabled = enabled;
         }
+        if (self.previewContainer) {
+            self.previewContainer.alpha = enabled ? 1.0 : 0.55;
+        }
     };
     if (animated) {
         [UIView animateWithDuration:0.2 animations:updates];
@@ -429,6 +658,13 @@
         updates();
     }
     self.enableSwitch.on = enabled;
+    [self markPreviewNeedsRender];
+}
+
+- (void)updatePreviewWithImage:(UIImage *)image metadata:(NSDictionary *)metadata {
+    self.userPreviewImage = [self preparedPreviewImageFromImage:image];
+    self.userPreviewMetadata = metadata;
+    [self markPreviewNeedsRender];
 }
 
 #pragma mark - UI Refresh
@@ -714,14 +950,15 @@
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     if (collectionView == self.frameCollectionView) {
-        return CGSizeMake(120.0, 96.0);
+        return CGSizeMake(132.0, 112.0);
     }
-    return CGSizeMake(86.0, 72.0);
+    return CGSizeMake(96.0, 84.0);
 }
 
 #pragma mark - Helpers
 
 - (void)notifyUpdate {
+    [self markPreviewNeedsRender];
     if ([self.delegate respondsToSelector:@selector(watermarkPanel:didUpdateConfiguration:)]) {
         [self.delegate watermarkPanel:self didUpdateConfiguration:[self configuration]];
     }
