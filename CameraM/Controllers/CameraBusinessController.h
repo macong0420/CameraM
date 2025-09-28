@@ -15,9 +15,7 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import <MetalKit/MetalKit.h>
 #import "../Managers/CameraManager.h"
-#import "../Managers/FilterManager.h"
 #import "../Models/CMWatermarkConfiguration.h"
 #import "../Models/CMCameraLensOption.h"
 
@@ -46,9 +44,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, weak) id<CameraBusinessDelegate> delegate;
 
-// 滤镜管理
-@property (nonatomic, readonly) FilterManager *filterManager;
-
 // 状态查询接口
 @property (nonatomic, readonly) CameraResolutionMode currentResolutionMode;
 @property (nonatomic, readonly) FlashMode currentFlashMode;
@@ -65,7 +60,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 相机控制接口
 - (void)setupCameraWithPreviewView:(UIView *)previewView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
-- (void)setupCameraWithMTKView:(MTKView *)mtkView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
 - (void)startSession;
 - (void)stopSession;
 - (void)cleanup;
@@ -103,13 +97,6 @@ NS_ASSUME_NONNULL_BEGIN
                   completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
 - (void)processImportedImage:(UIImage *)image
                   completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
-
-// 滤镜控制
-- (void)setCurrentFilter:(ARFilterDescriptor *)filter withIntensity:(float)intensity;
-- (ARFilterDescriptor *)currentFilter;
-- (float)currentFilterIntensity;
-- (void)setFilterGrainIntensity:(float)grainIntensity;
-- (float)currentFilterGrainIntensity;
 
 @end
 
