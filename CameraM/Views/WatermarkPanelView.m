@@ -17,6 +17,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     WatermarkPanelSectionPlacement
 };
 
+
 @interface WatermarkOptionCell : UICollectionViewCell
 
 @property (nonatomic, strong) UIImageView *imageView;
@@ -127,6 +128,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, UIView *> *sectionContentViews;
 @property (nonatomic, assign) WatermarkPanelSection activeSection;
 
+
 @property (nonatomic, strong) UIView *previewContainer;
 @property (nonatomic, strong) UIImageView *previewImageView;
 @property (nonatomic, strong) UILabel *previewPlaceholderLabel;
@@ -227,7 +229,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
         [self.previewContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0]
     ]];
 
-    self.previewHeightConstraint = [self.previewContainer.heightAnchor constraintEqualToAnchor:self.previewContainer.widthAnchor multiplier:4.0/5.0];
+    self.previewHeightConstraint = [self.previewContainer.heightAnchor constraintEqualToAnchor:self.previewContainer.widthAnchor multiplier:4.0/3.0];
     self.previewHeightConstraint.priority = UILayoutPriorityDefaultHigh;
     self.previewHeightConstraint.active = YES;
 
@@ -403,6 +405,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
 
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.topAnchor constraintEqualToAnchor:self.toolbarView.bottomAnchor constant:16.0],
+
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
@@ -548,6 +551,11 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     self.frameCollectionView.delegate = self;
     [self.frameCollectionView registerClass:[WatermarkOptionCell class] forCellWithReuseIdentifier:@"frame.cell"];
 
+    [self.contentStack addArrangedSubview:self.frameCollectionView];
+    [self.frameCollectionView.heightAnchor constraintEqualToConstant:128.0].active = YES;
+}
+
+
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
@@ -586,6 +594,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     [self.logoCollectionView.heightAnchor constraintEqualToConstant:104.0].active = YES;
 
     return [self containerWrappingStack:stack];
+
 }
 
 - (UIView *)buildTextSectionView {
@@ -904,6 +913,7 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
             button.userInteractionEnabled = enabled;
             button.alpha = enabled ? 1.0 : 0.35;
         }
+
     };
     if (animated) {
         [UIView animateWithDuration:0.2 animations:updates];
