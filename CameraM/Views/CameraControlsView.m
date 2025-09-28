@@ -48,6 +48,9 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 @property(nonatomic, strong) UIView *modeSelector;
 @property(nonatomic, strong) UIButton *galleryButton;
 @property(nonatomic, strong) UIButton *captureButton;
+@property(nonatomic, strong) UIActivityIndicatorView *captureLoadingIndicator;
+@property(nonatomic, assign) BOOL captureButtonLoading;
+@property(nonatomic, assign) BOOL captureButtonDesiredEnabled;
 
 // 右侧专业控制区
 @property(nonatomic, strong) UIView *professionalControlsView;
@@ -103,6 +106,8 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     _lensOptions = @[];
     _lensButtons = @[];
     _currentLensIdentifier = @"";
+    _captureButtonDesiredEnabled = YES;
+    _captureButtonLoading = NO;
     [self setupUI];
   }
   return self;
@@ -222,6 +227,14 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
                forControlEvents:UIControlEventTouchUpInside];
   self.captureButton.translatesAutoresizingMaskIntoConstraints = NO;
 
+  self.captureLoadingIndicator =
+      [[UIActivityIndicatorView alloc]
+          initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+  self.captureLoadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+  self.captureLoadingIndicator.hidesWhenStopped = YES;
+  self.captureLoadingIndicator.color = [UIColor systemOrangeColor];
+  [self.captureButton addSubview:self.captureLoadingIndicator];
+
   // 拍摄模式选择器
   self.modeSelector = [[UIView alloc] init];
   self.modeSelector.translatesAutoresizingMaskIntoConstraints = NO;
@@ -230,6 +243,13 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   [self.bottomControlsView addSubview:self.galleryButton];
   [self.bottomControlsView addSubview:self.captureButton];
   [self.bottomControlsView addSubview:self.modeSelector];
+
+  [NSLayoutConstraint activateConstraints:@[
+    [self.captureLoadingIndicator.centerXAnchor
+        constraintEqualToAnchor:self.captureButton.centerXAnchor],
+    [self.captureLoadingIndicator.centerYAnchor
+        constraintEqualToAnchor:self.captureButton.centerYAnchor]
+  ]];
 }
 
 - (void)setupModeSelector {
@@ -1122,6 +1142,35 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
                   [UIColor yellowColor].CGColor;
             }];
       }];
+}
+
+- (void)setCaptureButtonEnabled:(BOOL)enabled {
+  self.captureButtonDesiredEnabled = enabled;
+  BOOL shouldEnable = enabled && !self.captureButtonLoading;
+  self.captureButton.enabled = shouldEnable;
+  self.captureButton.alpha = shouldEnable ? 1.0f : 0.6f;
+}
+
+- (void)setCaptureButtonLoading:(BOOL)isLoading {
+  if (self.captureButtonLoading == isLoading) {
+    return;
+  }
+
+  self.captureButtonLoading = isLoading;
+
+  if (isLoading) {
+    [self.captureLoadingIndicator startAnimating];
+    self.captureButton.backgroundColor =
+        [UIColor colorWithWhite:1.0 alpha:0.3];
+    self.captureButton.layer.borderColor =
+        [UIColor colorWithWhite:1.0 alpha:0.2].CGColor;
+  } else {
+    [self.captureLoadingIndicator stopAnimating];
+    self.captureButton.backgroundColor = [UIColor whiteColor];
+    self.captureButton.layer.borderColor = [UIColor whiteColor].CGColor;
+  }
+
+  [self setCaptureButtonEnabled:self.captureButtonDesiredEnabled];
 }
 
 - (void)updatePreviewVideoRect:(CGRect)videoRect {
