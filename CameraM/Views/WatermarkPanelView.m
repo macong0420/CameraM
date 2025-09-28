@@ -287,6 +287,8 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     }
 
     [button addTarget:self action:@selector(handleToolbarButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    button.userInteractionEnabled = YES;
+    button.enabled = YES;
     return button;
 }
 
@@ -550,11 +552,6 @@ typedef NS_ENUM(NSUInteger, WatermarkPanelSection) {
     self.frameCollectionView.dataSource = self;
     self.frameCollectionView.delegate = self;
     [self.frameCollectionView registerClass:[WatermarkOptionCell class] forCellWithReuseIdentifier:@"frame.cell"];
-
-    [self.contentStack addArrangedSubview:self.frameCollectionView];
-    [self.frameCollectionView.heightAnchor constraintEqualToConstant:128.0].active = YES;
-}
-
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
