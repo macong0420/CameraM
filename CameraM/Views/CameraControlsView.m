@@ -8,7 +8,6 @@
 #import "CameraControlsView.h"
 #import "../Managers/CameraManager.h"
 #import "WatermarkPanelView.h"
-#import <MetalKit/MetalKit.h>
 #import <math.h>
 
 static inline CGFloat CMAspectRatioValue(CameraAspectRatio ratio,
@@ -34,7 +33,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 @interface CameraControlsView () <WatermarkPanelViewDelegate>
 
 // 主要容器
-@property(nonatomic, strong) MTKView *previewContainer;
+@property(nonatomic, strong) UIView *previewContainer;
 
 // 顶部控制栏
 @property(nonatomic, strong) UIView *topControlsView;
@@ -49,7 +48,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 @property(nonatomic, strong) UIView *modeSelector;
 @property(nonatomic, strong) UIButton *galleryButton;
 @property(nonatomic, strong) UIButton *captureButton;
-@property(nonatomic, strong) UIButton *filterButton;
 
 // 右侧专业控制区
 @property(nonatomic, strong) UIView *professionalControlsView;
@@ -92,13 +90,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 @property(nonatomic, assign) CameraAspectRatio activeAspectRatio;
 @property(nonatomic, assign) CGRect previewVideoRect;
 
-// 滤镜面板
-@property(nonatomic, strong) UIView *filterBackdropView;
-@property(nonatomic, strong) UIView *filterPanel;
-@property(nonatomic, strong) NSLayoutConstraint *filterPanelBottomConstraint;
-@property(nonatomic, strong) NSLayoutConstraint *filterPanelHeightConstraint;
-@property(nonatomic, assign) BOOL filterPanelVisible;
-
 @end
 
 @implementation CameraControlsView
@@ -133,29 +124,17 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   [self setupAspectRatioMask];
   [self setupLensSelector];
   [self setupWatermarkPanel];
-  [self setupFilterPanel];
   [self setupPortraitLayout]; // 默认竖屏布局
 }
 
 - (void)setupPreviewContainer {
-  // 创建Metal设备
-  id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice();
-
-  self.previewContainer = [[MTKView alloc] initWithFrame:self.bounds device:metalDevice];
-  self.previewContainer.device = metalDevice;
+  self.previewContainer = [[UIView alloc] initWithFrame:self.bounds];
   self.previewContainer.backgroundColor = [UIColor blackColor];
   self.previewContainer.translatesAutoresizingMaskIntoConstraints = NO;
-
-  // 确保MTKView填充整个容器
   self.previewContainer.contentMode = UIViewContentModeScaleAspectFill;
   self.previewContainer.clipsToBounds = YES;
 
   [self addSubview:self.previewContainer];
-
-  // 调试：打印MTKView信息
-  NSLog(@"🔍 MTKView创建 - frame: %@, bounds: %@",
-        NSStringFromCGRect(self.previewContainer.frame),
-        NSStringFromCGRect(self.previewContainer.bounds));
 
   // 添加手势
   UITapGestureRecognizer *tapGesture =
@@ -243,11 +222,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
                forControlEvents:UIControlEventTouchUpInside];
   self.captureButton.translatesAutoresizingMaskIntoConstraints = NO;
 
-  // 滤镜按钮
-  self.filterButton =
-      [self createControlButtonWithImageName:@"camera.filters"
-                                      action:@selector(filterButtonTapped:)];
-
   // 拍摄模式选择器
   self.modeSelector = [[UIView alloc] init];
   self.modeSelector.translatesAutoresizingMaskIntoConstraints = NO;
@@ -255,7 +229,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   [self.bottomControlsView addSubview:self.galleryButton];
   [self.bottomControlsView addSubview:self.captureButton];
-  [self.bottomControlsView addSubview:self.filterButton];
   [self.bottomControlsView addSubview:self.modeSelector];
 }
 
@@ -618,7 +591,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   // 调试：在下一个运行循环中检查约束是否生效
   dispatch_async(dispatch_get_main_queue(), ^{
-    NSLog(@"🔍 约束设置后 - CameraControlsView: %@, MTKView: %@",
+    NSLog(@"🔍 约束设置后 - CameraControlsView: %@, 预览容器: %@",
           NSStringFromCGRect(self.frame),
           NSStringFromCGRect(self.previewContainer.frame));
   });
@@ -724,14 +697,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.captureButton.widthAnchor constraintEqualToConstant:70],
     [self.captureButton.heightAnchor constraintEqualToConstant:70],
 
-    [self.filterButton.trailingAnchor
-        constraintEqualToAnchor:self.bottomControlsView.trailingAnchor
-                       constant:-30],
-    [self.filterButton.bottomAnchor
-        constraintEqualToAnchor:self.bottomControlsView.bottomAnchor
-                       constant:-20],
-    [self.filterButton.widthAnchor constraintEqualToConstant:50],
-    [self.filterButton.heightAnchor constraintEqualToConstant:50]
   ]];
 
   // 专业控制区
@@ -869,12 +834,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   if ([self.delegate respondsToSelector:@selector(didTapCaptureButton)]) {
     [self.delegate didTapCaptureButton];
-  }
-}
-
-- (void)filterButtonTapped:(UIButton *)sender {
-  if ([self.delegate respondsToSelector:@selector(didTapFilterButton)]) {
-    [self.delegate didTapFilterButton];
   }
 }
 
@@ -1538,16 +1497,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.captureButton.widthAnchor constraintEqualToConstant:70],
     [self.captureButton.heightAnchor constraintEqualToConstant:70],
 
-    // 滤镜按钮
-    [self.filterButton.trailingAnchor
-        constraintEqualToAnchor:self.bottomControlsView.trailingAnchor
-                       constant:-30],
-    [self.filterButton.bottomAnchor
-        constraintEqualToAnchor:self.bottomControlsView.bottomAnchor
-                       constant:-20],
-    [self.filterButton.widthAnchor constraintEqualToConstant:50],
-    [self.filterButton.heightAnchor constraintEqualToConstant:50],
-
     // 专业控制区域
     [self.professionalControlsView.trailingAnchor
         constraintEqualToAnchor:self.trailingAnchor],
@@ -1738,15 +1687,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.captureButton.widthAnchor constraintEqualToConstant:70],
     [self.captureButton.heightAnchor constraintEqualToConstant:70],
 
-    // 滤镜按钮
-    [self.filterButton.trailingAnchor
-        constraintEqualToAnchor:self.bottomControlsView.trailingAnchor
-                       constant:-30],
-    [self.filterButton.bottomAnchor
-        constraintEqualToAnchor:self.bottomControlsView.bottomAnchor
-                       constant:-15],
-    [self.filterButton.widthAnchor constraintEqualToConstant:50],
-    [self.filterButton.heightAnchor constraintEqualToConstant:50]
   ]];
 
   // 专业控制区域（横屏时保持右侧）
@@ -1858,20 +1798,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 - (void)layoutSubviews {
   [super layoutSubviews];
 
-  // 确保MTKView的drawable size与实际尺寸匹配
-  if (self.previewContainer && !CGRectIsEmpty(self.previewContainer.bounds)) {
-    CGFloat scale = [UIScreen mainScreen].scale;
-    CGSize viewSize = self.previewContainer.bounds.size;
-    CGSize newDrawableSize = CGSizeMake(viewSize.width * scale, viewSize.height * scale);
-
-    if (!CGSizeEqualToSize(self.previewContainer.drawableSize, newDrawableSize)) {
-      self.previewContainer.drawableSize = newDrawableSize;
-      NSLog(@"🔍 MTKView layoutSubviews - 更新drawableSize: %@, bounds: %@",
-            NSStringFromCGSize(newDrawableSize),
-            NSStringFromCGRect(self.previewContainer.bounds));
-    }
-  }
-
   // 重新创建网格线以适应屏幕尺寸
   if (self.gridLinesView.subviews.count == 0) {
     [self createGridLinesWithFrame];
@@ -1909,146 +1835,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     horizontalLine.frame = CGRectMake(0, y, gridFrame.size.width, 1);
     [self.gridLinesView addSubview:horizontalLine];
   }
-}
-
-#pragma mark - 滤镜面板管理
-
-- (void)setupFilterPanel {
-  // 创建滤镜面板背景遮罩
-  self.filterBackdropView = [[UIView alloc] init];
-  self.filterBackdropView.translatesAutoresizingMaskIntoConstraints = NO;
-  self.filterBackdropView.backgroundColor = [UIColor colorWithWhite:0
-                                                              alpha:0.6];
-  self.filterBackdropView.alpha = 0.0;
-  self.filterBackdropView.hidden = YES;
-  [self addSubview:self.filterBackdropView];
-
-  // 添加背景点击手势
-  UITapGestureRecognizer *backdropTap = [[UITapGestureRecognizer alloc]
-      initWithTarget:self
-              action:@selector(handleFilterBackdropTap)];
-  [self.filterBackdropView addGestureRecognizer:backdropTap];
-
-  // 设置背景遮罩约束
-  [NSLayoutConstraint activateConstraints:@[
-    [self.filterBackdropView.topAnchor constraintEqualToAnchor:self.topAnchor],
-    [self.filterBackdropView.leadingAnchor
-        constraintEqualToAnchor:self.leadingAnchor],
-    [self.filterBackdropView.trailingAnchor
-        constraintEqualToAnchor:self.trailingAnchor],
-    [self.filterBackdropView.bottomAnchor
-        constraintEqualToAnchor:self.bottomAnchor]
-  ]];
-
-  // 初始化滤镜面板约束（面板将在showFilterPanel时动态创建）
-  self.filterPanelVisible = NO;
-}
-
-- (void)handleFilterBackdropTap {
-  [self hideFilterPanel];
-}
-
-- (void)showFilterPanel:(UIView *)filterPanel {
-  if (self.filterPanelVisible || !filterPanel) {
-    return;
-  }
-
-  // 如果水印面板正在显示，先隐藏它
-  if (self.watermarkPanelVisible) {
-    [self dismissWatermarkPanel];
-  }
-
-  // 设置滤镜面板
-  self.filterPanel = filterPanel;
-  self.filterPanel.translatesAutoresizingMaskIntoConstraints = NO;
-  self.filterPanel.hidden = YES;
-  [self addSubview:self.filterPanel];
-
-  // 计算面板高度
-  CGFloat panelHeight = [self desiredFilterPanelHeight];
-
-  // 创建约束
-  self.filterPanelBottomConstraint = [self.filterPanel.bottomAnchor
-      constraintEqualToAnchor:self.bottomAnchor
-                     constant:panelHeight]; // 初始位置在屏幕下方
-  self.filterPanelHeightConstraint =
-      [self.filterPanel.heightAnchor constraintEqualToConstant:panelHeight];
-
-  [NSLayoutConstraint activateConstraints:@[
-    [self.filterPanel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-    [self.filterPanel.trailingAnchor
-        constraintEqualToAnchor:self.trailingAnchor],
-    self.filterPanelBottomConstraint, self.filterPanelHeightConstraint
-  ]];
-
-  [self layoutIfNeeded];
-
-  // 显示背景和面板
-  self.filterPanelVisible = YES;
-  self.filterBackdropView.hidden = NO;
-  self.filterPanel.hidden = NO;
-
-  [self bringSubviewToFront:self.filterBackdropView];
-  [self bringSubviewToFront:self.filterPanel];
-
-  // 更新约束以显示面板
-  self.filterPanelBottomConstraint.constant = 0;
-
-  // 执行动画
-  [UIView animateWithDuration:0.3
-                        delay:0
-       usingSpringWithDamping:0.85
-        initialSpringVelocity:0.4
-                      options:UIViewAnimationOptionCurveEaseInOut
-                   animations:^{
-                     self.filterBackdropView.alpha = 1.0;
-                     [self layoutIfNeeded];
-                   }
-                   completion:nil];
-}
-
-- (void)hideFilterPanel {
-  if (!self.filterPanelVisible) {
-    return;
-  }
-
-  self.filterPanelVisible = NO;
-
-  // 更新约束以隐藏面板
-  CGFloat panelHeight = self.filterPanelHeightConstraint.constant;
-  self.filterPanelBottomConstraint.constant = panelHeight;
-
-  [UIView animateWithDuration:0.25
-      animations:^{
-        self.filterBackdropView.alpha = 0.0;
-        [self layoutIfNeeded];
-      }
-      completion:^(BOOL finished) {
-        self.filterBackdropView.hidden = YES;
-        self.filterPanel.hidden = YES;
-
-        // 清理约束和面板
-        if (self.filterPanelBottomConstraint) {
-          self.filterPanelBottomConstraint.active = NO;
-          self.filterPanelBottomConstraint = nil;
-        }
-        if (self.filterPanelHeightConstraint) {
-          self.filterPanelHeightConstraint.active = NO;
-          self.filterPanelHeightConstraint = nil;
-        }
-
-        [self.filterPanel removeFromSuperview];
-        self.filterPanel = nil;
-      }];
-}
-
-- (BOOL)isFilterPanelVisible {
-  return self.filterPanelVisible;
-}
-
-- (CGFloat)desiredFilterPanelHeight {
-  // 滤镜面板高度：强度控制(60) + 滤镜集合视图(130) + 内边距(40) = 230
-  return 230.0f;
 }
 
 @end

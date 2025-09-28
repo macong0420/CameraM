@@ -7,18 +7,14 @@
 
 #import "CameraViewController.h"
 #import "Controllers/CameraBusinessController.h"
-#import "Managers/FilterManager.h"
-#import "Models/ARFilterDescriptor.h"
 #import "Models/CMCameraLensOption.h"
 #import "Views/CameraControlsView.h"
-#import "Views/FilterPanelView.h"
 #import "Views/WatermarkPanelView.h"
 #import <PhotosUI/PhotosUI.h>
 
 @interface CameraViewController () <
     CameraControlsDelegate, CameraBusinessDelegate,
-    PHPickerViewControllerDelegate, WatermarkPanelViewDelegate,
-    FilterPanelDelegate>
+    PHPickerViewControllerDelegate, WatermarkPanelViewDelegate>
 
 // 分离的组件 - 高内聚低耦合
 @property(nonatomic, strong) CameraControlsView *controlsView;
@@ -32,8 +28,6 @@
 @property(nonatomic, strong) UIImage *pendingImportedImage;
 @property(nonatomic, strong)
     CMWatermarkConfiguration *pendingImportConfiguration;
-@property(nonatomic, strong) FilterPanelView *filterPanel;
-@property(nonatomic, assign) BOOL isFilterPanelVisible;
 
 @end
 
@@ -103,8 +97,8 @@
 
 - (void)setupCamera {
   [self.businessController
-      setupCameraWithMTKView:self.controlsView.previewContainer
-                  completion:^(BOOL success, NSError *_Nullable error) {
+      setupCameraWithPreviewView:self.controlsView.previewContainer
+                       completion:^(BOOL success, NSError *_Nullable error) {
                     if (success) {
                       NSLog(@"相机设置成功");
                       [self updateUIState];
@@ -193,10 +187,6 @@
 
 - (void)didTapSettingsButton {
   NSLog(@"设置按钮点击");
-}
-
-- (void)didTapFilterButton {
-  [self toggleFilterPanel];
 }
 
 - (void)didChangeExposure:(float)value {
@@ -791,87 +781,6 @@
               [flashView removeFromSuperview];
             }];
       }];
-}
-
-#pragma mark - Filter Panel Management
-
-- (void)toggleFilterPanel {
-  if (self.isFilterPanelVisible) {
-    [self hideFilterPanel];
-  } else {
-    [self showFilterPanel];
-  }
-}
-
-- (void)showFilterPanel {
-  if (self.isFilterPanelVisible) {
-    return;
-  }
-
-  if (!self.filterPanel) {
-    self.filterPanel = [[FilterPanelView alloc] init];
-    self.filterPanel.delegate = self;
-    FilterManager *filterManager = [FilterManager sharedManager];
-    [self.filterPanel updateWithFilters:filterManager.availableFilters];
-    self.filterPanel.currentFilter = filterManager.currentFilter;
-    [self.filterPanel setIntensity:filterManager.intensity];
-    [self.filterPanel setGrainIntensity:filterManager.grainIntensity];
-  }
-
-  [self.controlsView showFilterPanel:self.filterPanel];
-  self.isFilterPanelVisible = YES;
-}
-
-- (void)hideFilterPanel {
-  if (!self.isFilterPanelVisible) {
-    return;
-  }
-
-  [self.controlsView hideFilterPanel];
-  self.isFilterPanelVisible = NO;
-}
-
-#pragma mark - FilterPanelDelegate
-
-- (void)didSelectFilter:(ARFilterDescriptor *)filter {
-  // 通过业务控制器设置滤镜，这样会同时更新 FilterManager 和应用到相机预览
-  [self.businessController
-      setCurrentFilter:filter
-         withIntensity:filter.intensity];
-
-  // 更新 UI 状态
-  self.filterPanel.currentFilter = filter;
-  NSLog(@"选择滤镜: %@", filter.displayName);
-}
-
-- (void)didChangeFilterIntensity:(float)intensity {
-  // 通过业务控制器设置滤镜强度，这样会同时更新 FilterManager 和 CameraManager
-  ARFilterDescriptor *currentFilter = self.businessController.currentFilter;
-  if (currentFilter) {
-    [self.businessController setCurrentFilter:currentFilter
-                                withIntensity:intensity];
-  } else {
-    FilterManager *filterManager = [FilterManager sharedManager];
-    filterManager.intensity = intensity;
-  }
-  NSLog(@"滤镜强度变化: %.2f", intensity);
-}
-
-- (void)didChangeFilterGrainIntensity:(float)grainIntensity {
-  ARFilterDescriptor *currentFilter = self.businessController.currentFilter;
-  if (currentFilter) {
-    [self.businessController setFilterGrainIntensity:grainIntensity];
-  } else {
-    FilterManager *filterManager = [FilterManager sharedManager];
-    filterManager.grainIntensity = grainIntensity;
-  }
-  NSLog(@"滤镜颗粒变化: %.2f", grainIntensity);
-}
-
-- (void)didToggleFilterFavorite:(ARFilterDescriptor *)filter {
-  filter.isFavorite = !filter.isFavorite;
-  NSLog(@"切换滤镜收藏状态: %@ - %@", filter.displayName,
-        filter.isFavorite ? @"已收藏" : @"取消收藏");
 }
 
 #pragma mark - 内存管理

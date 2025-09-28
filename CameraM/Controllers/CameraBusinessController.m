@@ -7,8 +7,6 @@
 
 #import "CameraBusinessController.h"
 #import "../Managers/CMWatermarkRenderer.h"
-#import "../Managers/FilterManager.h"
-#import "../Models/ARFilterDescriptor.h"
 
 static NSString *const kCMWatermarkConfigurationStorageKey =
     @"com.cameram.watermark.configuration";
@@ -41,7 +39,6 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 @property(nonatomic, copy) NSArray<CMCameraLensOption *> *availableLensOptions;
 @property(nonatomic, strong) CMCameraLensOption *currentLensOption;
 @property(nonatomic, copy) NSString *restoredLensIdentifier;
-@property(nonatomic, strong) FilterManager *filterManager;
 
 - (void)persistWatermarkConfiguration;
 - (void)loadPersistedWatermarkConfiguration;
@@ -65,7 +62,6 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     _currentLensOption = self.cameraManager.currentLensOption;
     _restoredLensIdentifier = [[NSUserDefaults standardUserDefaults]
         stringForKey:kCMLensSelectionStorageKey];
-    _filterManager = [FilterManager sharedManager];
   }
   return self;
 }
@@ -106,22 +102,6 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
                             (void (^)(BOOL success,
                                       NSError *_Nullable error))completion {
   [self.cameraManager setupCameraWithPreviewView:previewView
-                                      completion:completion];
-}
-
-- (void)setupCameraWithMTKView:(MTKView *)mtkView
-                    completion:(void (^)(BOOL success,
-                                         NSError *_Nullable error))completion {
-  // 首先设置MTKView滤镜预览
-  [self.cameraManager setupFilterPreviewWithMTKView:mtkView];
-
-  // 然后设置相机预览（使用MTKView的父视图）
-  UIView *previewContainer = mtkView.superview;
-  if (!previewContainer) {
-    previewContainer = mtkView; // 如果没有父视图，直接使用MTKView
-  }
-
-  [self.cameraManager setupCameraWithPreviewView:previewContainer
                                       completion:completion];
 }
 
@@ -226,7 +206,8 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 }
 
 - (CGRect)activePreviewRectInViewSize:(CGSize)viewSize {
-  return [self.cameraManager activeFormatPreviewRectInViewSize:viewSize];
+  return [self.cameraManager previewRectForAspectRatio:self.currentAspectRatio
+                                             inViewSize:viewSize];
 }
 
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
@@ -278,38 +259,14 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
         workingImage = CMNormalizeImageOrientation(image);
       }
 
-      // 首先应用滤镜（如果有的话）
-      UIImage *filteredImage = workingImage;
-      if (strongSelf.filterManager.currentFilter &&
-          ![strongSelf.filterManager.currentFilter.identifier
-              isEqualToString:@"none"] &&
-          ![strongSelf.filterManager.currentFilter.identifier
-              isEqualToString:@"original"]) {
-        CIImage *ciImage = [CIImage imageWithCGImage:workingImage.CGImage];
-        CIImage *filteredCIImage =
-            [strongSelf.filterManager applyCurrentFilterToImage:ciImage];
-        if (filteredCIImage) {
-          CIContext *context = [CIContext contextWithOptions:nil];
-          CGImageRef cgImage = [context createCGImage:filteredCIImage
-                                             fromRect:filteredCIImage.extent];
-          if (cgImage) {
-            filteredImage =
-                [UIImage imageWithCGImage:cgImage
-                                    scale:workingImage.scale
-                              orientation:workingImage.imageOrientation];
-            CGImageRelease(cgImage);
-          }
-        }
-      }
-
-      // 然后应用水印（在滤镜之后）
+      // 应用水印
       CMWatermarkConfiguration *configurationSnapshot =
           configuration ? [configuration copy]
                         : [strongSelf.watermarkConfiguration copy];
-      UIImage *renderedImage = filteredImage;
+      UIImage *renderedImage = workingImage;
       if (configurationSnapshot) {
         UIImage *watermarked =
-            [strongSelf.watermarkRenderer renderImage:filteredImage
+            [strongSelf.watermarkRenderer renderImage:workingImage
                                     withConfiguration:configurationSnapshot
                                              metadata:metadata];
         if (watermarked) {
@@ -537,40 +494,6 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   }
 
   [self persistCurrentLensSelection];
-}
-
-#pragma mark - 滤镜控制
-
-- (void)setCurrentFilter:(ARFilterDescriptor *)filter
-           withIntensity:(float)intensity {
-  [self.filterManager setCurrentFilter:filter withIntensity:intensity];
-
-  // 同时设置相机预览滤镜
-  [self.cameraManager setPreviewFilter:filter
-                          withIntensity:intensity
-                        grainIntensity:self.filterManager.grainIntensity];
-}
-
-- (ARFilterDescriptor *)currentFilter {
-  return self.filterManager.currentFilter;
-}
-
-- (float)currentFilterIntensity {
-  return self.filterManager.intensity;
-}
-
-- (void)setFilterGrainIntensity:(float)grainIntensity {
-  [self.filterManager setGrainIntensity:grainIntensity];
-  ARFilterDescriptor *filter = self.filterManager.currentFilter;
-  if (filter) {
-    [self.cameraManager setPreviewFilter:filter
-                            withIntensity:self.filterManager.intensity
-                          grainIntensity:self.filterManager.grainIntensity];
-  }
-}
-
-- (float)currentFilterGrainIntensity {
-  return self.filterManager.grainIntensity;
 }
 
 @end

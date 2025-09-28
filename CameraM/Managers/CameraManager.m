@@ -6,9 +6,6 @@
 //
 
 #import "CameraManager.h"
-#import "../Managers/FilterManager.h"
-#import "../Models/ARFilterDescriptor.h"
-#import "../Models/ARFilterPipeline.h"
 #import "../Models/CMCameraLensOption.h"
 #import <CoreLocation/CoreLocation.h>
 #import <CoreMotion/CoreMotion.h>
@@ -17,9 +14,7 @@
 #import <float.h>
 #import <math.h>
 
-@interface CameraManager () <AVCapturePhotoCaptureDelegate,
-                             AVCaptureVideoDataOutputSampleBufferDelegate,
-                             MTKViewDelegate>
+@interface CameraManager () <AVCapturePhotoCaptureDelegate>
 
 // AVFoundation 核心组件
 @property(nonatomic, strong) AVCaptureSession *captureSession;
@@ -57,17 +52,6 @@
 @property(nonatomic, strong) CMCameraLensOption *currentLensOption;
 @property(nonatomic, strong)
     NSDictionary<NSString *, AVCaptureDevice *> *lensDeviceMap;
-
-// 滤镜预览 - MTKView方案
-@property(nonatomic, strong) MTKView *mtkView;
-@property(nonatomic, strong) id<MTLDevice> metalDevice;
-@property(nonatomic, strong) CIContext *filterContext;
-@property(nonatomic, strong) CIImage *latestCIImage;
-@property(nonatomic, strong) ARFilterDescriptor *previewFilter;
-@property(nonatomic, assign) float previewFilterIntensity;
-@property(nonatomic, assign) float previewFilterGrainIntensity;
-@property(nonatomic, strong) dispatch_queue_t videoDataQueue;
-@property(nonatomic, strong) AVCaptureVideoDataOutput *videoDataOutput;
 
 - (NSArray<AVCaptureDevice *> *)discoverDevicesForPosition:
     (CameraPosition)position;
@@ -139,24 +123,6 @@
 
   // 初始化方向监听
   _motionManager = [[CMMotionManager alloc] init];
-
-  // 初始化滤镜相关属性
-  _videoDataQueue =
-      dispatch_queue_create("com.cameram.videodata", DISPATCH_QUEUE_SERIAL);
-  _metalDevice = MTLCreateSystemDefaultDevice();
-  _previewFilterIntensity = 1.0f;
-  _previewFilterGrainIntensity = 0.3f;
-
-  // 创建CIContext使用Metal后端
-  if (_metalDevice) {
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    _filterContext = [CIContext
-        contextWithMTLDevice:_metalDevice
-                     options:@{
-                       kCIContextWorkingColorSpace : (__bridge id)colorSpace
-                     }];
-    CGColorSpaceRelease(colorSpace);
-  }
 
   // 检查4800万像素支持
   [self checkUltraHighResolutionSupport];
@@ -1115,26 +1081,6 @@
     return NO;
   }
 
-  // 创建视频数据输出用于滤镜预览
-  self.videoDataOutput = [[AVCaptureVideoDataOutput alloc] init];
-  self.videoDataOutput.videoSettings = @{
-    (NSString *)kCVPixelBufferPixelFormatTypeKey :
-        @(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
-  };
-  [self.videoDataOutput setSampleBufferDelegate:self queue:self.videoDataQueue];
-  self.videoDataOutput.alwaysDiscardsLateVideoFrames = YES;
-
-  if ([self.captureSession canAddOutput:self.videoDataOutput]) {
-    [self.captureSession addOutput:self.videoDataOutput];
-
-    // 设置视频方向
-    AVCaptureConnection *connection =
-        [self.videoDataOutput connectionWithMediaType:AVMediaTypeVideo];
-    if (connection.isVideoOrientationSupported) {
-      connection.videoOrientation = AVCaptureVideoOrientationPortrait;
-    }
-  }
-
   [self updateUltraHighResolutionSupportForDevice:self.currentDevice];
 
   return YES;
@@ -1807,202 +1753,6 @@
 
 - (void)dealloc {
   [self cleanup];
-}
-
-#pragma mark - 滤镜预览 - MTKView方案
-
-- (void)setupFilterPreviewWithMTKView:(MTKView *)mtkView {
-  self.mtkView = mtkView;
-  self.mtkView.device = self.metalDevice;
-  self.mtkView.framebufferOnly = NO;
-  self.mtkView.enableSetNeedsDisplay = NO;
-  self.mtkView.paused = NO;
-  self.mtkView.delegate = self;
-
-  // 关键设置：确保 MTKView 正确配置
-  self.mtkView.autoResizeDrawable = YES;
-  self.mtkView.preferredFramesPerSecond = 60;
-  self.mtkView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-
-  // 强制设置 drawable size 为视图的实际尺寸
-  CGFloat scale = [UIScreen mainScreen].scale;
-  CGSize viewSize = mtkView.bounds.size;
-  mtkView.drawableSize = CGSizeMake(viewSize.width * scale, viewSize.height * scale);
-
-  NSLog(@"🎨 MTKView滤镜预览已设置 - frame: %@, drawableSize: %@, scale: %.1f",
-        NSStringFromCGRect(mtkView.frame),
-        NSStringFromCGSize(mtkView.drawableSize),
-        scale);
-}
-
-- (void)setPreviewFilter:(ARFilterDescriptor *)filter
-           withIntensity:(float)intensity
-         grainIntensity:(float)grainIntensity {
-  dispatch_async(dispatch_get_main_queue(), ^{
-    self.previewFilter = filter;
-    self.previewFilterIntensity = MAX(0.0f, MIN(1.0f, intensity));
-    self.previewFilterGrainIntensity = MAX(0.0f, MIN(1.0f, grainIntensity));
-
-    if (filter && filter.supportsGrainAdjustment) {
-      filter.grainIntensity = self.previewFilterGrainIntensity;
-    }
-
-    // 记录滤镜切换日志
-    if (filter) {
-      NSLog(@"🎨 设置预览滤镜: %@ (强度: %.2f)", filter.displayName,
-            self.previewFilterIntensity);
-      if (filter.supportsGrainAdjustment) {
-        NSLog(@"🎞️ 颗粒强度: %.2f", self.previewFilterGrainIntensity);
-      }
-    } else {
-      NSLog(@"🎨 清除预览滤镜");
-    }
-  });
-}
-
-- (void)clearPreviewFilter {
-  dispatch_async(dispatch_get_main_queue(), ^{
-    self.previewFilter = nil;
-    self.previewFilterIntensity = 1.0f;
-  });
-}
-
-#pragma mark - AVCaptureVideoDataOutputSampleBufferDelegate
-
-- (void)captureOutput:(AVCaptureOutput *)output
-    didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
-           fromConnection:(AVCaptureConnection *)connection {
-
-  CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-  if (!pixelBuffer) {
-    return;
-  }
-
-  // 创建CIImage并指定色彩空间
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-  CIImage *ciImage = [CIImage
-      imageWithCVPixelBuffer:pixelBuffer
-                     options:@{kCIImageColorSpace : (__bridge id)colorSpace}];
-  CGColorSpaceRelease(colorSpace);
-
-  if (ciImage) {
-    self.latestCIImage = ciImage;
-
-    // 通知MTKView重绘
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if (self.mtkView) {
-        [self.mtkView draw];
-      }
-    });
-  }
-}
-
-#pragma mark - MTKViewDelegate
-
-- (void)drawInMTKView:(MTKView *)view {
-  if (!self.latestCIImage) {
-    return;
-  }
-
-  // 调试：打印MTKView的实际尺寸
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    NSLog(@"🔍 MTKView渲染 - frame: %@, bounds: %@, drawableSize: %@",
-          NSStringFromCGRect(view.frame),
-          NSStringFromCGRect(view.bounds),
-          NSStringFromCGSize(view.drawableSize));
-  });
-
-  CIImage *sourceImage = self.latestCIImage;
-  CIImage *outputImage = sourceImage;
-
-  // 应用滤镜
-  if (self.previewFilter &&
-      ![self.previewFilter.identifier isEqualToString:@"none"] &&
-      ![self.previewFilter.identifier isEqualToString:@"original"]) {
-
-    if (self.previewFilter.pipeline) {
-      self.previewFilter.pipeline.intensity = self.previewFilterIntensity;
-      if (self.previewFilter.supportsGrainAdjustment) {
-        self.previewFilter.pipeline.grainIntensity =
-            self.previewFilterGrainIntensity;
-      }
-      outputImage = [self.previewFilter.pipeline process:sourceImage];
-
-      if (!outputImage) {
-        outputImage = sourceImage; // 如果滤镜处理失败，使用原图
-      }
-    }
-  }
-
-  CGRect imageExtent = outputImage.extent;
-  if (CGRectIsEmpty(imageExtent)) {
-    return;
-  }
-
-  CGSize drawableSize = view.drawableSize;
-  if (drawableSize.width <= 0.0f || drawableSize.height <= 0.0f) {
-    CGSize boundsSize = view.bounds.size;
-    drawableSize = CGSizeMake(MAX(boundsSize.width, 1.0f),
-                              MAX(boundsSize.height, 1.0f));
-  }
-  CGRect targetRect = CGRectMake(0, 0, drawableSize.width, drawableSize.height);
-  if (CGRectIsEmpty(targetRect)) {
-    return;
-  }
-
-  CIImage *normalizedImage =
-      [outputImage imageByApplyingTransform:CGAffineTransformMakeTranslation(
-                                             -imageExtent.origin.x,
-                                             -imageExtent.origin.y)];
-
-  CGFloat imageAspect = imageExtent.size.width / imageExtent.size.height;
-  CGFloat targetAspect = targetRect.size.width / targetRect.size.height;
-  CGFloat scale = 1.0f;
-  if (imageAspect > targetAspect) {
-    scale = targetRect.size.height / imageExtent.size.height;
-  } else {
-    scale = targetRect.size.width / imageExtent.size.width;
-  }
-
-  CIImage *scaledImage =
-      [normalizedImage imageByApplyingTransform:CGAffineTransformMakeScale(scale, scale)];
-
-  CGFloat scaledWidth = imageExtent.size.width * scale;
-  CGFloat scaledHeight = imageExtent.size.height * scale;
-  CGFloat offsetX = (targetRect.size.width - scaledWidth) * 0.5f;
-  CGFloat offsetY = (targetRect.size.height - scaledHeight) * 0.5f;
-
-  if (fabs(offsetX) > FLT_EPSILON || fabs(offsetY) > FLT_EPSILON) {
-    scaledImage =
-        [scaledImage imageByApplyingTransform:CGAffineTransformMakeTranslation(
-                                             offsetX, offsetY)];
-  }
-
-  CIImage *finalImage = [scaledImage imageByCroppingToRect:targetRect];
-
-  // 渲染到MTKView
-  id<CAMetalDrawable> drawable = view.currentDrawable;
-  if (drawable && self.filterContext) {
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    [self.filterContext render:finalImage
-                  toMTLTexture:drawable.texture
-                 commandBuffer:nil
-                        bounds:targetRect
-                    colorSpace:colorSpace];
-    CGColorSpaceRelease(colorSpace);
-
-    [drawable present];
-  }
-}
-
-- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size {
-  NSLog(@"🔍 MTKView drawableSize 改变: %@ -> frame: %@",
-        NSStringFromCGSize(size),
-        NSStringFromCGRect(view.frame));
-
-  // 强制重新渲染
-  [view setNeedsDisplay];
 }
 
 @end

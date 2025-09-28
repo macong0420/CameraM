@@ -21,7 +21,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 // 前向声明，引用CameraManager中的定义
 @class CameraManager;
-@class MTKView;
 typedef NS_ENUM(NSInteger, CameraAspectRatio);
 typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 
@@ -42,7 +41,6 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)didTapSwitchCameraButton;
 - (void)didTapFrameWatermarkButton;
 - (void)didTapSettingsButton;
-- (void)didTapFilterButton;
 - (void)didSelectLensOption:(CMCameraLensOption *)lensOption;
 
 // 专业控制
@@ -66,7 +64,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 @property (nonatomic, weak) id<CameraControlsDelegate> delegate;
 
 // UI组件访问接口
-@property (nonatomic, readonly) MTKView *previewContainer;
+@property (nonatomic, readonly) UIView *previewContainer;
 @property (nonatomic, readonly) UIButton *captureButton;
 @property (nonatomic, readonly) UIButton *flashButton;
 @property (nonatomic, readonly) UIButton *gridButton;
@@ -92,11 +90,6 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 - (void)presentWatermarkPanel;
 - (void)dismissWatermarkPanel;
 - (BOOL)isWatermarkPanelVisible;
-
-// 滤镜面板
-- (void)showFilterPanel:(UIView *)filterPanel;
-- (void)hideFilterPanel;
-- (BOOL)isFilterPanelVisible;
 
 @end
 
