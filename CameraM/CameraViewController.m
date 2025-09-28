@@ -611,11 +611,11 @@
   [self.view layoutIfNeeded];
   CGFloat safeTop = self.view.safeAreaInsets.top;
   CGFloat availableHeight = screenHeight - safeTop - 24.0f;
-  CGFloat minimumHeight = 360.0f;
+  CGFloat minimumHeight = 520.0f;
   if (availableHeight < minimumHeight) {
     availableHeight = minimumHeight;
   }
-  CGFloat targetHeight = screenHeight * 0.7f;
+  CGFloat targetHeight = screenHeight * 0.82f;
   targetHeight = MIN(targetHeight, availableHeight);
   targetHeight = MAX(targetHeight, minimumHeight);
   return targetHeight;
@@ -647,6 +647,8 @@
 
   if (self.importCustomizationOverlay.superview) {
     [self.importWatermarkPanel applyConfiguration:configuration animated:NO];
+    [self.importWatermarkPanel updatePreviewWithImage:self.pendingImportedImage
+                                            metadata:self.pendingImportMetadata];
     self.pendingImportConfiguration = [configuration copy];
     return;
   }
@@ -669,6 +671,8 @@
   panel.translatesAutoresizingMaskIntoConstraints = NO;
   panel.delegate = self;
   [panel applyConfiguration:configuration animated:NO];
+  [panel updatePreviewWithImage:self.pendingImportedImage
+                       metadata:self.pendingImportMetadata];
 
   UIStackView *buttons = [[UIStackView alloc] init];
   buttons.translatesAutoresizingMaskIntoConstraints = NO;
