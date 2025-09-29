@@ -568,17 +568,18 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     rendererScale = MAX([UIScreen mainScreen].scale, 1.0f);
   }
 
-  const CGFloat strokeWidth = -1.0f / rendererScale;
-  UIColor *strokeColor = [UIColor colorWithWhite:0.0f alpha:0.35f];
+  NSShadow *textShadow = [[NSShadow alloc] init];
+  textShadow.shadowOffset = CGSizeMake(0.0f, 2.0f / rendererScale);
+  textShadow.shadowBlurRadius = 4.0f / rendererScale;
+  textShadow.shadowColor = [UIColor colorWithWhite:0.0f alpha:0.6f];
 
-  NSDictionary * (^attributesForFont)(UIFont *) =
+  NSDictionary * (^fillAttributesForFont)(UIFont *) =
       ^NSDictionary *(UIFont *font) {
         return @{
           NSFontAttributeName : font,
           NSForegroundColorAttributeName : [UIColor whiteColor],
-          NSStrokeColorAttributeName : strokeColor,
-          NSStrokeWidthAttributeName : @(strokeWidth),
-          NSParagraphStyleAttributeName : centerParagraph
+          NSParagraphStyleAttributeName : centerParagraph,
+          NSShadowAttributeName : textShadow
         };
       };
 
@@ -674,10 +675,10 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     if (text.length == 0 || !font) {
       continue;
     }
-    NSDictionary *attributes = attributesForFont(font);
+    NSDictionary *fillAttributes = fillAttributesForFont(font);
     CGRect lineRect =
         CGRectMake(horizontalMargin, currentY, textWidth, font.lineHeight);
-    [text drawInRect:lineRect withAttributes:attributes];
+    [text drawInRect:lineRect withAttributes:fillAttributes];
     currentY = CGRectGetMaxY(lineRect);
     if (index < lines.count - 1) {
       currentY += lineSpacing;
