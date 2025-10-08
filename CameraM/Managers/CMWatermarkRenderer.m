@@ -184,6 +184,7 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
               frameDescriptor.photoContentScale.width > 0.0 &&
               frameDescriptor.photoContentScale.height > 0.0;
           CGRect photoMaskRect = CGRectZero;
+          CGRect polaroidFooterRect = CGRectNull;
           if (hasCustomPhotoMask) {
             photoMaskRect = CGRectMake(
                 frameDescriptor.photoContentOffset.x * canvasSize.width,
@@ -204,6 +205,15 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
               if (adjustedHeight > 0.0) {
                 photoMaskRect.origin.y = desiredTopInset;
                 photoMaskRect.size.height = adjustedHeight;
+              }
+              // 使用实际的照片底部位置计算底部内容区域，保证整体垂直居中
+              CGFloat photoBottom = CGRectGetMaxY(photoMaskRect);
+              CGFloat footerHeight =
+                  MAX(0.0, canvasSize.height - photoBottom);
+              if (footerHeight > 0.0) {
+                polaroidFooterRect =
+                    CGRectMake(0.0, photoBottom, canvasSize.width,
+                               footerHeight);
               }
             }
             if (!CGRectIsEmpty(photoMaskRect)) {
@@ -307,7 +317,7 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
             drawOverlay(photoMaskRect, hasCustomPhotoMask);
           }
 
-          CGRect footerOverrideRect = CGRectNull;
+          CGRect footerOverrideRect = polaroidFooterRect;
           if (frameDescriptor &&
               !CGRectIsEmpty(frameDescriptor.footerContentRect)) {
             CGRect normalized = frameDescriptor.footerContentRect;
@@ -980,17 +990,13 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     hasLogo = (logoImage != nil);
   }
 
-  CGFloat minTopMargin = availableHeight * 0.02;
-  CGFloat desiredTopMargin = availableHeight * 0.04;
-  CGFloat topMargin = MAX(minTopMargin, desiredTopMargin);
-  if (topMargin >= availableHeight) {
-    topMargin = MIN(availableHeight * 0.2, availableHeight);
-  }
-
-  CGFloat remainingHeight = availableHeight - topMargin;
-  if (remainingHeight <= 0.0) {
-    remainingHeight = availableHeight;
-    topMargin = availableHeight * 0.02;
+  CGFloat minimumOuterMargin = MAX(availableHeight * 0.04, 12.0);
+  minimumOuterMargin =
+      MIN(minimumOuterMargin, availableHeight * 0.25); // clamp relative margin
+  CGFloat usableHeight = availableHeight - minimumOuterMargin * 2.0;
+  if (usableHeight <= 0.0) {
+    usableHeight = availableHeight;
+    minimumOuterMargin = MAX(availableHeight * 0.02, 4.0);
   }
 
   CGFloat baseLogoHeight = hasLogo ? availableHeight * 0.24 : 0.0;
@@ -1004,7 +1010,7 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   CGFloat baselineSum = baseLogoHeight + baseLogoSpacing + baseTextHeight +
                         baseTextSpacing + baseParameterHeight;
   CGFloat compression =
-      baselineSum > 0.0 ? MIN(1.0, remainingHeight / baselineSum) : 1.0;
+      baselineSum > 0.0 ? MIN(1.0, usableHeight / baselineSum) : 1.0;
 
   CGFloat logoHeight = baseLogoHeight * compression;
   CGFloat logoSpacing = baseLogoSpacing * compression;
@@ -1012,11 +1018,38 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   CGFloat textSpacing = baseTextSpacing * compression;
   CGFloat parameterHeight = baseParameterHeight * compression;
 
-  CGFloat currentY = contentRect.origin.y + topMargin;
-  CGFloat upwardShift = contentRect.size.height * 0.20;
-  if (upwardShift > 0.0f) {
-    CGFloat minimumY = contentRect.origin.y;
-    currentY = MAX(minimumY, currentY - upwardShift);
+  CGFloat totalContentHeight = 0.0;
+  if (hasLogo && logoHeight > 0.0) {
+    totalContentHeight += logoHeight;
+    if (logoSpacing > 0.0) {
+      totalContentHeight += logoSpacing;
+    }
+  }
+  BOOL hasTextBlock = (hasCaption && textBlockHeight > 0.0);
+  if (hasTextBlock) {
+    totalContentHeight += textBlockHeight;
+  }
+  BOOL hasParameters = (hasDetail && parameterHeight > 0.0);
+  if (hasParameters) {
+    if (textSpacing > 0.0 && hasTextBlock) {
+      totalContentHeight += textSpacing;
+    }
+    totalContentHeight += parameterHeight;
+  }
+  if (totalContentHeight <= 0.0) {
+    return;
+  }
+
+  CGFloat currentY =
+      contentRect.origin.y +
+      (contentRect.size.height - totalContentHeight) * 0.5f;
+  CGFloat minStartY = contentRect.origin.y + minimumOuterMargin;
+  CGFloat maxStartY = CGRectGetMaxY(contentRect) - totalContentHeight -
+                      minimumOuterMargin;
+  if (minStartY <= maxStartY) {
+    currentY = MIN(MAX(currentY, minStartY), maxStartY);
+  } else {
+    currentY = MAX(contentRect.origin.y, currentY);
   }
 
   CGFloat availableWidth = contentRect.size.width - horizontalPadding * 2.0;
