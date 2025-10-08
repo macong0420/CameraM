@@ -190,6 +190,22 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                 frameDescriptor.photoContentOffset.y * canvasSize.height,
                 frameDescriptor.photoContentScale.width * canvasSize.width,
                 frameDescriptor.photoContentScale.height * canvasSize.height);
+            if (frameDescriptor &&
+                [frameDescriptor.identifier
+                    isEqualToString:CMWatermarkFrameIdentifierPolaroid]) {
+              // 保持宝丽来模式顶部边框与左右边框尺寸一致
+              CGFloat sideInset =
+                  frameDescriptor.photoContentOffset.x * canvasSize.width;
+              CGFloat originalBottomInset =
+                  canvasSize.height - CGRectGetMaxY(photoMaskRect);
+              CGFloat desiredTopInset = sideInset;
+              CGFloat adjustedHeight =
+                  canvasSize.height - desiredTopInset - originalBottomInset;
+              if (adjustedHeight > 0.0) {
+                photoMaskRect.origin.y = desiredTopInset;
+                photoMaskRect.size.height = adjustedHeight;
+              }
+            }
             if (!CGRectIsEmpty(photoMaskRect)) {
               contentRect = photoMaskRect;
             }
@@ -997,6 +1013,11 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   CGFloat parameterHeight = baseParameterHeight * compression;
 
   CGFloat currentY = contentRect.origin.y + topMargin;
+  CGFloat upwardShift = contentRect.size.height * 0.20;
+  if (upwardShift > 0.0f) {
+    CGFloat minimumY = contentRect.origin.y;
+    currentY = MAX(minimumY, currentY - upwardShift);
+  }
 
   CGFloat availableWidth = contentRect.size.width - horizontalPadding * 2.0;
   if (availableWidth <= 0.0) {
