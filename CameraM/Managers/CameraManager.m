@@ -14,7 +14,7 @@
 #import <float.h>
 #import <math.h>
 
-@interface CameraManager () <AVCapturePhotoCaptureDelegate>
+@interface CameraManager () <AVCapturePhotoCaptureDelegate, CLLocationManagerDelegate>
 
 // AVFoundation 核心组件
 @property(nonatomic, strong) AVCaptureSession *captureSession;
@@ -52,6 +52,9 @@
 @property(nonatomic, strong) CMCameraLensOption *currentLensOption;
 @property(nonatomic, strong)
     NSDictionary<NSString *, AVCaptureDevice *> *lensDeviceMap;
+// 位置管理
+@property(nonatomic, strong) CLLocationManager *locationManager;
+@property(nonatomic, strong) CLLocation *latestLocation;
 
 - (NSArray<AVCaptureDevice *> *)discoverDevicesForPosition:
     (CameraPosition)position;
@@ -79,6 +82,19 @@
     (AVCaptureDeviceFormat *)format;
 - (void)configureMaxPhotoDimensionsForSettings:
     (AVCapturePhotoSettings *)settings;
+- (void)checkUltraHighResolutionSupport;
+- (BOOL)performCameraSetup:(NSError **)error;
+- (void)setupPreviewLayerWithView:(UIView *)previewView;
+- (void)notifyDelegateStateChanged;
+- (void)configureLocationServices;
+- (void)handleLocationAuthorizationStatus:(CLAuthorizationStatus)status;
+- (void)startUpdatingLocationIfPossible;
+- (void)stopUpdatingLocationIfNeeded;
+- (BOOL)isValidLocation:(CLLocation *)location;
+- (AVCaptureVideoOrientation)currentVideoOrientation;
+- (AVCapturePhotoSettings *)createPhotoSettings;
+- (CLAuthorizationStatus)authorizationStatusForManager:
+    (CLLocationManager *)manager;
 
 @end
 
@@ -126,6 +142,10 @@
 
   // 检查4800万像素支持
   [self checkUltraHighResolutionSupport];
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self configureLocationServices];
+  });
 }
 
 #pragma mark - 公开方法
@@ -179,6 +199,7 @@
       dispatch_async(dispatch_get_main_queue(), ^{
         self.currentState = CameraStateRunning;
         [self notifyDelegateStateChanged];
+        [self startUpdatingLocationIfPossible];
       });
     }
   });
@@ -191,6 +212,7 @@
       dispatch_async(dispatch_get_main_queue(), ^{
         self.currentState = CameraStateStopped;
         [self notifyDelegateStateChanged];
+        [self stopUpdatingLocationIfNeeded];
       });
     }
   });
@@ -219,6 +241,116 @@
     AVCapturePhotoSettings *settings = [self createPhotoSettings];
     [self.photoOutput capturePhotoWithSettings:settings delegate:self];
   });
+
+  // 后续状态更新在回调中处理
+}
+
+#pragma mark - 位置服务
+
+- (void)configureLocationServices {
+  if (![CLLocationManager locationServicesEnabled]) {
+    NSLog(@"⚠️ 位置服务不可用，无法写入位置信息到照片 EXIF。");
+    return;
+  }
+
+  if (!self.locationManager) {
+    self.locationManager = [[CLLocationManager alloc] init];
+    self.locationManager.delegate = self;
+    self.locationManager.desiredAccuracy = kCLLocationAccuracyBest;
+    self.locationManager.distanceFilter = 3.0;
+    self.locationManager.pausesLocationUpdatesAutomatically = YES;
+  }
+
+  CLAuthorizationStatus status;
+  status = [self authorizationStatusForManager:self.locationManager];
+  [self handleLocationAuthorizationStatus:status];
+}
+
+- (void)handleLocationAuthorizationStatus:(CLAuthorizationStatus)status {
+  switch (status) {
+  case kCLAuthorizationStatusNotDetermined:
+    [self.locationManager requestWhenInUseAuthorization];
+    break;
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+  case kCLAuthorizationStatusAuthorized:
+#endif
+  case kCLAuthorizationStatusAuthorizedAlways:
+  case kCLAuthorizationStatusAuthorizedWhenInUse:
+    [self startUpdatingLocationIfPossible];
+    break;
+  case kCLAuthorizationStatusDenied:
+  case kCLAuthorizationStatusRestricted:
+    [self stopUpdatingLocationIfNeeded];
+    self.latestLocation = nil;
+    break;
+  default:
+    break;
+  }
+}
+
+- (void)startUpdatingLocationIfPossible {
+  if (!self.locationManager || ![CLLocationManager locationServicesEnabled]) {
+    return;
+  }
+
+  CLAuthorizationStatus status;
+  status = [self authorizationStatusForManager:self.locationManager];
+
+  if (status == kCLAuthorizationStatusAuthorizedWhenInUse ||
+      status == kCLAuthorizationStatusAuthorizedAlways
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+      || status == kCLAuthorizationStatusAuthorized
+#endif
+  ) {
+    [self.locationManager startUpdatingLocation];
+  }
+}
+
+- (void)stopUpdatingLocationIfNeeded {
+  if (!self.locationManager) {
+    return;
+  }
+  [self.locationManager stopUpdatingLocation];
+}
+
+- (CLAuthorizationStatus)authorizationStatusForManager:
+    (CLLocationManager *)manager {
+  if (@available(iOS 14.0, *)) {
+    return manager.authorizationStatus;
+  }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  return [CLLocationManager authorizationStatus];
+#pragma clang diagnostic pop
+}
+
+- (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager {
+  CLAuthorizationStatus status =
+      [self authorizationStatusForManager:manager];
+  [self handleLocationAuthorizationStatus:status];
+}
+
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-implementations"
+- (void)locationManager:(CLLocationManager *)manager
+    didChangeAuthorizationStatus:(CLAuthorizationStatus)status {
+  [self handleLocationAuthorizationStatus:status];
+}
+#pragma clang diagnostic pop
+#endif
+
+- (void)locationManager:(CLLocationManager *)manager
+     didUpdateLocations:(NSArray<CLLocation *> *)locations {
+  CLLocation *latest = locations.lastObject;
+  if ([self isValidLocation:latest]) {
+    self.latestLocation = latest;
+  }
+}
+
+- (void)locationManager:(CLLocationManager *)manager
+       didFailWithError:(NSError *)error {
+  NSLog(@"⚠️ 定位失败: %@", error.localizedDescription);
 }
 
 - (void)switchCamera {
@@ -1556,13 +1688,14 @@
     NSData *imageData = photo.fileDataRepresentation;
     if (imageData) {
       UIImage *image = [UIImage imageWithData:imageData];
-      NSDictionary *metadata = photo.metadata;
+      NSDictionary *enrichedMetadata =
+          [self enrichedMetadataFromPhoto:photo originalMetadata:photo.metadata];
 
       if ([self.delegate respondsToSelector:@selector
                          (cameraManager:didCapturePhoto:withMetadata:)]) {
         [self.delegate cameraManager:self
                      didCapturePhoto:image
-                        withMetadata:metadata];
+                        withMetadata:enrichedMetadata];
       }
     }
   });
@@ -1648,6 +1781,213 @@
 }
 
 #pragma mark - 元数据辅助
+
+- (BOOL)isValidLocation:(CLLocation *)location {
+  if (!location) {
+    return NO;
+  }
+  if (location.horizontalAccuracy < 0.0) {
+    return NO;
+  }
+  NSTimeInterval age = fabs([location.timestamp timeIntervalSinceNow]);
+  return age <= 300.0;
+}
+
+- (NSDictionary *)gpsDictionaryForLocation:(CLLocation *)location {
+  if (![self isValidLocation:location]) {
+    return nil;
+  }
+
+  NSMutableDictionary *gps = [NSMutableDictionary dictionary];
+  CLLocationCoordinate2D coordinate = location.coordinate;
+  double latitude = fabs(coordinate.latitude);
+  double longitude = fabs(coordinate.longitude);
+  gps[(NSString *)kCGImagePropertyGPSLatitude] = @(latitude);
+  gps[(NSString *)kCGImagePropertyGPSLatitudeRef] =
+      (coordinate.latitude >= 0.0) ? @"N" : @"S";
+  gps[(NSString *)kCGImagePropertyGPSLongitude] = @(longitude);
+  gps[(NSString *)kCGImagePropertyGPSLongitudeRef] =
+      (coordinate.longitude >= 0.0) ? @"E" : @"W";
+
+  double altitude = location.altitude;
+  gps[(NSString *)kCGImagePropertyGPSAltitude] = @(fabs(altitude));
+  gps[(NSString *)kCGImagePropertyGPSAltitudeRef] =
+      (altitude < 0.0) ? @1 : @0;
+
+  static NSDateFormatter *dateFormatter = nil;
+  static NSDateFormatter *timeFormatter = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    dateFormatter = [[NSDateFormatter alloc] init];
+    dateFormatter.dateFormat = @"yyyy:MM:dd";
+    dateFormatter.timeZone = [NSTimeZone timeZoneWithAbbreviation:@"UTC"];
+    dateFormatter.locale =
+        [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+
+    timeFormatter = [[NSDateFormatter alloc] init];
+    timeFormatter.dateFormat = @"HH:mm:ss.SSS";
+    timeFormatter.timeZone = [NSTimeZone timeZoneWithAbbreviation:@"UTC"];
+    timeFormatter.locale =
+        [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+  });
+
+  NSDate *timestamp = location.timestamp ?: [NSDate date];
+  gps[(NSString *)kCGImagePropertyGPSDateStamp] =
+      [dateFormatter stringFromDate:timestamp];
+  gps[(NSString *)kCGImagePropertyGPSTimeStamp] =
+      [timeFormatter stringFromDate:timestamp];
+
+  if (location.horizontalAccuracy >= 0.0) {
+    gps[(NSString *)kCGImagePropertyGPSDOP] =
+        @(MAX(location.horizontalAccuracy, 1.0));
+  }
+
+  if (location.speed >= 0.0) {
+    double speedKmh = location.speed * 3.6;
+    gps[(NSString *)kCGImagePropertyGPSSpeed] = @(speedKmh);
+    gps[(NSString *)kCGImagePropertyGPSSpeedRef] = @"K";
+  }
+
+  if (location.course >= 0.0) {
+    gps[(NSString *)kCGImagePropertyGPSTrack] = @(location.course);
+    gps[(NSString *)kCGImagePropertyGPSTrackRef] = @"T";
+  }
+
+  return [gps copy];
+}
+
+- (CGFloat)baselineFocalLengthForDevice:(AVCaptureDevice *)device {
+  if (!device) {
+    return 24.0f;
+  }
+  if (device.position == AVCaptureDevicePositionFront) {
+    return 28.0f;
+  }
+  return 24.0f;
+}
+
+- (void)populateLensMetadataInExif:(NSMutableDictionary *)exif
+                     originalExif:(NSDictionary *)originalExif {
+  (void)originalExif;
+  AVCaptureDevice *device = self.currentDevice;
+  CMCameraLensOption *lensOption = self.currentLensOption;
+
+  NSString *manufacturer = nil;
+  if ([device respondsToSelector:@selector(manufacturer)]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
+    manufacturer = device.manufacturer;
+#pragma clang diagnostic pop
+  }
+  if (manufacturer.length == 0) {
+    manufacturer = @"Apple";
+  }
+  exif[(NSString *)kCGImagePropertyExifLensMake] = manufacturer;
+
+  NSString *lensModel = nil;
+  if (device.localizedName.length > 0 && lensOption.displayName.length > 0) {
+    if ([lensOption.displayName isEqualToString:device.localizedName]) {
+      lensModel = lensOption.displayName;
+    } else {
+      lensModel = [NSString stringWithFormat:@"%@ %@",
+                                             device.localizedName,
+                                             lensOption.displayName];
+    }
+  } else if (lensOption.displayName.length > 0) {
+    lensModel = lensOption.displayName;
+  } else if (device.localizedName.length > 0) {
+    lensModel = device.localizedName;
+  } else {
+    lensModel = @"Camera Lens";
+  }
+  exif[(NSString *)kCGImagePropertyExifLensModel] = lensModel;
+
+  if (lensOption.deviceUniqueID.length > 0) {
+    exif[(NSString *)kCGImagePropertyExifLensSerialNumber] =
+        lensOption.deviceUniqueID;
+  }
+
+  CGFloat zoomFactor = lensOption ? lensOption.zoomFactor : 1.0f;
+  if (zoomFactor > 0.0f) {
+    exif[(NSString *)kCGImagePropertyExifDigitalZoomRatio] =
+        @(roundf(zoomFactor * 100.0f) / 100.0f);
+  }
+
+  CGFloat aperture = device.lensAperture;
+  if (aperture > 0.0f) {
+    NSNumber *apertureNumber = @(roundf(aperture * 100.0f) / 100.0f);
+    exif[(NSString *)kCGImagePropertyExifFNumber] = apertureNumber;
+    if (!exif[(NSString *)kCGImagePropertyExifMaxApertureValue]) {
+      exif[(NSString *)kCGImagePropertyExifMaxApertureValue] =
+          apertureNumber;
+    }
+  }
+
+  NSNumber *focalLengthNumber =
+      exif[(NSString *)kCGImagePropertyExifFocalLength];
+  if (!focalLengthNumber) {
+    CGFloat baseFocal = [self baselineFocalLengthForDevice:device];
+    CGFloat computedFocal = baseFocal * MAX(zoomFactor, 0.1f);
+    focalLengthNumber = @(roundf(computedFocal * 10.0f) / 10.0f);
+    exif[(NSString *)kCGImagePropertyExifFocalLength] = focalLengthNumber;
+  }
+
+  if (!exif[(NSString *)kCGImagePropertyExifFocalLenIn35mmFilm] &&
+      focalLengthNumber) {
+    exif[(NSString *)kCGImagePropertyExifFocalLenIn35mmFilm] =
+        @(roundf(focalLengthNumber.doubleValue));
+  }
+
+  if (!exif[(NSString *)kCGImagePropertyExifLensSpecification]) {
+    double focal = focalLengthNumber.doubleValue;
+    NSNumber *focalSpec = @(round(focal * 10.0) / 10.0);
+    NSNumber *apertureSpec =
+        (aperture > 0.0f) ? @(round(aperture * 100.0f) / 100.0f) : @(0.0f);
+    exif[(NSString *)kCGImagePropertyExifLensSpecification] =
+        @[ focalSpec, focalSpec, apertureSpec, apertureSpec ];
+  }
+}
+
+- (NSDictionary *)enrichedMetadataFromPhoto:(AVCapturePhoto *)photo
+                           originalMetadata:(NSDictionary *)metadata {
+  NSMutableDictionary *mutableMetadata =
+      metadata ? [metadata mutableCopy] : [NSMutableDictionary dictionary];
+  if (!mutableMetadata) {
+    mutableMetadata = [NSMutableDictionary dictionary];
+  }
+
+  CLLocation *photoLocation = nil;
+  photoLocation = [self locationFromMetadata:photo.metadata];
+  if (![self isValidLocation:photoLocation]) {
+    photoLocation = [self locationFromMetadata:metadata];
+  }
+  if (![self isValidLocation:photoLocation] &&
+      [self isValidLocation:self.latestLocation]) {
+    photoLocation = self.latestLocation;
+  }
+
+  if ([self isValidLocation:photoLocation]) {
+    self.latestLocation = photoLocation;
+    NSDictionary *gps = [self gpsDictionaryForLocation:photoLocation];
+    if (gps.count > 0) {
+      mutableMetadata[(NSString *)kCGImagePropertyGPSDictionary] = gps;
+    }
+  }
+
+  NSMutableDictionary *exif =
+      metadata[(NSString *)kCGImagePropertyExifDictionary]
+          ? [metadata[(NSString *)kCGImagePropertyExifDictionary] mutableCopy]
+          : [NSMutableDictionary dictionary];
+  [self populateLensMetadataInExif:exif
+                      originalExif:metadata[(NSString *)
+                                            kCGImagePropertyExifDictionary]];
+
+  if (exif.count > 0) {
+    mutableMetadata[(NSString *)kCGImagePropertyExifDictionary] = exif;
+  }
+
+  return [mutableMetadata copy];
+}
 
 - (NSDate *)creationDateFromMetadata:(NSDictionary *)metadata {
   if (!metadata) {
