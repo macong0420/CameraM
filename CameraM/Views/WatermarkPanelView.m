@@ -140,6 +140,9 @@
 
 @property (nonatomic, copy) NSArray<CMWatermarkFrameDescriptor *> *frameDescriptors;
 @property (nonatomic, copy) NSArray<CMWatermarkLogoDescriptor *> *logoDescriptors;
+@property (nonatomic, weak) UITextField *activeTextField;
+@property (nonatomic, assign) UIEdgeInsets scrollViewBaseContentInset;
+@property (nonatomic, assign) UIEdgeInsets scrollViewBaseIndicatorInsets;
 
 @end
 
@@ -163,6 +166,8 @@
         _previewRenderQueue = dispatch_queue_create("com.cameram.watermark.preview", DISPATCH_QUEUE_SERIAL);
         _previewRenderer = [[CMWatermarkRenderer alloc] init];
         _previewNeedsRender = YES;
+
+        [self registerForKeyboardNotifications];
 
         [self setupHeader];
         [self setupControlsContainer];
@@ -425,6 +430,9 @@
         [self.contentStack.trailingAnchor constraintEqualToAnchor:frameGuide.trailingAnchor constant:-16.0],
         [self.contentStack.bottomAnchor constraintEqualToAnchor:contentGuide.bottomAnchor constant:-24.0]
     ]];
+
+    self.scrollViewBaseContentInset = self.scrollView.contentInset;
+    self.scrollViewBaseIndicatorInsets = self.scrollView.scrollIndicatorInsets;
 }
 
 - (void)buildSectionContentViews {
@@ -1079,6 +1087,17 @@
 
 #pragma mark - UITextFieldDelegate
 
+- (void)textFieldDidBeginEditing:(UITextField *)textField {
+    self.activeTextField = textField;
+    [self ensureActiveFieldVisibleAnimated:YES];
+}
+
+- (void)textFieldDidEndEditing:(UITextField *)textField {
+    if (self.activeTextField == textField) {
+        self.activeTextField = nil;
+    }
+}
+
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
     [textField resignFirstResponder];
     return YES;
@@ -1144,6 +1163,84 @@
 }
 
 #pragma mark - Helpers
+
+- (void)registerForKeyboardNotifications {
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center addObserver:self selector:@selector(handleKeyboardWillChangeFrame:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [center addObserver:self selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)handleKeyboardWillChangeFrame:(NSNotification *)notification {
+    if (!self.scrollView || !self.window) {
+        return;
+    }
+
+    NSDictionary *userInfo = notification.userInfo;
+    CGRect keyboardScreenFrame = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    UIWindow *window = self.window;
+    CGRect keyboardInWindow = [window convertRect:keyboardScreenFrame fromWindow:nil];
+    CGRect keyboardInSelf = [self convertRect:keyboardInWindow fromView:window];
+    CGRect intersection = CGRectIntersection(self.bounds, keyboardInSelf);
+    CGFloat overlap = CGRectIsNull(intersection) ? 0.0f : CGRectGetHeight(intersection);
+    CGFloat adjustedOverlap = MAX(0.0f, overlap - self.safeAreaInsets.bottom);
+
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    NSUInteger curveRaw = [userInfo[UIKeyboardAnimationCurveUserInfoKey] unsignedIntegerValue] << 16;
+    UIViewAnimationOptions options = (UIViewAnimationOptions)curveRaw | UIViewAnimationOptionBeginFromCurrentState;
+
+    [self applyKeyboardBottomInset:adjustedOverlap duration:duration options:options ensureVisibility:YES];
+}
+
+- (void)handleKeyboardWillHide:(NSNotification *)notification {
+    if (!self.scrollView) {
+        return;
+    }
+
+    NSDictionary *userInfo = notification.userInfo;
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    NSUInteger curveRaw = [userInfo[UIKeyboardAnimationCurveUserInfoKey] unsignedIntegerValue] << 16;
+    UIViewAnimationOptions options = (UIViewAnimationOptions)curveRaw | UIViewAnimationOptionBeginFromCurrentState;
+
+    [self applyKeyboardBottomInset:0.0f duration:duration options:options ensureVisibility:NO];
+}
+
+- (void)applyKeyboardBottomInset:(CGFloat)bottomInset
+                        duration:(NSTimeInterval)duration
+                         options:(UIViewAnimationOptions)options
+               ensureVisibility:(BOOL)ensureVisibility {
+    // Keep the editing field above the keyboard by mirroring UIKit's keyboard animation.
+    UIEdgeInsets contentInset = self.scrollViewBaseContentInset;
+    contentInset.bottom += bottomInset;
+
+    UIEdgeInsets indicatorInset = self.scrollViewBaseIndicatorInsets;
+    indicatorInset.bottom += bottomInset;
+
+    [UIView animateWithDuration:duration
+                          delay:0.0
+                        options:options
+                     animations:^{
+                         self.scrollView.contentInset = contentInset;
+                         self.scrollView.scrollIndicatorInsets = indicatorInset;
+                         if (ensureVisibility) {
+                             [self ensureActiveFieldVisibleAnimated:NO];
+                         }
+                     }
+                     completion:nil];
+}
+
+- (void)ensureActiveFieldVisibleAnimated:(BOOL)animated {
+    if (!self.activeTextField || !self.scrollView) {
+        return;
+    }
+
+    CGRect fieldRect = [self.activeTextField convertRect:self.activeTextField.bounds toView:self.scrollView];
+    fieldRect = CGRectInset(fieldRect, 0.0, -12.0);
+    [self.scrollView scrollRectToVisible:fieldRect animated:animated];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
 
 - (void)notifyUpdate {
     [self markPreviewNeedsRender];
