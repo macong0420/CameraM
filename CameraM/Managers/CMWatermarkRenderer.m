@@ -1007,6 +1007,13 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
       (hasCaption && hasDetail) ? availableHeight * 0.045 : 0.0;
   CGFloat baseParameterHeight = hasDetail ? availableHeight * 0.22 : 0.0;
 
+  const CGFloat polaroidContentScale = 0.8f;
+  baseLogoHeight *= polaroidContentScale;
+  baseLogoSpacing *= polaroidContentScale;
+  baseTextHeight *= polaroidContentScale;
+  baseTextSpacing *= polaroidContentScale;
+  baseParameterHeight *= polaroidContentScale;
+
   CGFloat baselineSum = baseLogoHeight + baseLogoSpacing + baseTextHeight +
                         baseTextSpacing + baseParameterHeight;
   CGFloat compression =
