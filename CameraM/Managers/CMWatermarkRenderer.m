@@ -948,72 +948,105 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                       canvasSize:(CGSize)canvasSize
                horizontalPadding:(CGFloat)horizontalPadding {
 
-  // 3行布局：Logo(第1行), 文字(第2行), 参数(第3行) - 精确间距控制
-  CGFloat logoToTextSpacing = 35.0 * CMWatermarkUIScaleFactor; // logo和文字间距
-  CGFloat textToParamSpacing =
-      26.0 * CMWatermarkUIScaleFactor; // 文字和参数间距
-  CGFloat currentY = contentRect.origin.y;
+  CGFloat availableHeight = contentRect.size.height;
+  if (availableHeight <= 0.0) {
+    return;
+  }
 
-  // 第1行：Logo - 高度约占底部边框高度的20%
-  CGFloat logoHeight = 0.0;
+  BOOL hasCaption =
+      configuration.isCaptionEnabled && configuration.captionText.length > 0;
+  BOOL hasDetail = detailString.length > 0;
+
+  UIImage *logoImage = nil;
+  BOOL hasLogo = NO;
   if (logoDescriptor && logoDescriptor.assetName.length > 0) {
-    UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
-    if (logoImage) {
-      CGFloat bottomBorderHeight = contentRect.size.height;
-      logoHeight = MIN(bottomBorderHeight * 0.20 * CMWatermarkUIScaleFactor,
-                       bottomBorderHeight);
-      CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
-      CGFloat logoWidth = logoHeight * aspect;
+    logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+    hasLogo = (logoImage != nil);
+  }
 
-      CGFloat logoX =
-          contentRect.origin.x + (contentRect.size.width - logoWidth) / 2.0;
-      CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
+  CGFloat minTopMargin = availableHeight * 0.02;
+  CGFloat desiredTopMargin = availableHeight * 0.04;
+  CGFloat topMargin = MAX(minTopMargin, desiredTopMargin);
+  if (topMargin >= availableHeight) {
+    topMargin = MIN(availableHeight * 0.2, availableHeight);
+  }
 
-      UIImage *renderableLogo =
-          logoDescriptor.prefersTemplateRendering
-              ? [logoImage
-                    imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
-              : logoImage;
-      if (logoDescriptor.prefersTemplateRendering) {
-        [[UIColor blackColor] setFill]; // 宝丽来模式使用黑色logo
-        [[UIColor blackColor] setStroke];
-      }
-      [renderableLogo drawInRect:logoRect
-                       blendMode:kCGBlendModeNormal
-                           alpha:0.95];
+  CGFloat remainingHeight = availableHeight - topMargin;
+  if (remainingHeight <= 0.0) {
+    remainingHeight = availableHeight;
+    topMargin = availableHeight * 0.02;
+  }
+
+  CGFloat baseLogoHeight = hasLogo ? availableHeight * 0.24 : 0.0;
+  CGFloat baseLogoSpacing =
+      (hasLogo && (hasCaption || hasDetail)) ? availableHeight * 0.05 : 0.0;
+  CGFloat baseTextHeight = hasCaption ? availableHeight * 0.18 : 0.0;
+  CGFloat baseTextSpacing =
+      (hasCaption && hasDetail) ? availableHeight * 0.045 : 0.0;
+  CGFloat baseParameterHeight = hasDetail ? availableHeight * 0.22 : 0.0;
+
+  CGFloat baselineSum = baseLogoHeight + baseLogoSpacing + baseTextHeight +
+                        baseTextSpacing + baseParameterHeight;
+  CGFloat compression =
+      baselineSum > 0.0 ? MIN(1.0, remainingHeight / baselineSum) : 1.0;
+
+  CGFloat logoHeight = baseLogoHeight * compression;
+  CGFloat logoSpacing = baseLogoSpacing * compression;
+  CGFloat textBlockHeight = baseTextHeight * compression;
+  CGFloat textSpacing = baseTextSpacing * compression;
+  CGFloat parameterHeight = baseParameterHeight * compression;
+
+  CGFloat currentY = contentRect.origin.y + topMargin;
+
+  CGFloat availableWidth = contentRect.size.width - horizontalPadding * 2.0;
+  if (availableWidth <= 0.0) {
+    availableWidth = contentRect.size.width;
+  }
+
+  if (hasLogo && logoHeight > 0.0) {
+    CGFloat aspect =
+        logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+    CGFloat logoWidth = logoHeight * aspect;
+    if (logoWidth > availableWidth) {
+      CGFloat widthScale = availableWidth / logoWidth;
+      logoWidth = availableWidth;
+      logoHeight *= widthScale;
+    }
+    CGFloat logoX =
+        contentRect.origin.x + (contentRect.size.width - logoWidth) / 2.0;
+    CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
+
+    UIImage *renderableLogo =
+        logoDescriptor.prefersTemplateRendering
+            ? [logoImage
+                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+            : logoImage;
+    if (logoDescriptor.prefersTemplateRendering) {
+      [[UIColor blackColor] setFill];
+      [[UIColor blackColor] setStroke];
+    }
+    [renderableLogo drawInRect:logoRect
+                      blendMode:kCGBlendModeNormal
+                          alpha:0.95];
+    currentY += logoHeight;
+    if (logoSpacing > 0.0) {
+      currentY += logoSpacing;
     }
   }
-  currentY += logoHeight + logoToTextSpacing;
-
-  // 第2行：文字 - 字号为Logo高度的35%-40%，无logo时使用底部区域高度计算
-  CGFloat row2Y = currentY;
-  CGFloat textFontSize;
-  if (logoHeight > 0) {
-    textFontSize = logoHeight * 0.5; // 有logo时基于logo高度
-  } else {
-    textFontSize = contentRect.size.height * 0.12 *
-                   CMWatermarkUIScaleFactor; // 无logo时基于底部区域高度
-    textFontSize = MIN(textFontSize, contentRect.size.height * 0.9f);
-  }
-  textFontSize = MIN(textFontSize, contentRect.size.height);
-  UIFont *textFont = [UIFont systemFontOfSize:textFontSize
-                                       weight:UIFontWeightMedium];
-  UIColor *textColor = [UIColor blackColor]; // 纯黑色 #000000
 
   NSMutableString *combinedText = [NSMutableString string];
-  if (configuration.isCaptionEnabled && configuration.captionText.length > 0) {
+  if (hasCaption) {
     [combinedText appendString:configuration.captionText];
   }
-  // 署名功能已删除
-  // if (configuration.isSignatureEnabled && configuration.signatureText.length
-  // > 0) {
-  //     if (combinedText.length > 0) {
-  //         [combinedText appendString:@" | "];
-  //     }
-  //     [combinedText appendString:configuration.signatureText];
-  // }
 
-  if (combinedText.length > 0) {
+  CGFloat textFontSize = 0.0;
+  if (combinedText.length > 0 && textBlockHeight > 0.0) {
+    textFontSize = MIN(textBlockHeight * 0.82, availableHeight * 0.18);
+    textFontSize = MAX(textFontSize, 28.0);
+    UIFont *textFont =
+        [UIFont systemFontOfSize:textFontSize weight:UIFontWeightMedium];
+    UIColor *textColor = [UIColor blackColor];
+
     NSMutableParagraphStyle *textParagraph =
         [[NSMutableParagraphStyle alloc] init];
     textParagraph.alignment = NSTextAlignmentCenter;
@@ -1025,26 +1058,28 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
       NSParagraphStyleAttributeName : textParagraph
     };
 
-    CGRect textRect = CGRectMake(
-        contentRect.origin.x + horizontalPadding, row2Y,
-        contentRect.size.width - 2 * horizontalPadding, textFont.lineHeight);
+    CGFloat drawY =
+        currentY + MAX(0.0, (textBlockHeight - textFont.lineHeight) / 2.0);
+    CGRect textRect =
+        CGRectMake(contentRect.origin.x + horizontalPadding, drawY,
+                   contentRect.size.width - 2.0 * horizontalPadding,
+                   textFont.lineHeight);
     [combinedText drawInRect:textRect withAttributes:textAttributes];
-    currentY += textFont.lineHeight + textToParamSpacing;
-  } else {
-    // 即使没有文字内容，也要为参数留出合适的位置
-    currentY = row2Y + textToParamSpacing;
+    currentY += textBlockHeight;
   }
 
-  // 第3行：参数 - 字号为文字部分的70%-80%
-  if (detailString.length > 0) {
-    CGFloat row3Y = currentY;
+  if (hasDetail && parameterHeight > 0.0) {
+    if (textSpacing > 0.0 && currentY < CGRectGetMaxY(contentRect)) {
+      currentY += textSpacing;
+    }
     CGFloat parameterFontSize =
-        textFontSize * 0.75; // 文字字号的75% (70%-80%之间)
-    CGFloat parameterHeight =
-        MIN(contentRect.size.height * 0.3, 90.0 * CMWatermarkUIScaleFactor);
-    [self drawPolaroidParametersInRect:CGRectMake(contentRect.origin.x, row3Y,
-                                                  contentRect.size.width,
-                                                  parameterHeight)
+        MAX(20.0,
+            MIN(parameterHeight * 0.6,
+                (textFontSize > 0.0 ? textFontSize * 0.75
+                                    : availableHeight * 0.12)));
+    CGRect parameterRect = CGRectMake(contentRect.origin.x, currentY,
+                                      contentRect.size.width, parameterHeight);
+    [self drawPolaroidParametersInRect:parameterRect
                           detailString:detailString
                             canvasSize:canvasSize
                      parameterFontSize:parameterFontSize];
@@ -1075,7 +1110,14 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   };
 
   // 将参数字符串分解并水平排列
-  NSArray *components = [detailString componentsSeparatedByString:@"    "];
+  NSString *trimmed =
+      [detailString stringByTrimmingCharactersInSet:
+                       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (trimmed.length == 0) {
+    return;
+  }
+
+  NSArray *components = [trimmed componentsSeparatedByString:@"    "];
   if (components.count > 0) {
     NSString *displayText = [components componentsJoinedByString:@"  •  "];
 
