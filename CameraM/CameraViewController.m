@@ -11,13 +11,14 @@
 #import "Views/CameraControlsView.h"
 #import "Views/WatermarkPanelView.h"
 #import "Controllers/GalleryViewController.h"
+#import "Controllers/GalleryPreviewViewController.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
 @interface CameraViewController () <
     CameraControlsDelegate, CameraBusinessDelegate,
     PHPickerViewControllerDelegate, WatermarkPanelViewDelegate,
-    GalleryViewControllerDelegate>
+    GalleryViewControllerDelegate, GalleryPreviewViewControllerDelegate>
 
 // 分离的组件 - 高内聚低耦合
 @property(nonatomic, strong) CameraControlsView *controlsView;
@@ -863,7 +864,42 @@
                                      if (!strongSelf) {
                                        return;
                                      }
-                                     [strongSelf handleImportedImage:image
+                                     GalleryPreviewViewController *previewVC =
+                                         [[GalleryPreviewViewController alloc]
+                                             initWithImage:image];
+                                     previewVC.delegate = strongSelf;
+                                     previewVC.modalPresentationStyle =
+                                         UIModalPresentationFullScreen;
+                                     [strongSelf presentViewController:previewVC
+                                                           animated:YES
+                                                         completion:nil];
+                                   }];
+}
+
+#pragma mark - GalleryPreviewViewControllerDelegate
+
+- (void)galleryPreviewViewControllerDidRequestContinue:
+    (GalleryPreviewViewController *)controller {
+  [controller dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)galleryPreviewViewControllerDidRequestEdit:
+    (GalleryPreviewViewController *)controller {
+  UIImage *selectedImage = controller.image;
+  if (!selectedImage) {
+    [controller dismissViewControllerAnimated:YES completion:nil];
+    return;
+  }
+
+  __weak typeof(self) weakSelf = self;
+  [controller dismissViewControllerAnimated:YES
+                                   completion:^{
+                                     __strong typeof(weakSelf) strongSelf =
+                                         weakSelf;
+                                     if (!strongSelf) {
+                                       return;
+                                     }
+                                     [strongSelf handleImportedImage:selectedImage
                                                             metadata:nil];
                                    }];
 }
