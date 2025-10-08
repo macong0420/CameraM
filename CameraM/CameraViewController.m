@@ -34,6 +34,8 @@
     CMWatermarkConfiguration *pendingImportConfiguration;
 @property(nonatomic, strong) NSDictionary *pendingImportMetadata;
 @property(nonatomic, assign) BOOL hasCapturedPhotoInSession;
+// 控制下次点击相册按钮时是否优先展示最新拍摄的快速预览
+@property(nonatomic, assign) BOOL shouldShowCapturePreview;
 @property(nonatomic, strong) NSDictionary *latestCaptureMetadata;
 
 @end
@@ -48,6 +50,7 @@
   [self setupCamera];
   self.hasCapturedPhotoInSession =
       (self.businessController.latestCapturedImage != nil);
+  self.shouldShowCapturePreview = self.hasCapturedPhotoInSession;
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -161,9 +164,9 @@
 }
 
 - (void)didTapGalleryButton {
-  if (self.hasCapturedPhotoInSession &&
+  if (self.shouldShowCapturePreview &&
       self.businessController.latestCapturedImage) {
-    [self presentEditorForCapturedImage];
+    [self presentPreviewForCapturedImage];
   } else {
     [self presentCustomGallery];
   }
@@ -306,6 +309,7 @@
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata {
   NSLog(@"拍照成功，图片尺寸: %.0fx%.0f", image.size.width, image.size.height);
   self.hasCapturedPhotoInSession = YES;
+  self.shouldShowCapturePreview = YES;
   self.latestCaptureMetadata = metadata;
   [self.controlsView setCaptureButtonLoading:NO];
   [self.controlsView updateGalleryButtonWithImage:image];
@@ -400,7 +404,7 @@
 
 #pragma mark - 自定义相册
 
-- (void)presentEditorForCapturedImage {
+- (void)presentPreviewForCapturedImage {
   if (self.isProcessingImportedImage) {
     return;
   }
@@ -411,7 +415,17 @@
     return;
   }
 
-  [self handleImportedImage:latestImage metadata:self.latestCaptureMetadata];
+  if (self.presentedViewController) {
+    return;
+  }
+
+  GalleryPreviewViewController *previewVC =
+      [[GalleryPreviewViewController alloc]
+          initWithImage:latestImage
+               metadata:self.latestCaptureMetadata];
+  previewVC.delegate = self;
+  previewVC.modalPresentationStyle = UIModalPresentationFullScreen;
+  [self presentViewController:previewVC animated:YES completion:nil];
 }
 
 - (void)presentCustomGallery {
@@ -880,6 +894,8 @@
 
 - (void)galleryPreviewViewControllerDidRequestContinue:
     (GalleryPreviewViewController *)controller {
+  self.shouldShowCapturePreview = NO;
+  self.hasCapturedPhotoInSession = NO;
   [controller dismissViewControllerAnimated:YES completion:nil];
 }
 
@@ -899,8 +915,13 @@
                                      if (!strongSelf) {
                                        return;
                                      }
-                                     [strongSelf handleImportedImage:selectedImage
-                                                            metadata:nil];
+                                     strongSelf.shouldShowCapturePreview = NO;
+                                     strongSelf.hasCapturedPhotoInSession = NO;
+                                     NSDictionary *metadata =
+                                         controller.metadata;
+                                     [strongSelf handleImportedImage:
+                                                       selectedImage
+                                                        metadata:metadata];
                                    }];
 }
 

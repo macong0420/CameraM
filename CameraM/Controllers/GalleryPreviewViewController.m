@@ -13,6 +13,7 @@
 @property(nonatomic, strong) UIView *buttonContainer;
 @property(nonatomic, strong) UIStackView *buttonStack;
 @property(nonatomic, strong, readwrite) UIImage *image;
+@property(nonatomic, strong, readwrite, nullable) NSDictionary *metadata;
 
 @end
 
@@ -20,14 +21,20 @@
 
 #pragma mark - Lifecycle
 
-- (instancetype)initWithImage:(UIImage *)image {
+- (instancetype)initWithImage:(UIImage *)image
+                     metadata:(NSDictionary *_Nullable)metadata {
   self = [super initWithNibName:nil bundle:nil];
   if (self) {
     _image = image ?: [[UIImage alloc] init];
+    _metadata = [metadata copy];
     self.modalPresentationStyle = UIModalPresentationFullScreen;
     self.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
   }
   return self;
+}
+
+- (instancetype)initWithImage:(UIImage *)image {
+  return [self initWithImage:image metadata:nil];
 }
 
 - (void)viewDidLoad {
@@ -159,4 +166,3 @@
 }
 
 @end
-
