@@ -887,6 +887,10 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   NSLog(@"🔍 参数生成调试 - preference: %ld, preferenceOptions: %ld",
         (long)configuration.preference, (long)configuration.preferenceOptions);
 
+  if (configuration.preference == CMWatermarkPreferenceOff) {
+    return configuration.auxiliaryText ?: @"";
+  }
+
   // 对于宝丽来模式，支持多选参数显示
   if (configuration.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
     NSMutableArray *components = [NSMutableArray array];

@@ -1041,6 +1041,10 @@
 - (void)handlePreferenceChanged:(UISegmentedControl *)sender {
     self.internalConfiguration.preference = (CMWatermarkPreference)sender.selectedSegmentIndex;
     
+    if (self.internalConfiguration.preference == CMWatermarkPreferenceOff) {
+        self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsNone;
+    }
+    
     // 对于宝丽来模式，同时更新preferenceOptions来支持多选显示
     NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
     if ([frameId isEqualToString:@"frame.polaroid"]) {
