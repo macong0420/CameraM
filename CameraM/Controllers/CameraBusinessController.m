@@ -8,19 +8,8 @@
 #import "CameraBusinessController.h"
 #import "../Managers/CMWatermarkRenderer.h"
 #import "../Services/CMCaptureSessionService.h"
-
-static NSString *const kCMWatermarkConfigurationStorageKey =
-    @"com.cameram.watermark.configuration";
-static NSString *const kCMLensSelectionStorageKey =
-    @"com.cameram.lens.selection";
-static NSString *const kCMFlashModeStorageKey =
-    @"com.cameram.flash.mode";
-static NSString *const kCMGridVisibilityStorageKey =
-    @"com.cameram.grid.visibility";
-static NSString *const kCMResolutionModeStorageKey =
-    @"com.cameram.resolution.mode";
-static NSString *const kCMBusinessControllerErrorDomain =
-    @"com.cameram.business";
+#import "../Common/CMConstants.h"
+#import "../Common/CMSettingsStorage.h"
 
 static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   if (!image || image.imageOrientation == UIImageOrientationUp) {
@@ -85,8 +74,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
         dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
     _availableLensOptions = _captureService.availableLensOptions ?: @[];
     _currentLensOption = _captureService.currentLensOption;
-    _restoredLensIdentifier = [[NSUserDefaults standardUserDefaults]
-        stringForKey:kCMLensSelectionStorageKey];
+    _restoredLensIdentifier = [[CMSettingsStorage sharedStorage] loadLensIdentifier];
   }
   return self;
 }
@@ -354,112 +342,64 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 }
 
 - (void)loadPersistedSettings {
-  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  CMSettingsStorage *storage = [CMSettingsStorage sharedStorage];
 
-  if ([defaults objectForKey:kCMGridVisibilityStorageKey] != nil) {
-    _isGridLinesVisible =
-        [defaults boolForKey:kCMGridVisibilityStorageKey];
-  } else {
-    [self persistGridVisibility];
-  }
+  // Load grid visibility
+  _isGridLinesVisible = [storage loadGridVisibilityWithDefault:NO];
 
-  if ([defaults objectForKey:kCMFlashModeStorageKey] != nil) {
-    NSInteger rawValue = [defaults integerForKey:kCMFlashModeStorageKey];
-    FlashMode storedMode = (FlashMode)rawValue;
-    if (storedMode < FlashModeAuto || storedMode > FlashModeOff) {
-      storedMode = FlashModeAuto;
-    }
-    if (storedMode != self.captureService.currentFlashMode) {
-      [self.captureService switchFlashMode:storedMode];
-    } else {
-      [self persistFlashMode];
-    }
+  // Load flash mode
+  FlashMode storedFlashMode = [storage loadFlashModeWithDefault:FlashModeAuto];
+  if (storedFlashMode != self.captureService.currentFlashMode) {
+    [self.captureService switchFlashMode:storedFlashMode];
   } else {
     [self persistFlashMode];
   }
 
-  if ([defaults objectForKey:kCMResolutionModeStorageKey] != nil) {
-    NSInteger rawValue = [defaults integerForKey:kCMResolutionModeStorageKey];
-    CameraResolutionMode storedMode = (CameraResolutionMode)rawValue;
-    if (storedMode == CameraResolutionModeUltraHigh &&
-        !self.captureService.isUltraHighResolutionSupported) {
-      storedMode = CameraResolutionModeStandard;
-    }
+  // Load resolution mode
+  CameraResolutionMode storedResolutionMode =
+      [storage loadResolutionModeWithDefault:CameraResolutionModeStandard];
+  if (storedResolutionMode == CameraResolutionModeUltraHigh &&
+      !self.captureService.isUltraHighResolutionSupported) {
+    storedResolutionMode = CameraResolutionModeStandard;
+  }
 
-    if (storedMode != self.captureService.currentResolutionMode) {
-      [self.captureService switchResolutionMode:storedMode];
-    } else {
-      [self persistCurrentResolutionMode];
-    }
+  if (storedResolutionMode != self.captureService.currentResolutionMode) {
+    [self.captureService switchResolutionMode:storedResolutionMode];
   } else {
     [self persistCurrentResolutionMode];
   }
 }
 
 - (void)persistFlashMode {
-  [[NSUserDefaults standardUserDefaults]
-      setInteger:self.captureService.currentFlashMode
-            forKey:kCMFlashModeStorageKey];
+  [[CMSettingsStorage sharedStorage]
+      saveFlashMode:self.captureService.currentFlashMode];
 }
 
 - (void)persistGridVisibility {
-  [[NSUserDefaults standardUserDefaults]
-      setBool:self.isGridLinesVisible
-        forKey:kCMGridVisibilityStorageKey];
+  [[CMSettingsStorage sharedStorage] saveGridVisibility:self.isGridLinesVisible];
 }
 
 - (void)persistCurrentResolutionMode {
-  [[NSUserDefaults standardUserDefaults]
-      setInteger:self.captureService.currentResolutionMode
-            forKey:kCMResolutionModeStorageKey];
+  [[CMSettingsStorage sharedStorage]
+      saveResolutionMode:self.captureService.currentResolutionMode];
 }
 
 - (void)persistWatermarkConfiguration {
-  if (!self.watermarkConfiguration) {
-    return;
-  }
-
-  NSError *archiveError = nil;
-  NSData *data =
-      [NSKeyedArchiver archivedDataWithRootObject:self.watermarkConfiguration
-                            requiringSecureCoding:YES
-                                            error:&archiveError];
-  if (data && !archiveError) {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:data forKey:kCMWatermarkConfigurationStorageKey];
-  } else if (archiveError) {
-    NSLog(@"⚠️ 水印配置存档失败: %@", archiveError.localizedDescription);
-  }
+  [[CMSettingsStorage sharedStorage]
+      saveWatermarkConfiguration:self.watermarkConfiguration];
 }
 
 - (void)loadPersistedWatermarkConfiguration {
-  NSData *storedData = [[NSUserDefaults standardUserDefaults]
-      objectForKey:kCMWatermarkConfigurationStorageKey];
-  if (!storedData) {
-    return;
-  }
-
-  NSError *unarchiveError = nil;
-  CMWatermarkConfiguration *storedConfig = [NSKeyedUnarchiver
-      unarchivedObjectOfClass:[CMWatermarkConfiguration class]
-                     fromData:storedData
-                        error:&unarchiveError];
-  if (storedConfig && !unarchiveError) {
+  CMWatermarkConfiguration *storedConfig =
+      [[CMSettingsStorage sharedStorage] loadWatermarkConfiguration];
+  if (storedConfig) {
     self.watermarkConfiguration = [storedConfig copy];
-  } else if (unarchiveError) {
-    NSLog(@"⚠️ 水印配置读取失败: %@", unarchiveError.localizedDescription);
   }
 }
 
 - (void)persistCurrentLensSelection {
-  if (self.currentLensOption.identifier.length == 0) {
-    [[NSUserDefaults standardUserDefaults]
-        removeObjectForKey:kCMLensSelectionStorageKey];
-    return;
-  }
-  [[NSUserDefaults standardUserDefaults]
-      setObject:self.currentLensOption.identifier
-         forKey:kCMLensSelectionStorageKey];
+  [[CMSettingsStorage sharedStorage]
+      saveLensIdentifier:self.currentLensOption.identifier];
 }
 
 #pragma mark - CameraManagerDelegate

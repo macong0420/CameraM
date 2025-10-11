@@ -20,7 +20,7 @@
 #import <float.h>
 #import <math.h>
 
-@interface CameraManager () <AVCapturePhotoCaptureDelegate, CMLocationServiceDelegate, CMOrientationManagerDelegate>
+@interface CameraManager () <AVCapturePhotoCaptureDelegate, CLLocationManagerDelegate, CMLocationServiceDelegate, CMOrientationManagerDelegate>
 
 // AVFoundation 核心组件
 @property(nonatomic, strong) AVCaptureSession *captureSession;
@@ -50,8 +50,9 @@
 // 镜头管理 - 已迁移到CMDeviceManager
 // availableLensOptions, currentLensOption, lensDeviceMap 通过属性访问器桥接
 // 位置管理
-@property(nonatomic, strong) CMLocationService *locationService; // 位置服务
-@property(nonatomic, strong) CLLocation *latestLocation; // 最新位置(由CMLocationService更新)
+@property(nonatomic, strong) CMLocationService *locationService; // 新位置服务
+@property(nonatomic, strong) CLLocationManager *locationManager; // 保留旧实现以保持兼容
+@property(nonatomic, strong) CLLocation *latestLocation;
 
 // 图片处理
 @property(nonatomic, strong) CMImageProcessor *imageProcessor; // 图片处理模块
@@ -90,8 +91,15 @@
 - (BOOL)performCameraSetup:(NSError **)error;
 - (void)setupPreviewLayerWithView:(UIView *)previewView;
 - (void)notifyDelegateStateChanged;
+- (void)configureLocationServices;
+- (void)handleLocationAuthorizationStatus:(CLAuthorizationStatus)status;
+- (void)startUpdatingLocationIfPossible;
+- (void)stopUpdatingLocationIfNeeded;
+- (BOOL)isValidLocation:(CLLocation *)location;
 - (AVCaptureVideoOrientation)currentVideoOrientation;
 - (AVCapturePhotoSettings *)createPhotoSettings;
+- (CLAuthorizationStatus)authorizationStatusForManager:
+    (CLLocationManager *)manager;
 
 @end
 
@@ -258,6 +266,116 @@
   });
 
   // 后续状态更新在回调中处理
+}
+
+#pragma mark - 位置服务
+
+- (void)configureLocationServices {
+  if (![CLLocationManager locationServicesEnabled]) {
+    NSLog(@"⚠️ 位置服务不可用，无法写入位置信息到照片 EXIF。");
+    return;
+  }
+
+  if (!self.locationManager) {
+    self.locationManager = [[CLLocationManager alloc] init];
+    self.locationManager.delegate = self;
+    self.locationManager.desiredAccuracy = kCLLocationAccuracyBest;
+    self.locationManager.distanceFilter = 3.0;
+    self.locationManager.pausesLocationUpdatesAutomatically = YES;
+  }
+
+  CLAuthorizationStatus status;
+  status = [self authorizationStatusForManager:self.locationManager];
+  [self handleLocationAuthorizationStatus:status];
+}
+
+- (void)handleLocationAuthorizationStatus:(CLAuthorizationStatus)status {
+  switch (status) {
+  case kCLAuthorizationStatusNotDetermined:
+    [self.locationManager requestWhenInUseAuthorization];
+    break;
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+  case kCLAuthorizationStatusAuthorized:
+#endif
+  case kCLAuthorizationStatusAuthorizedAlways:
+  case kCLAuthorizationStatusAuthorizedWhenInUse:
+    [self startUpdatingLocationIfPossible]; // 旧实现
+    [self.locationService startUpdatingLocation]; // 新实现(并行运行)
+    break;
+  case kCLAuthorizationStatusDenied:
+  case kCLAuthorizationStatusRestricted:
+    [self stopUpdatingLocationIfNeeded]; // 旧实现
+    [self.locationService stopUpdatingLocation]; // 新实现(并行运行)
+    self.latestLocation = nil;
+    break;
+  default:
+    break;
+  }
+}
+
+- (void)startUpdatingLocationIfPossible {
+  if (!self.locationManager || ![CLLocationManager locationServicesEnabled]) {
+    return;
+  }
+
+  CLAuthorizationStatus status;
+  status = [self authorizationStatusForManager:self.locationManager];
+
+  if (status == kCLAuthorizationStatusAuthorizedWhenInUse ||
+      status == kCLAuthorizationStatusAuthorizedAlways
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+      || status == kCLAuthorizationStatusAuthorized
+#endif
+  ) {
+    [self.locationManager startUpdatingLocation];
+  }
+}
+
+- (void)stopUpdatingLocationIfNeeded {
+  if (!self.locationManager) {
+    return;
+  }
+  [self.locationManager stopUpdatingLocation];
+}
+
+- (CLAuthorizationStatus)authorizationStatusForManager:
+    (CLLocationManager *)manager {
+  if (@available(iOS 14.0, *)) {
+    return manager.authorizationStatus;
+  }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  return [CLLocationManager authorizationStatus];
+#pragma clang diagnostic pop
+}
+
+- (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager {
+  CLAuthorizationStatus status =
+      [self authorizationStatusForManager:manager];
+  [self handleLocationAuthorizationStatus:status];
+}
+
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-implementations"
+- (void)locationManager:(CLLocationManager *)manager
+    didChangeAuthorizationStatus:(CLAuthorizationStatus)status {
+  [self handleLocationAuthorizationStatus:status];
+}
+#pragma clang diagnostic pop
+#endif
+
+- (void)locationManager:(CLLocationManager *)manager
+     didUpdateLocations:(NSArray<CLLocation *> *)locations {
+  CLLocation *latest = locations.lastObject;
+  if ([self isValidLocation:latest]) {
+    self.latestLocation = latest;
+  }
+}
+
+- (void)locationManager:(CLLocationManager *)manager
+       didFailWithError:(NSError *)error {
+  NSLog(@"⚠️ 定位失败: %@", error.localizedDescription);
 }
 
 #pragma mark - CMLocationServiceDelegate

@@ -13,6 +13,7 @@
 #import "Controllers/GalleryViewController.h"
 #import "Controllers/GalleryPreviewViewController.h"
 #import "ViewModels/CameraViewModel.h"
+#import "Common/CMPermissionManager.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
@@ -426,61 +427,32 @@
     return;
   }
 
-  PHAuthorizationStatus status;
-  if (@available(iOS 14, *)) {
-    status = [PHPhotoLibrary authorizationStatusForAccessLevel:
-                                          PHAccessLevelReadWrite];
-  } else {
-    status = [PHPhotoLibrary authorizationStatus];
-  }
+  // 使用CMPermissionManager简化权限处理
+  CMPermissionManager *pm = [CMPermissionManager sharedManager];
 
-  switch (status) {
-  case PHAuthorizationStatusAuthorized:
-  case PHAuthorizationStatusLimited:
+  if ([pm isPhotoLibraryAccessGranted]) {
+    // 已授权,直接显示相册
     [self showGalleryController];
-    break;
-  case PHAuthorizationStatusNotDetermined: {
-    if (@available(iOS 14, *)) {
-      __weak typeof(self) weakSelf = self;
-      [PHPhotoLibrary
-          requestAuthorizationForAccessLevel:PHAccessLevelReadWrite
-                                      handler:^(PHAuthorizationStatus status) {
-                                        dispatch_async(dispatch_get_main_queue(), ^{
-                                          __strong typeof(weakSelf) strongSelf =
-                                              weakSelf;
-                                          if (!strongSelf) {
-                                            return;
-                                          }
-                                          if (status == PHAuthorizationStatusAuthorized ||
-                                              status == PHAuthorizationStatusLimited) {
-                                            [strongSelf showGalleryController];
-                                          } else {
-                                            [strongSelf
-                                                showGalleryAuthorizationAlert];
-                                          }
-                                        });
-                                      }];
-    } else {
-      __weak typeof(self) weakSelf = self;
-      [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-          __strong typeof(weakSelf) strongSelf = weakSelf;
-          if (!strongSelf) {
-            return;
-          }
-          if (status == PHAuthorizationStatusAuthorized) {
-            [strongSelf showGalleryController];
-          } else {
-            [strongSelf showGalleryAuthorizationAlert];
-          }
-        });
-      }];
-    }
-    break;
-  }
-  default:
-    [self showGalleryAuthorizationAlert];
-    break;
+  } else if ([pm photoLibraryAuthorizationStatus] == CMPermissionStatusNotDetermined) {
+    // 未决定,请求权限
+    __weak typeof(self) weakSelf = self;
+    [pm requestPhotoLibraryPermission:^(CMPermissionStatus status) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        if (status == CMPermissionStatusAuthorized ||
+            status == CMPermissionStatusLimited) {
+          [strongSelf showGalleryController];
+        } else {
+          [pm showPermissionDeniedAlertForType:@"相册" fromViewController:strongSelf];
+        }
+      });
+    }];
+  } else {
+    // 已拒绝或受限,显示设置提示
+    [pm showPermissionDeniedAlertForType:@"相册" fromViewController:self];
   }
 }
 
@@ -494,34 +466,7 @@
   [self presentViewController:galleryVC animated:YES completion:nil];
 }
 
-- (void)showGalleryAuthorizationAlert {
-  UIAlertController *alert =
-      [UIAlertController alertControllerWithTitle:@"无法访问相册"
-                                          message:@"请在设置中允许CameraM访问照片，以浏览和编辑相册内容。"
-                                   preferredStyle:UIAlertControllerStyleAlert];
-
-  UIAlertAction *cancelAction =
-      [UIAlertAction actionWithTitle:@"取消"
-                               style:UIAlertActionStyleCancel
-                             handler:nil];
-  [alert addAction:cancelAction];
-
-  NSURL *settingsURL = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
-  if ([[UIApplication sharedApplication] canOpenURL:settingsURL]) {
-    UIAlertAction *settingsAction = [UIAlertAction
-        actionWithTitle:@"前往设置"
-                  style:UIAlertActionStyleDefault
-                handler:^(UIAlertAction *_Nonnull action) {
-                  [[UIApplication sharedApplication]
-                      openURL:settingsURL
-                      options:@{}
-            completionHandler:nil];
-                }];
-    [alert addAction:settingsAction];
-  }
-
-  [self presentViewController:alert animated:YES completion:nil];
-}
+// showGalleryAuthorizationAlert 已由 CMPermissionManager 替代
 
 #pragma mark - Photo Picker
 
