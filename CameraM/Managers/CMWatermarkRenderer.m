@@ -353,12 +353,13 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                       frameDescriptor:
                           (CMWatermarkFrameDescriptor *_Nullable)frameDescriptor
                              metadata:(NSDictionary *_Nullable)metadata {
-  NSString *detailString =
-      [self supplementaryStringForConfiguration:configuration
-                                       metadata:metadata];
   BOOL shouldRenderInline =
       (!frameDescriptor || [frameDescriptor.identifier
                                isEqualToString:CMWatermarkFrameIdentifierNone]);
+  NSString *detailString =
+      [self supplementaryStringForConfiguration:configuration
+                                       metadata:metadata
+                                     inlineMode:shouldRenderInline];
 
   if (shouldRenderInline) {
     [self drawInlineWatermarkOnPhotoInContext:context
@@ -508,107 +509,21 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
       NSMutableParagraphStyle *detailParagraph =
           [[NSMutableParagraphStyle alloc] init];
       detailParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
-      detailParagraph.alignment = NSTextAlignmentLeft;
+      UIColor *detailTextColor =
+          [[UIColor whiteColor] colorWithAlphaComponent:0.85];
 
-      NSArray<NSString *> *components =
-          [detailString componentsSeparatedByString:@"    "];
-      BOOL hasFormattedComponents = NO;
-      for (NSString *component in components) {
-        if ([component containsString:@"|"]) {
-          hasFormattedComponents = YES;
-          break;
-        }
-      }
-
+      NSDictionary *detailAttributes = @{
+        NSFontAttributeName : detailFont,
+        NSForegroundColorAttributeName : detailTextColor,
+        NSParagraphStyleAttributeName : detailParagraph
+      };
       CGFloat detailBaselineY =
           captionText.length > 0
               ? CGRectGetMaxY(captionRect) + (6.0 * CMWatermarkUIScaleFactor)
               : (contentCenterY - detailFont.lineHeight * 0.5);
       CGRect detailRect = CGRectMake(cursorX, detailBaselineY, availableWidth,
                                      detailFont.lineHeight);
-
-      if (!hasFormattedComponents) {
-        UIColor *detailTextColor =
-            [[UIColor whiteColor] colorWithAlphaComponent:0.85];
-        NSDictionary *detailAttributes = @{
-          NSFontAttributeName : detailFont,
-          NSForegroundColorAttributeName : detailTextColor,
-          NSParagraphStyleAttributeName : detailParagraph
-        };
-        [detailString drawInRect:detailRect withAttributes:detailAttributes];
-      } else {
-        UIColor *labelColor = [UIColor colorWithRed:199.0 / 255.0
-                                              green:201.0 / 255.0
-                                               blue:200.0 / 255.0
-                                              alpha:1.0];
-        UIColor *valueColor = [UIColor whiteColor];
-        NSDictionary *labelAttributes = @{
-          NSFontAttributeName : detailFont,
-          NSForegroundColorAttributeName : labelColor,
-          NSParagraphStyleAttributeName : detailParagraph
-        };
-        NSDictionary *valueAttributes = @{
-          NSFontAttributeName : detailFont,
-          NSForegroundColorAttributeName : valueColor,
-          NSParagraphStyleAttributeName : detailParagraph
-        };
-        NSDictionary *separatorAttributes = @{
-          NSFontAttributeName : detailFont,
-          NSForegroundColorAttributeName : labelColor,
-          NSParagraphStyleAttributeName : detailParagraph
-        };
-
-        NSMutableAttributedString *formatted =
-            [[NSMutableAttributedString alloc] init];
-        for (NSUInteger idx = 0; idx < components.count; idx++) {
-          NSString *component = components[idx];
-          NSArray<NSString *> *parts =
-              [component componentsSeparatedByString:@"|"];
-          NSString *label =
-              parts.count > 0
-                  ? [parts[0] stringByTrimmingCharactersInSet:
-                                   [NSCharacterSet whitespaceCharacterSet]]
-                  : @"";
-          NSString *value =
-              parts.count > 1
-                  ? [parts[1] stringByTrimmingCharactersInSet:
-                                   [NSCharacterSet whitespaceCharacterSet]]
-                  : @"";
-
-          if (idx > 0) {
-            NSAttributedString *separator =
-                [[NSAttributedString alloc] initWithString:@"    "
-                                                attributes:separatorAttributes];
-            [formatted appendAttributedString:separator];
-          }
-
-          if (label.length > 0) {
-            NSString *labelText =
-                [NSString stringWithFormat:@"%@ | ", label];
-            [formatted appendAttributedString:[[NSAttributedString alloc]
-                                                   initWithString:labelText
-                                                       attributes:labelAttributes]];
-          }
-          if (value.length > 0) {
-            [formatted appendAttributedString:[[NSAttributedString alloc]
-                                                   initWithString:value
-                                                       attributes:valueAttributes]];
-          }
-        }
-
-        if (formatted.length > 0) {
-          [formatted drawInRect:detailRect];
-        } else {
-          UIColor *detailTextColor =
-              [[UIColor whiteColor] colorWithAlphaComponent:0.85];
-          NSDictionary *detailAttributes = @{
-            NSFontAttributeName : detailFont,
-            NSForegroundColorAttributeName : detailTextColor,
-            NSParagraphStyleAttributeName : detailParagraph
-          };
-          [detailString drawInRect:detailRect withAttributes:detailAttributes];
-        }
-      }
+      [detailString drawInRect:detailRect withAttributes:detailAttributes];
     }
   }
 
@@ -883,7 +798,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 - (NSString *)supplementaryStringForConfiguration:
                   (CMWatermarkConfiguration *)configuration
                                          metadata:
-                                             (NSDictionary *_Nullable)metadata {
+                                             (NSDictionary *_Nullable)metadata
+                                       inlineMode:(BOOL)inlineMode {
   NSLog(@"🔍 参数生成调试 - preference: %ld, preferenceOptions: %ld",
         (long)configuration.preference, (long)configuration.preferenceOptions);
 
@@ -897,7 +813,9 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
     if (configuration.preferenceOptions &
         CMWatermarkPreferenceOptionsExposure) {
-      NSString *exposure = [self exposureStringFromMetadata:metadata];
+      NSString *exposure = inlineMode
+                               ? [self inlineExposureStringFromMetadata:metadata]
+                               : [self exposureStringFromMetadata:metadata];
       if (exposure.length > 0) {
         [components addObject:exposure];
       }
@@ -926,7 +844,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   case CMWatermarkPreferenceOff:
     return configuration.auxiliaryText;
   case CMWatermarkPreferenceExposure:
-    return [self exposureStringFromMetadata:metadata];
+    return inlineMode ? [self inlineExposureStringFromMetadata:metadata]
+                      : [self exposureStringFromMetadata:metadata];
   case CMWatermarkPreferenceCoordinates:
     return [self coordinateStringFromMetadata:metadata];
   case CMWatermarkPreferenceDate:
@@ -935,18 +854,31 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 }
 
 - (NSString *)exposureStringFromMetadata:(NSDictionary *)metadata {
+  return [self exposureStringFromMetadata:metadata inline:NO];
+}
+
+- (NSString *)inlineExposureStringFromMetadata:(NSDictionary *)metadata {
+  return [self exposureStringFromMetadata:metadata inline:YES];
+}
+
+- (NSString *)exposureStringFromMetadata:(NSDictionary *)metadata
+                                  inline:(BOOL)inlineMode {
   NSLog(@"📊 曝光参数调试 - metadata存在: %@", metadata ? @"YES" : @"NO");
   if (!metadata) {
-    // 测试数据：如果没有metadata，返回示例拍摄参数
-    NSString *testParams =
-        @"Aperture | f/2.8    Shutter | 1/60s    ISO | 800";
-    NSLog(@"📊 返回测试参数: %@", testParams);
-    return testParams;
+    if (inlineMode) {
+      NSString *testParams =
+          @"Aperture | f/2.8    Shutter | 1/60s    ISO | 800";
+      NSLog(@"📊 返回测试参数: %@", testParams);
+      return testParams;
+    }
+    return @"800 ISO    2.8 F    24 mm    1/60 S";
   }
   NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
   if (!exif) {
-    // 测试数据：如果没有EXIF信息，返回示例参数
-    return @"Aperture | f/1.8    Shutter | 1/125s    ISO | 1600";
+    if (inlineMode) {
+      return @"Aperture | f/1.8    Shutter | 1/125s    ISO | 1600";
+    }
+    return @"1600 ISO    1.8 F    50 mm    1/125 S";
   }
 
   double fNumber = [exif[(NSString *)kCGImagePropertyExifFNumber] doubleValue];
@@ -955,6 +887,16 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         [exif[(NSString *)kCGImagePropertyExifApertureValue] doubleValue];
     if (apertureValue > 0.0) {
       fNumber = pow(2.0, apertureValue / 2.0);
+    }
+  }
+
+  double focalLength =
+      [exif[(NSString *)kCGImagePropertyExifFocalLength] doubleValue];
+  if (focalLength <= 0.0) {
+    double focalLength35 =
+        [exif[(NSString *)kCGImagePropertyExifFocalLenIn35mmFilm] doubleValue];
+    if (focalLength35 > 0.0) {
+      focalLength = focalLength35;
     }
   }
 
@@ -987,40 +929,66 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     return result;
   };
 
-  NSString *apertureValue = @"--";
-  if (fNumber > 0.0) {
-    NSString *raw = [NSString stringWithFormat:@"%.1f", fNumber];
-    raw = trimmedDecimalString(raw);
-    apertureValue = [NSString stringWithFormat:@"f/%@", raw];
-  }
-
-  NSString *shutterValue = @"--";
-  if (exposureTime > 0.0) {
-    if (exposureTime >= 1.0) {
-      NSString *raw = [NSString stringWithFormat:@"%.1f", exposureTime];
+  if (inlineMode) {
+    NSString *apertureValue = @"--";
+    if (fNumber > 0.0) {
+      NSString *raw = [NSString stringWithFormat:@"%.1f", fNumber];
       raw = trimmedDecimalString(raw);
-      shutterValue = [raw stringByAppendingString:@"s"];
-    } else {
-      double denominator = round(1.0 / exposureTime);
-      if (!isfinite(denominator) || denominator <= 1.0) {
-        NSString *raw = [NSString stringWithFormat:@"%.2f", exposureTime];
+      apertureValue = [NSString stringWithFormat:@"f/%@", raw];
+    }
+
+    NSString *shutterValue = @"--";
+    if (exposureTime > 0.0) {
+      if (exposureTime >= 1.0) {
+        NSString *raw = [NSString stringWithFormat:@"%.1f", exposureTime];
         raw = trimmedDecimalString(raw);
         shutterValue = [raw stringByAppendingString:@"s"];
       } else {
-        shutterValue = [NSString stringWithFormat:@"1/%.0fs", denominator];
+        double denominator = round(1.0 / exposureTime);
+        if (!isfinite(denominator) || denominator <= 1.0) {
+          NSString *raw = [NSString stringWithFormat:@"%.2f", exposureTime];
+          raw = trimmedDecimalString(raw);
+          shutterValue = [raw stringByAppendingString:@"s"];
+        } else {
+          shutterValue = [NSString stringWithFormat:@"1/%.0fs", denominator];
+        }
       }
     }
+
+    NSString *isoValueString =
+        isoValue > 0 ? [NSString stringWithFormat:@"%ld", (long)isoValue] : @"--";
+
+    NSArray<NSString *> *components = @[
+      [NSString stringWithFormat:@"Aperture | %@", apertureValue],
+      [NSString stringWithFormat:@"Shutter | %@", shutterValue],
+      [NSString stringWithFormat:@"ISO | %@", isoValueString]
+    ];
+    return [components componentsJoinedByString:@"    "];
   }
 
-  NSString *isoValueString =
-      isoValue > 0 ? [NSString stringWithFormat:@"%ld", (long)isoValue] : @"--";
+  NSString *isoString =
+      isoValue > 0 ? [NSString stringWithFormat:@"%ld ISO", (long)isoValue]
+                   : @"-- ISO";
+  NSString *fString =
+      fNumber > 0.0 ? [NSString stringWithFormat:@"%.1f F", fNumber] : @"-- F";
+  NSString *focalString =
+      focalLength > 0.0 ? [NSString stringWithFormat:@"%.0f mm", focalLength]
+                        : @"-- mm";
 
-  NSArray<NSString *> *components = @[
-    [NSString stringWithFormat:@"Aperture   |   %@", apertureValue],
-    [NSString stringWithFormat:@"Shutter   |   %@", shutterValue],
-    [NSString stringWithFormat:@"ISO   |   %@", isoValueString]
-  ];
-  return [components componentsJoinedByString:@"    "];
+  NSString *shutterString;
+  if (exposureTime > 0.0) {
+    if (exposureTime >= 1.0) {
+      shutterString = [NSString stringWithFormat:@"%.1f S", exposureTime];
+    } else {
+      double denominator = round(1.0 / exposureTime);
+      shutterString = [NSString stringWithFormat:@"1/%.0f S", denominator];
+    }
+  } else {
+    shutterString = @"-- S";
+  }
+
+  return [@[ isoString, fString, focalString, shutterString ]
+      componentsJoinedByString:@"    "];
 }
 
 - (NSString *)coordinateStringFromMetadata:(NSDictionary *)metadata {
@@ -1081,90 +1049,58 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
                                                  weight:UIFontWeightSemibold];
   UIFont *parameterLabelFont = [UIFont systemFontOfSize:parameterFontSize * 0.65
                                                  weight:UIFontWeightMedium];
-//
-//  UIColor *labelColor = [UIColor colorWithRed:199.0 / 255.0
-//                                        green:201.0 / 255.0
-//                                         blue:200.0 / 255.0
-//                                        alpha:0.7];
-UIColor *labelColor = [UIColor redColor];
-  UIColor *valueColor = [UIColor whiteColor];
 
-  NSArray<NSString *> *components =
-      [detailString componentsSeparatedByString:@"    "];
-  if (components.count == 0) {
-    return;
-  }
+  // 文字颜色 - 黑色
+  UIColor *valueColor = [UIColor blackColor];
+  UIColor *labelColor = [UIColor colorWithWhite:0.3 alpha:1.0];
 
-  CGFloat contentWidth = contentRect.size.width;
-  CGFloat horizontalPadding = contentWidth * 0.06;
-  CGFloat availableWidth = contentWidth - (horizontalPadding * 2.0);
-  if (availableWidth <= 0.0) {
-    availableWidth = contentWidth;
-    horizontalPadding = 0.0;
-  }
-  CGFloat segmentWidth = availableWidth / MAX((CGFloat)components.count, 1.0f);
-  CGFloat startX =
-      contentRect.origin.x + (contentWidth - availableWidth) * 0.5f;
+  // 解析参数字符串: "3200 ISO    2.0 F    23 mm    1/63 S"
+  NSArray *components = [detailString componentsSeparatedByString:@"    "];
+  if (components.count == 4) {
+    CGFloat contentWidth = contentRect.size.width;
+    CGFloat horizontalPadding = contentWidth * 0.05; // 5%的左右边距
+    CGFloat availableWidth = contentWidth - (horizontalPadding * 2);
+    CGFloat spacing = availableWidth / 4.0; // 四个参数平均分布在可用宽度内
+    CGFloat startX = contentRect.origin.x + horizontalPadding;
 
-  NSMutableParagraphStyle *centerParagraph = [[NSMutableParagraphStyle alloc] init];
-  centerParagraph.alignment = NSTextAlignmentCenter;
+    for (NSInteger i = 0; i < components.count; i++) {
+      NSString *component = components[i];
+      NSArray *parts = [component componentsSeparatedByString:@" "];
+      if (parts.count >= 2) {
+        NSString *value = parts[0];
+        NSString *unit = parts[1];
 
-  NSDictionary *labelAttributes = @{
-    NSFontAttributeName : parameterLabelFont,
-    NSForegroundColorAttributeName : labelColor,
-    NSParagraphStyleAttributeName : centerParagraph
-  };
-  NSDictionary *valueAttributes = @{
-    NSFontAttributeName : parameterValueFont,
-    NSForegroundColorAttributeName : valueColor,
-    NSParagraphStyleAttributeName : centerParagraph
-  };
+        // 计算每个参数的中心位置
+        CGFloat centerX = startX + (spacing * i) + (spacing * 0.5);
+        CGFloat valueY = contentRect.origin.y + contentRect.size.height * 0.15;
+        CGFloat labelY = valueY + parameterValueFont.lineHeight +
+                         (4.0 * CMWatermarkUIScaleFactor);
 
-  for (NSInteger i = 0; i < components.count; i++) {
-    NSString *component = components[i];
-    NSArray<NSString *> *parts =
-        [component componentsSeparatedByString:@"|"];
-    NSString *label =
-        parts.count > 0 ? [parts[0] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet whitespaceCharacterSet]]
-                       : @"";
-    NSString *value =
-        parts.count > 1 ? [parts[1] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet whitespaceCharacterSet]]
-                       : component;
+        // 绘制数值 - 居中对齐
+        NSDictionary *valueAttributes = @{
+          NSFontAttributeName : parameterValueFont,
+          NSForegroundColorAttributeName : valueColor,
+          NSParagraphStyleAttributeName : [[NSParagraphStyle alloc] init]
+        };
+        CGSize valueSize = [value sizeWithAttributes:valueAttributes];
+        CGFloat valueX = centerX - (valueSize.width * 0.5);
+        CGRect valueRect =
+            CGRectMake(valueX, valueY, valueSize.width, valueSize.height);
+        [value drawInRect:valueRect withAttributes:valueAttributes];
 
-    NSMutableAttributedString *segment =
-        [[NSMutableAttributedString alloc] initWithString:@""];
-    if (label.length > 0) {
-      NSString *labelText =
-          [NSString stringWithFormat:@"%@ | ", label];
-      [segment appendAttributedString:[[NSAttributedString alloc]
-                                          initWithString:labelText
-                                              attributes:labelAttributes]];
+        // 绘制单位 - 居中对齐
+        NSDictionary *labelAttributes = @{
+          NSFontAttributeName : parameterLabelFont,
+          NSForegroundColorAttributeName : labelColor,
+          NSParagraphStyleAttributeName : [[NSParagraphStyle alloc] init]
+        };
+        CGSize labelSize = [unit sizeWithAttributes:labelAttributes];
+        CGFloat labelX = centerX - (labelSize.width * 0.5);
+        CGRect labelRect =
+            CGRectMake(labelX, labelY, labelSize.width, labelSize.height);
+        [unit drawInRect:labelRect withAttributes:labelAttributes];
+      }
     }
-    [segment appendAttributedString:[[NSAttributedString alloc]
-                                        initWithString:value
-                                            attributes:valueAttributes]];
-
-    CGRect segmentRect = CGRectMake(startX + segmentWidth * i,
-                                    contentRect.origin.y, segmentWidth,
-                                    contentRect.size.height);
-    CGSize boundingSize =
-        [segment boundingRectWithSize:CGSizeMake(segmentRect.size.width,
-                                                 CGFLOAT_MAX)
-                              options:NSStringDrawingUsesLineFragmentOrigin |
-                                       NSStringDrawingUsesFontLeading
-                              context:nil]
-            .size;
-    CGFloat textX =
-        segmentRect.origin.x +
-        (segmentRect.size.width - boundingSize.width) * 0.5f;
-    CGFloat textY =
-        segmentRect.origin.y +
-        (segmentRect.size.height - boundingSize.height) * 0.5f;
-    CGRect textRect =
-        CGRectMake(textX, textY, boundingSize.width, boundingSize.height);
-    [segment drawInRect:textRect];
   }
 }
 
@@ -1369,22 +1305,25 @@ UIColor *labelColor = [UIColor redColor];
                         detailString:(NSString *)detailString
                           canvasSize:(CGSize)canvasSize
                    parameterFontSize:(CGFloat)parameterFontSize {
+  UIFont *parameterFont = [UIFont systemFontOfSize:parameterFontSize
+                                            weight:UIFontWeightMedium];
+  UIColor *parameterColor = [UIColor colorWithRed:102.0 / 255.0
+                                            green:102.0 / 255.0
+                                             blue:102.0 / 255.0
+                                            alpha:1.0]; // #666666
 
-  UIFont *labelFont = [UIFont systemFontOfSize:parameterFontSize * 0.92
-                                        weight:UIFontWeightMedium];
-  UIFont *valueFont = [UIFont systemFontOfSize:parameterFontSize
-                                        weight:UIFontWeightSemibold];
-//  UIColor *labelColor = [UIColor colorWithRed:199.0 / 255.0
-//                                        green:201.0 / 255.0
-//                                         blue:200.0 / 255.0
-//                                        alpha:1.0];
-    UIColor *labelColor = [UIColor redColor];
-  UIColor *valueColor = [UIColor whiteColor];
+  NSMutableParagraphStyle *parameterParagraph =
+      [[NSMutableParagraphStyle alloc] init];
+  parameterParagraph.alignment = NSTextAlignmentCenter;
+  parameterParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
 
-  NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
-  paragraph.alignment = NSTextAlignmentCenter;
-  paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
+  NSDictionary *parameterAttributes = @{
+    NSFontAttributeName : parameterFont,
+    NSForegroundColorAttributeName : parameterColor,
+    NSParagraphStyleAttributeName : parameterParagraph
+  };
 
+  // 将参数字符串分解并水平排列
   NSString *trimmed =
       [detailString stringByTrimmingCharactersInSet:
                        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1392,82 +1331,17 @@ UIColor *labelColor = [UIColor redColor];
     return;
   }
 
-  NSArray<NSString *> *components =
-      [trimmed componentsSeparatedByString:@"    "];
-  if (components.count == 0) {
-    return;
+  NSArray *components = [trimmed componentsSeparatedByString:@"    "];
+  if (components.count > 0) {
+    NSString *displayText = [components componentsJoinedByString:@"  •  "];
+
+    CGFloat horizontalPadding = rect.size.width * 0.05;
+    CGRect parameterRect = CGRectMake(
+        rect.origin.x + horizontalPadding,
+        rect.origin.y + (rect.size.height - parameterFont.lineHeight) / 2.0,
+        rect.size.width - 2 * horizontalPadding, parameterFont.lineHeight);
+    [displayText drawInRect:parameterRect withAttributes:parameterAttributes];
   }
-
-  NSMutableAttributedString *composed =
-      [[NSMutableAttributedString alloc] init];
-  for (NSUInteger idx = 0; idx < components.count; idx++) {
-    NSString *component = components[idx];
-    NSArray<NSString *> *parts =
-        [component componentsSeparatedByString:@"|"];
-    NSString *label =
-        parts.count > 0 ? [parts[0] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet whitespaceCharacterSet]]
-                       : @"";
-    NSString *value =
-        parts.count > 1 ? [parts[1] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet whitespaceCharacterSet]]
-                       : component;
-
-    if (idx > 0) {
-      NSAttributedString *separator =
-          [[NSAttributedString alloc] initWithString:@"  •  "
-                                          attributes:@{
-                                            NSFontAttributeName : labelFont,
-                                            NSForegroundColorAttributeName :
-                                                labelColor,
-                                            NSParagraphStyleAttributeName :
-                                                paragraph
-                                          }];
-      [composed appendAttributedString:separator];
-    }
-
-    if (label.length > 0) {
-      NSString *labelText =
-          [NSString stringWithFormat:@"%@ | ", label];
-      [composed appendAttributedString:[[NSAttributedString alloc]
-                                           initWithString:labelText
-                                               attributes:@{
-                                                 NSFontAttributeName :
-                                                     labelFont,
-                                                 NSForegroundColorAttributeName :
-                                                     labelColor,
-                                                 NSParagraphStyleAttributeName :
-                                                     paragraph
-                                               }]];
-    }
-    [composed appendAttributedString:[[NSAttributedString alloc]
-                                         initWithString:value
-                                             attributes:@{
-                                               NSFontAttributeName :
-                                                   valueFont,
-                                               NSForegroundColorAttributeName :
-                                                   valueColor,
-                                               NSParagraphStyleAttributeName :
-                                                   paragraph
-                                             }]];
-  }
-
-  CGFloat horizontalPadding = rect.size.width * 0.05;
-  CGRect parameterRect =
-      CGRectMake(rect.origin.x + horizontalPadding, rect.origin.y,
-                 rect.size.width - 2 * horizontalPadding, rect.size.height);
-  CGRect drawingRect =
-      [composed boundingRectWithSize:CGSizeMake(parameterRect.size.width,
-                                                CGFLOAT_MAX)
-                             options:NSStringDrawingUsesLineFragmentOrigin |
-                                      NSStringDrawingUsesFontLeading
-                             context:nil];
-  CGFloat textY = parameterRect.origin.y +
-                  (parameterRect.size.height - drawingRect.size.height) * 0.5f;
-  CGRect finalRect = CGRectMake(parameterRect.origin.x, textY,
-                                parameterRect.size.width,
-                                drawingRect.size.height);
-  [composed drawInRect:finalRect];
 }
 
 - (void)drawInfoLayoutInRect:(CGRect)contentRect
