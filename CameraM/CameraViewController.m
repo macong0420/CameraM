@@ -12,6 +12,7 @@
 #import "Views/WatermarkPanelView.h"
 #import "Controllers/GalleryViewController.h"
 #import "Controllers/GalleryPreviewViewController.h"
+#import "ViewModels/CameraViewModel.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
@@ -23,6 +24,7 @@
 // 分离的组件 - 高内聚低耦合
 @property(nonatomic, strong) CameraControlsView *controlsView;
 @property(nonatomic, strong) CameraBusinessController *businessController;
+@property(nonatomic, strong) CameraViewModel *viewModel;
 @property(nonatomic, strong) UIView *processingOverlay;
 @property(nonatomic, strong) UIActivityIndicatorView *processingIndicator;
 @property(nonatomic, assign) BOOL isProcessingImportedImage;
@@ -86,6 +88,8 @@
   // 创建业务控制器
   self.businessController = [[CameraBusinessController alloc] init];
   self.businessController.delegate = self;
+  self.viewModel =
+      [[CameraViewModel alloc] initWithBusinessController:self.businessController];
 
   [self.controlsView applyWatermarkConfiguration:self.businessController
                                                      .watermarkConfiguration];
@@ -129,31 +133,16 @@
 }
 
 - (void)updateUIState {
-  // 协调UI状态更新
-  CameraResolutionMode mode = self.businessController.currentResolutionMode;
-  NSString *modeText =
-      (mode == CameraResolutionModeUltraHigh) ? @"48MP" : @"12MP";
-  BOOL highlighted = (mode == CameraResolutionModeUltraHigh);
-  [self.controlsView updateResolutionMode:modeText highlighted:highlighted];
+  CMCameraControlDisplayState *state =
+      [self.viewModel currentControlDisplayState];
+  [self.controlsView updateResolutionMode:state.resolutionText
+                               highlighted:state.resolutionHighlighted];
   [self.controlsView
       setResolutionModeEnabled:self.businessController
                                    .isUltraHighResolutionSupported];
 
-  FlashMode flashMode = self.businessController.currentFlashMode;
-  NSString *flashText = [self flashModeText:flashMode];
-  BOOL flashHighlighted = (flashMode == FlashModeOn);
-  [self.controlsView updateFlashMode:flashText highlighted:flashHighlighted];
-}
-
-- (NSString *)flashModeText:(FlashMode)mode {
-  switch (mode) {
-  case FlashModeAuto:
-    return @"AUTO";
-  case FlashModeOn:
-    return @"ON";
-  case FlashModeOff:
-    return @"OFF";
-  }
+  [self.controlsView updateFlashMode:state.flashText
+                          highlighted:state.flashHighlighted];
 }
 
 #pragma mark - CameraControlsDelegate (UI事件转发)
@@ -221,7 +210,7 @@
 - (void)didTapPreviewAtPoint:(CGPoint)point {
   [self.businessController
           focusAtPoint:point
-      withPreviewLayer:self.businessController.cameraManager.previewLayer];
+      withPreviewLayer:self.businessController.previewLayer];
   [self.controlsView showFocusIndicatorAtPoint:point];
 }
 
@@ -282,7 +271,7 @@
 
   if (!CGRectIsEmpty(newFrame)) {
     AVCaptureVideoPreviewLayer *previewLayer =
-        self.businessController.cameraManager.previewLayer;
+        self.businessController.previewLayer;
     if (!previewLayer) {
       return;
     }

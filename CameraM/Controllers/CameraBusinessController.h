@@ -21,6 +21,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@protocol CMCaptureSessionServicing;
+
 // 业务事件代理协议
 @protocol CameraBusinessDelegate <NSObject>
 
@@ -55,8 +57,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSArray<CMCameraLensOption *> *availableLensOptions;
 @property (nonatomic, readonly) CMCameraLensOption *currentLensOption;
 
-// 内部组件访问（仅用于协调）
-@property (nonatomic, readonly) CameraManager *cameraManager;
+// 预览访问（仅用于协调）
+@property (nonatomic, readonly) AVCaptureVideoPreviewLayer *previewLayer;
 
 // 相机控制接口
 - (void)setupCameraWithPreviewView:(UIView *)previewView completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
@@ -102,6 +104,10 @@ NS_ASSUME_NONNULL_BEGIN
                                          NSError *_Nullable error))completion;
 - (void)processImportedImage:(UIImage *)image
                   completion:(void (^)(UIImage * _Nullable processedImage, NSError * _Nullable error))completion;
+
+- (instancetype)initWithCaptureService:(id<CMCaptureSessionServicing>)service;
+
+- (instancetype)init;
 
 @end
 

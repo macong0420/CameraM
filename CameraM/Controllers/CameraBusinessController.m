@@ -7,6 +7,7 @@
 
 #import "CameraBusinessController.h"
 #import "../Managers/CMWatermarkRenderer.h"
+#import "../Services/CMCaptureSessionService.h"
 
 static NSString *const kCMWatermarkConfigurationStorageKey =
     @"com.cameram.watermark.configuration";
@@ -36,7 +37,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 
 @interface CameraBusinessController () <CameraManagerDelegate>
 
-@property(nonatomic, strong) CameraManager *cameraManager;
+@property(nonatomic, strong) id<CMCaptureSessionServicing> captureService;
 @property(nonatomic, strong) UIImage *latestCapturedImage;
 @property(nonatomic, assign) BOOL isGridLinesVisible;
 @property(nonatomic, copy) CMWatermarkConfiguration *watermarkConfiguration;
@@ -59,9 +60,22 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 @implementation CameraBusinessController
 
 - (instancetype)init {
+  return [self initWithCaptureService:nil];
+}
+
+- (instancetype)initWithCaptureService:
+    (id<CMCaptureSessionServicing>)service {
   self = [super init];
   if (self) {
-    [self setupCameraManager];
+    id<CMCaptureSessionServicing> resolvedService = service;
+    if (!resolvedService) {
+      CameraManager *manager = [CameraManager sharedManager];
+      resolvedService =
+          [[CMCaptureSessionService alloc] initWithCameraManager:manager];
+    }
+    _captureService = resolvedService;
+    _captureService.delegate = self;
+
     _isGridLinesVisible = NO;
     _watermarkConfiguration = [CMWatermarkConfiguration defaultConfiguration];
     [self loadPersistedWatermarkConfiguration];
@@ -69,41 +83,39 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
     _renderQueue =
         dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
-    _availableLensOptions = self.cameraManager.availableLensOptions ?: @[];
-    _currentLensOption = self.cameraManager.currentLensOption;
+    _availableLensOptions = _captureService.availableLensOptions ?: @[];
+    _currentLensOption = _captureService.currentLensOption;
     _restoredLensIdentifier = [[NSUserDefaults standardUserDefaults]
         stringForKey:kCMLensSelectionStorageKey];
   }
   return self;
 }
 
-#pragma mark - 私有方法
-
-- (void)setupCameraManager {
-  self.cameraManager = [CameraManager sharedManager];
-  self.cameraManager.delegate = self;
+// Convenience accessor for preview layer
+- (AVCaptureVideoPreviewLayer *)previewLayer {
+  return self.captureService.previewLayer;
 }
 
 #pragma mark - 状态查询接口
 
 - (CameraResolutionMode)currentResolutionMode {
-  return self.cameraManager.currentResolutionMode;
+  return self.captureService.currentResolutionMode;
 }
 
 - (FlashMode)currentFlashMode {
-  return self.cameraManager.currentFlashMode;
+  return self.captureService.currentFlashMode;
 }
 
 - (CameraAspectRatio)currentAspectRatio {
-  return self.cameraManager.currentAspectRatio;
+  return self.captureService.currentAspectRatio;
 }
 
 - (CameraDeviceOrientation)currentDeviceOrientation {
-  return self.cameraManager.currentDeviceOrientation;
+  return self.captureService.currentDeviceOrientation;
 }
 
 - (BOOL)isUltraHighResolutionSupported {
-  return self.cameraManager.isUltraHighResolutionSupported;
+  return self.captureService.isUltraHighResolutionSupported;
 }
 
 #pragma mark - 相机控制接口
@@ -112,56 +124,56 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
                         completion:
                             (void (^)(BOOL success,
                                       NSError *_Nullable error))completion {
-  [self.cameraManager setupCameraWithPreviewView:previewView
-                                      completion:completion];
+  [self.captureService setupCameraWithPreviewView:previewView
+                                       completion:completion];
 }
 
 - (void)startSession {
-  [self.cameraManager startSession];
+  [self.captureService startSession];
 }
 
 - (void)stopSession {
-  [self.cameraManager stopSession];
+  [self.captureService stopSession];
 }
 
 - (void)cleanup {
-  [self.cameraManager cleanup];
+  [self.captureService cleanup];
 }
 
 - (void)startOrientationMonitoring {
-  [self.cameraManager startDeviceOrientationMonitoring];
+  [self.captureService startDeviceOrientationMonitoring];
 }
 
 - (void)stopOrientationMonitoring {
-  [self.cameraManager stopDeviceOrientationMonitoring];
+  [self.captureService stopDeviceOrientationMonitoring];
 }
 
 #pragma mark - 拍摄控制
 
 - (void)capturePhoto {
-  [self.cameraManager capturePhoto];
+  [self.captureService capturePhoto];
 }
 
 - (void)switchCamera {
-  [self.cameraManager switchCamera];
+  [self.captureService switchCamera];
 }
 
 - (void)switchResolutionMode {
-  CameraResolutionMode currentMode = self.cameraManager.currentResolutionMode;
+  CameraResolutionMode currentMode = self.captureService.currentResolutionMode;
   CameraResolutionMode newMode = (currentMode == CameraResolutionModeStandard)
                                      ? CameraResolutionModeUltraHigh
                                      : CameraResolutionModeStandard;
 
   if (newMode == CameraResolutionModeUltraHigh &&
-      !self.cameraManager.isUltraHighResolutionSupported) {
+      !self.captureService.isUltraHighResolutionSupported) {
     return; // 不支持高分辨率
   }
 
-  [self.cameraManager switchResolutionMode:newMode];
+  [self.captureService switchResolutionMode:newMode];
 }
 
 - (void)switchFlashMode {
-  FlashMode currentMode = self.cameraManager.currentFlashMode;
+  FlashMode currentMode = self.captureService.currentFlashMode;
   FlashMode nextMode;
 
   switch (currentMode) {
@@ -176,16 +188,16 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     break;
   }
 
-  [self.cameraManager switchFlashMode:nextMode];
+  [self.captureService switchFlashMode:nextMode];
   [self persistFlashMode];
 }
 
 - (void)switchAspectRatio:(CameraAspectRatio)ratio {
-  [self.cameraManager switchAspectRatio:ratio];
+  [self.captureService switchAspectRatio:ratio];
 }
 
 - (void)switchToLensOption:(CMCameraLensOption *)lensOption {
-  [self.cameraManager switchToLensOption:lensOption];
+  [self.captureService switchToLensOption:lensOption];
 }
 
 #pragma mark - 对焦和曝光
@@ -195,11 +207,11 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   // 转换屏幕坐标到设备坐标
   CGPoint devicePoint =
       [previewLayer captureDevicePointOfInterestForPoint:screenPoint];
-  [self.cameraManager focusAtPoint:devicePoint];
+  [self.captureService focusAtPoint:devicePoint];
 }
 
 - (void)setExposureCompensation:(float)value {
-  [self.cameraManager setExposureCompensation:value];
+  [self.captureService setExposureCompensation:value];
 }
 
 #pragma mark - 网格线状态管理
@@ -214,13 +226,12 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 }
 
 - (CGRect)previewRectForCurrentAspectRatioInViewSize:(CGSize)viewSize {
-  return [self.cameraManager previewRectForAspectRatio:self.currentAspectRatio
-                                            inViewSize:viewSize];
+  return [self.captureService previewRectForAspectRatio:self.currentAspectRatio
+                                             inViewSize:viewSize];
 }
 
 - (CGRect)activePreviewRectInViewSize:(CGSize)viewSize {
-  return [self.cameraManager previewRectForAspectRatio:self.currentAspectRatio
-                                             inViewSize:viewSize];
+  return [self.captureService activeFormatPreviewRectInViewSize:viewSize];
 }
 
 - (void)updateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration {
@@ -263,8 +274,8 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
       if (applyCrop) {
         CameraAspectRatio aspectRatio = strongSelf.currentAspectRatio;
         UIImage *croppedImage =
-            [strongSelf.cameraManager cropImage:image
-                                  toAspectRatio:aspectRatio];
+            [strongSelf.captureService cropImage:image
+                                   toAspectRatio:aspectRatio];
         if (croppedImage) {
           workingImage = croppedImage;
         }
@@ -289,7 +300,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 
       UIImage *finalImage = renderedImage ?: workingImage;
 
-      [strongSelf.cameraManager
+      [strongSelf.captureService
           saveImageToPhotosLibrary:finalImage
                           metadata:metadata
                         completion:^(BOOL success, NSError *_Nullable error) {
@@ -358,8 +369,8 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     if (storedMode < FlashModeAuto || storedMode > FlashModeOff) {
       storedMode = FlashModeAuto;
     }
-    if (storedMode != self.cameraManager.currentFlashMode) {
-      [self.cameraManager switchFlashMode:storedMode];
+    if (storedMode != self.captureService.currentFlashMode) {
+      [self.captureService switchFlashMode:storedMode];
     } else {
       [self persistFlashMode];
     }
@@ -371,12 +382,12 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     NSInteger rawValue = [defaults integerForKey:kCMResolutionModeStorageKey];
     CameraResolutionMode storedMode = (CameraResolutionMode)rawValue;
     if (storedMode == CameraResolutionModeUltraHigh &&
-        !self.cameraManager.isUltraHighResolutionSupported) {
+        !self.captureService.isUltraHighResolutionSupported) {
       storedMode = CameraResolutionModeStandard;
     }
 
-    if (storedMode != self.cameraManager.currentResolutionMode) {
-      [self.cameraManager switchResolutionMode:storedMode];
+    if (storedMode != self.captureService.currentResolutionMode) {
+      [self.captureService switchResolutionMode:storedMode];
     } else {
       [self persistCurrentResolutionMode];
     }
@@ -387,7 +398,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 
 - (void)persistFlashMode {
   [[NSUserDefaults standardUserDefaults]
-      setInteger:self.cameraManager.currentFlashMode
+      setInteger:self.captureService.currentFlashMode
             forKey:kCMFlashModeStorageKey];
 }
 
@@ -399,7 +410,7 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 
 - (void)persistCurrentResolutionMode {
   [[NSUserDefaults standardUserDefaults]
-      setInteger:self.cameraManager.currentResolutionMode
+      setInteger:self.captureService.currentResolutionMode
             forKey:kCMResolutionModeStorageKey];
 }
 
