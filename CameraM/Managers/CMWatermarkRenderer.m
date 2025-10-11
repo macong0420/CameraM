@@ -14,6 +14,22 @@
 
 static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
+static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
+                                                 CGFloat minPointSize,
+                                                 CGFloat maxPointSize) {
+  if (canvasWidth <= 0.0f) {
+    return minPointSize * CMWatermarkUIScaleFactor;
+  }
+  const CGFloat referenceWidth = 3024.0f;
+  CGFloat clampedWidth = MIN(canvasWidth, referenceWidth);
+  CGFloat ratio = clampedWidth / referenceWidth;
+  CGFloat pointSize = maxPointSize * ratio;
+  if (pointSize < minPointSize) {
+    pointSize = minPointSize;
+  }
+  return pointSize * CMWatermarkUIScaleFactor;
+}
+
 @interface CMWatermarkRenderer ()
 
 @property(nonatomic, strong) NSDateFormatter *dateFormatter;
@@ -208,12 +224,10 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
               }
               // 使用实际的照片底部位置计算底部内容区域，保证整体垂直居中
               CGFloat photoBottom = CGRectGetMaxY(photoMaskRect);
-              CGFloat footerHeight =
-                  MAX(0.0, canvasSize.height - photoBottom);
+              CGFloat footerHeight = MAX(0.0, canvasSize.height - photoBottom);
               if (footerHeight > 0.0) {
-                polaroidFooterRect =
-                    CGRectMake(0.0, photoBottom, canvasSize.width,
-                               footerHeight);
+                polaroidFooterRect = CGRectMake(0.0, photoBottom,
+                                                canvasSize.width, footerHeight);
               }
             }
             if (!CGRectIsEmpty(photoMaskRect)) {
@@ -436,8 +450,12 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     return;
   }
 
+  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
+  const CGFloat referenceWidth = 3024.0f;
+  CGFloat normalizedWidth = MIN(canvasSize.width, referenceWidth);
+
   CGFloat baseFontSize =
-      MAX(18.0, MIN(42.0, canvasSize.width * 0.035)) * CMWatermarkUIScaleFactor;
+      MAX(18.0, MIN(42.0, normalizedWidth * 0.035)) * CMWatermarkUIScaleFactor;
   UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
                                           weight:UIFontWeightSemibold];
   NSMutableParagraphStyle *captionParagraph =
@@ -574,12 +592,16 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
   const CGFloat horizontalMargin = MAX(canvasSize.width * 0.05f, 40.0f);
   const CGFloat bottomInset = MAX(canvasSize.height * 0.06f, 80.0f);
-  CGFloat baseFontSize = MAX(22.0f, MIN(52.0f, canvasSize.width * 0.045f)) *
-                         CMWatermarkUIScaleFactor;
+
+  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
+  CGFloat baseFontSize =
+      CMWatermarkScaledPointSize(canvasSize.width, 12.0f, 42.0f);
   UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
                                           weight:UIFontWeightSemibold];
-  UIFont *detailFont = [UIFont systemFontOfSize:baseFontSize * 0.58f
-                                         weight:UIFontWeightMedium];
+  CGFloat detailPointSize =
+      MAX(10.0f * CMWatermarkUIScaleFactor, baseFontSize * 0.58f);
+  UIFont *detailFont =
+      [UIFont systemFontOfSize:detailPointSize weight:UIFontWeightMedium];
   const CGFloat lineSpacing = baseFontSize * 0.35f;
 
   NSMutableParagraphStyle *centerParagraph =
@@ -751,12 +773,12 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         NSString *label =
             parts.count > 0
                 ? [parts[0] stringByTrimmingCharactersInSet:
-                                 [NSCharacterSet whitespaceCharacterSet]]
+                                [NSCharacterSet whitespaceCharacterSet]]
                 : @"";
         NSString *value =
             parts.count > 1
                 ? [parts[1] stringByTrimmingCharactersInSet:
-                                 [NSCharacterSet whitespaceCharacterSet]]
+                                [NSCharacterSet whitespaceCharacterSet]]
                 : @"";
 
         if (idx > 0) {
@@ -767,16 +789,17 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         }
 
         if (label.length > 0) {
-          NSString *labelText =
-              [NSString stringWithFormat:@"%@ | ", label];
-          [formatted appendAttributedString:[[NSAttributedString alloc]
-                                                 initWithString:labelText
-                                                     attributes:labelAttributes]];
+          NSString *labelText = [NSString stringWithFormat:@"%@ | ", label];
+          [formatted
+              appendAttributedString:[[NSAttributedString alloc]
+                                         initWithString:labelText
+                                             attributes:labelAttributes]];
         }
         if (value.length > 0) {
-          [formatted appendAttributedString:[[NSAttributedString alloc]
-                                                 initWithString:value
-                                                     attributes:valueAttributes]];
+          [formatted
+              appendAttributedString:[[NSAttributedString alloc]
+                                         initWithString:value
+                                             attributes:valueAttributes]];
         }
       }
 
@@ -813,9 +836,9 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
     if (configuration.preferenceOptions &
         CMWatermarkPreferenceOptionsExposure) {
-      NSString *exposure = inlineMode
-                               ? [self inlineExposureStringFromMetadata:metadata]
-                               : [self exposureStringFromMetadata:metadata];
+      NSString *exposure =
+          inlineMode ? [self inlineExposureStringFromMetadata:metadata]
+                     : [self exposureStringFromMetadata:metadata];
       if (exposure.length > 0) {
         [components addObject:exposure];
       }
@@ -917,17 +940,18 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
         [exif[(NSString *)kCGImagePropertyExifExposureIndex] integerValue];
   }
 
-  NSString *(^trimmedDecimalString)(NSString *) = ^NSString *(NSString *value) {
-    NSString *result = value;
-    while ([result containsString:@"."] && [result hasSuffix:@"0"] &&
-           result.length > 0) {
-      result = [result substringToIndex:result.length - 1];
-    }
-    if ([result hasSuffix:@"."]) {
-      result = [result substringToIndex:result.length - 1];
-    }
-    return result;
-  };
+  NSString * (^trimmedDecimalString)(NSString *) =
+      ^NSString *(NSString *value) {
+        NSString *result = value;
+        while ([result containsString:@"."] && [result hasSuffix:@"0"] &&
+               result.length > 0) {
+          result = [result substringToIndex:result.length - 1];
+        }
+        if ([result hasSuffix:@"."]) {
+          result = [result substringToIndex:result.length - 1];
+        }
+        return result;
+      };
 
   if (inlineMode) {
     NSString *apertureValue = @"--";
@@ -956,7 +980,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     }
 
     NSString *isoValueString =
-        isoValue > 0 ? [NSString stringWithFormat:@"%ld", (long)isoValue] : @"--";
+        isoValue > 0 ? [NSString stringWithFormat:@"%ld", (long)isoValue]
+                     : @"--";
 
     NSArray<NSString *> *components = @[
       [NSString stringWithFormat:@"Aperture | %@", apertureValue],
@@ -1042,8 +1067,12 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 - (void)drawStudioParametersInRect:(CGRect)contentRect
                       detailString:(NSString *)detailString
                         canvasSize:(CGSize)canvasSize {
+  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
+  const CGFloat referenceWidth = 3024.0f;
+  CGFloat normalizedWidth = MIN(canvasSize.width, referenceWidth);
+
   CGFloat parameterFontSize =
-      MAX(48.0, MIN(96.0, canvasSize.width * 0.075)) * CMWatermarkUIScaleFactor;
+      MAX(48.0, MIN(96.0, normalizedWidth * 0.075)) * CMWatermarkUIScaleFactor;
   parameterFontSize = MIN(parameterFontSize, contentRect.size.height * 0.85f);
   UIFont *parameterValueFont = [UIFont systemFontOfSize:parameterFontSize
                                                  weight:UIFontWeightSemibold];
@@ -1201,12 +1230,11 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
     return;
   }
 
-  CGFloat currentY =
-      contentRect.origin.y +
-      (contentRect.size.height - totalContentHeight) * 0.5f;
+  CGFloat currentY = contentRect.origin.y +
+                     (contentRect.size.height - totalContentHeight) * 0.5f;
   CGFloat minStartY = contentRect.origin.y + minimumOuterMargin;
-  CGFloat maxStartY = CGRectGetMaxY(contentRect) - totalContentHeight -
-                      minimumOuterMargin;
+  CGFloat maxStartY =
+      CGRectGetMaxY(contentRect) - totalContentHeight - minimumOuterMargin;
   if (minStartY <= maxStartY) {
     currentY = MIN(MAX(currentY, minStartY), maxStartY);
   } else {
@@ -1219,8 +1247,7 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   }
 
   if (hasLogo && logoHeight > 0.0) {
-    CGFloat aspect =
-        logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+    CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
     CGFloat logoWidth = logoHeight * aspect;
     if (logoWidth > availableWidth) {
       CGFloat widthScale = availableWidth / logoWidth;
@@ -1241,8 +1268,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
       [[UIColor blackColor] setStroke];
     }
     [renderableLogo drawInRect:logoRect
-                      blendMode:kCGBlendModeNormal
-                          alpha:0.95];
+                     blendMode:kCGBlendModeNormal
+                         alpha:0.95];
     currentY += logoHeight;
     if (logoSpacing > 0.0) {
       currentY += logoSpacing;
@@ -1258,8 +1285,8 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   if (combinedText.length > 0 && textBlockHeight > 0.0) {
     textFontSize = MIN(textBlockHeight * 0.82, availableHeight * 0.18);
     textFontSize = MAX(textFontSize, 28.0);
-    UIFont *textFont =
-        [UIFont systemFontOfSize:textFontSize weight:UIFontWeightMedium];
+    UIFont *textFont = [UIFont systemFontOfSize:textFontSize
+                                         weight:UIFontWeightMedium];
     UIColor *textColor = [UIColor blackColor];
 
     NSMutableParagraphStyle *textParagraph =
@@ -1275,10 +1302,9 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
     CGFloat drawY =
         currentY + MAX(0.0, (textBlockHeight - textFont.lineHeight) / 2.0);
-    CGRect textRect =
-        CGRectMake(contentRect.origin.x + horizontalPadding, drawY,
-                   contentRect.size.width - 2.0 * horizontalPadding,
-                   textFont.lineHeight);
+    CGRect textRect = CGRectMake(
+        contentRect.origin.x + horizontalPadding, drawY,
+        contentRect.size.width - 2.0 * horizontalPadding, textFont.lineHeight);
     [combinedText drawInRect:textRect withAttributes:textAttributes];
     currentY += textBlockHeight;
   }
@@ -1288,10 +1314,9 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
       currentY += textSpacing;
     }
     CGFloat parameterFontSize =
-        MAX(20.0,
-            MIN(parameterHeight * 0.6,
-                (textFontSize > 0.0 ? textFontSize * 0.75
-                                    : availableHeight * 0.12)));
+        MAX(20.0, MIN(parameterHeight * 0.6,
+                      (textFontSize > 0.0 ? textFontSize * 0.75
+                                          : availableHeight * 0.12)));
     CGRect parameterRect = CGRectMake(contentRect.origin.x, currentY,
                                       contentRect.size.width, parameterHeight);
     [self drawPolaroidParametersInRect:parameterRect
@@ -1324,9 +1349,9 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
   };
 
   // 将参数字符串分解并水平排列
-  NSString *trimmed =
-      [detailString stringByTrimmingCharactersInSet:
-                       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  NSString *trimmed = [detailString
+      stringByTrimmingCharactersInSet:[NSCharacterSet
+                                          whitespaceAndNewlineCharacterSet]];
   if (trimmed.length == 0) {
     return;
   }
@@ -1361,10 +1386,14 @@ static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 
   // 动态设计参数 - 增大字体大小
   const CGFloat textSpacing = 20.0; // 文字间距20px
+  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
+  const CGFloat referenceWidth = 3024.0f;
+  CGFloat normalizedWidth = MIN(canvasSize.width, referenceWidth);
+
   // 增大字体大小：从15%和2%调整为20%和3%
   CGFloat baseFontSize =
       MIN(contentRect.size.height * 0.20,
-          canvasSize.width * 0.03); // 底部区域高度的20%或画布宽度的3%，取较小值
+          normalizedWidth * 0.03); // 底部区域高度的20%或画布宽度的3%，取较小值
   CGFloat primaryFontSize = baseFontSize * CMWatermarkUIScaleFactor;
   CGFloat secondaryFontSize = primaryFontSize * 0.85;
   CGFloat logoHeight =
