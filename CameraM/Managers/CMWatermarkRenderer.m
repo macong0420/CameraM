@@ -13,21 +13,67 @@
 #import <sys/utsname.h>
 
 static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
+static const CGFloat CMWatermarkReferenceShortSide = 3024.0f;
+static const CGFloat CMWatermarkReferenceLongSide = 4032.0f;
 
-static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
+static inline CGFloat CMWatermarkCanvasScaleForSize(CGSize canvasSize) {
+  CGFloat shortSide = MIN(canvasSize.width, canvasSize.height);
+  CGFloat longSide = MAX(canvasSize.width, canvasSize.height);
+  if (shortSide <= 0.0f || longSide <= 0.0f) {
+    return 1.0f;
+  }
+
+  CGFloat referenceDiagonal =
+      hypot(CMWatermarkReferenceLongSide, CMWatermarkReferenceShortSide);
+  CGFloat currentDiagonal = hypot(longSide, shortSide);
+  CGFloat normalized = currentDiagonal / referenceDiagonal;
+
+  // Soften the delta so imported assets with very different resolutions
+  // keep similar perceived sizing compared to captured photos.
+  CGFloat softened = pow(normalized, 0.5f);
+
+  // Clamp to a narrow band to avoid giant or tiny glyphs on extreme inputs.
+  return MIN(MAX(softened, 0.78f), 1.06f);
+}
+
+static inline CGFloat CMWatermarkScaledPointSize(CGSize canvasSize,
                                                  CGFloat minPointSize,
                                                  CGFloat maxPointSize) {
-  if (canvasWidth <= 0.0f) {
-    return minPointSize * CMWatermarkUIScaleFactor;
+  CGFloat scale = CMWatermarkCanvasScaleForSize(canvasSize);
+  if (scale <= 0.0f) {
+    scale = 1.0f;
   }
-  const CGFloat referenceWidth = 3024.0f;
-  CGFloat clampedWidth = MIN(canvasWidth, referenceWidth);
-  CGFloat ratio = clampedWidth / referenceWidth;
-  CGFloat pointSize = maxPointSize * ratio;
-  if (pointSize < minPointSize) {
-    pointSize = minPointSize;
+
+  CGFloat target = maxPointSize * scale;
+  if (target < minPointSize) {
+    target = minPointSize;
   }
-  return pointSize * CMWatermarkUIScaleFactor;
+
+  return target * CMWatermarkUIScaleFactor;
+}
+
+static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
+                                                      CGSize canvasSize,
+                                                      CGFloat maxContentHeight) {
+  CGFloat scale = CMWatermarkCanvasScaleForSize(canvasSize);
+  CGFloat targetHeight = captionLineHeight * 1.35f * scale;
+  CGFloat maxAllowed = 0.0f;
+  if (maxContentHeight > 0.0f) {
+    maxAllowed = maxContentHeight;
+  }
+
+  CGFloat absoluteCap = captionLineHeight * 1.85f;
+  if (maxAllowed > 0.0f) {
+    targetHeight = MIN(targetHeight, maxAllowed);
+  }
+  targetHeight = MIN(targetHeight, absoluteCap);
+
+  CGFloat minimum = captionLineHeight * 0.95f;
+  if (targetHeight < minimum) {
+    targetHeight = minimum;
+  }
+
+  return targetHeight;
 }
 
 @interface CMWatermarkRenderer ()
@@ -412,6 +458,12 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
   CGFloat cursorX = contentRect.origin.x + horizontalPadding;
   CGFloat contentCenterY = CGRectGetMidY(contentRect);
 
+  // 使用统一的画布缩放策略保持文字大小一致
+  CGFloat baseFontSize =
+      CMWatermarkScaledPointSize(canvasSize, 18.0f, 42.0f);
+  UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
+                                          weight:UIFontWeightSemibold];
+
   // Studio模式、Polaroid模式和Info模式不在此处显示logo
   if (logoDescriptor && logoDescriptor.assetName.length > 0 &&
       !(frameDescriptor &&
@@ -420,12 +472,19 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
          [frameDescriptor.identifier isEqualToString:@"frame.info"]))) {
     UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
     if (logoImage) {
-      CGFloat maxLogoHeight =
-          MIN(contentRect.size.height * 0.6, 140.0) * CMWatermarkUIScaleFactor;
-      maxLogoHeight = MIN(maxLogoHeight, contentRect.size.height);
+      CGFloat maxContentHeight = contentRect.size.height * 0.6f;
+      CGFloat logoHeight = CMWatermarkConsistentLogoHeight(
+          captionFont.lineHeight, canvasSize, maxContentHeight);
       CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
-      CGFloat logoHeight = maxLogoHeight;
       CGFloat logoWidth = logoHeight * aspect;
+
+      CGFloat availableLogoWidth =
+          CGRectGetMaxX(contentRect) - horizontalPadding - cursorX;
+      if (logoWidth > availableLogoWidth && availableLogoWidth > 0.0f) {
+        logoWidth = availableLogoWidth;
+        logoHeight = logoWidth / MAX(aspect, 0.1f);
+      }
+
       CGRect logoRect = CGRectMake(cursorX, contentCenterY - logoHeight / 2.0,
                                    logoWidth, logoHeight);
       UIImage *renderableLogo =
@@ -450,14 +509,6 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
     return;
   }
 
-  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
-  const CGFloat referenceWidth = 3024.0f;
-  CGFloat normalizedWidth = MIN(canvasSize.width, referenceWidth);
-
-  CGFloat baseFontSize =
-      MAX(18.0, MIN(42.0, normalizedWidth * 0.035)) * CMWatermarkUIScaleFactor;
-  UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
-                                          weight:UIFontWeightSemibold];
   NSMutableParagraphStyle *captionParagraph =
       [[NSMutableParagraphStyle alloc] init];
   captionParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -593,9 +644,9 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
   const CGFloat horizontalMargin = MAX(canvasSize.width * 0.05f, 40.0f);
   const CGFloat bottomInset = MAX(canvasSize.height * 0.06f, 80.0f);
 
-  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
+  // 使用统一的画布缩放策略，保持不同来源照片的水印观感一致
   CGFloat baseFontSize =
-      CMWatermarkScaledPointSize(canvasSize.width, 12.0f, 42.0f);
+      CMWatermarkScaledPointSize(canvasSize, 12.0f, 42.0f);
   UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
                                           weight:UIFontWeightSemibold];
   CGFloat detailPointSize =
@@ -656,11 +707,12 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
     if (!logoImage) {
       hasLogoAsset = NO;
     } else {
-      CGFloat maxLogoHeight =
-          captionFont.lineHeight * 1.2f * CMWatermarkUIScaleFactor;
-      maxLogoHeight = MIN(maxLogoHeight, canvasSize.height * 0.3f);
+      CGFloat maxContentHeight = canvasSize.height * 0.3f;
+      CGFloat targetLogoHeight =
+          CMWatermarkConsistentLogoHeight(captionFont.lineHeight, canvasSize,
+                                          maxContentHeight);
       CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
-      logoHeight = maxLogoHeight;
+      logoHeight = targetLogoHeight;
       logoWidth = logoHeight * aspect;
       CGFloat maxContentWidth = canvasSize.width - horizontalMargin * 2.0f;
       if (logoWidth > maxContentWidth && maxContentWidth > 0.0f) {
@@ -1067,12 +1119,9 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
 - (void)drawStudioParametersInRect:(CGRect)contentRect
                       detailString:(NSString *)detailString
                         canvasSize:(CGSize)canvasSize {
-  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
-  const CGFloat referenceWidth = 3024.0f;
-  CGFloat normalizedWidth = MIN(canvasSize.width, referenceWidth);
-
+  // 使用统一缩放策略，确保不同分辨率下的参数字体大小一致
   CGFloat parameterFontSize =
-      MAX(48.0, MIN(96.0, normalizedWidth * 0.075)) * CMWatermarkUIScaleFactor;
+      CMWatermarkScaledPointSize(canvasSize, 48.0f, 96.0f);
   parameterFontSize = MIN(parameterFontSize, contentRect.size.height * 0.85f);
   UIFont *parameterValueFont = [UIFont systemFontOfSize:parameterFontSize
                                                  weight:UIFontWeightSemibold];
@@ -1384,29 +1433,32 @@ static inline CGFloat CMWatermarkScaledPointSize(CGFloat canvasWidth,
         canvasSize.width, canvasSize.height, contentRect.size.width,
         contentRect.size.height);
 
-  // 动态设计参数 - 增大字体大小
-  const CGFloat textSpacing = 20.0; // 文字间距20px
-  // 使用标准化的参考宽度来计算字体大小，确保不同尺寸照片的水印大小一致
-  const CGFloat referenceWidth = 3024.0f;
-  CGFloat normalizedWidth = MIN(canvasSize.width, referenceWidth);
+  CGFloat layoutScale = CMWatermarkCanvasScaleForSize(canvasSize);
 
-  // 增大字体大小：从15%和2%调整为20%和3%
-  CGFloat baseFontSize =
-      MIN(contentRect.size.height * 0.20,
-          normalizedWidth * 0.03); // 底部区域高度的20%或画布宽度的3%，取较小值
-  CGFloat primaryFontSize = baseFontSize * CMWatermarkUIScaleFactor;
-  CGFloat secondaryFontSize = primaryFontSize * 0.85;
-  CGFloat logoHeight =
-      contentRect.size.height * 0.6; // Logo高度为底部区域高度的60%
+  CGFloat primaryFontSize =
+      CMWatermarkScaledPointSize(canvasSize, 24.0f, 48.0f);
+  if (contentRect.size.height > 0.0f) {
+    primaryFontSize =
+        MIN(primaryFontSize, contentRect.size.height * 0.45f);
+  }
+  UIFont *primaryFont = [UIFont systemFontOfSize:primaryFontSize
+                                          weight:UIFontWeightSemibold];
+
+  CGFloat secondaryFontSize =
+      MAX(primaryFontSize * 0.82f, 28.0f * layoutScale);
+  secondaryFontSize = MIN(secondaryFontSize, primaryFontSize * 0.92f);
+  UIFont *secondaryFont = [UIFont systemFontOfSize:secondaryFontSize
+                                            weight:UIFontWeightMedium];
+
+  CGFloat textSpacing =
+      MAX(primaryFont.lineHeight * 0.32f, 18.0f * layoutScale);
+  CGFloat logoHeight = CMWatermarkConsistentLogoHeight(
+      primaryFont.lineHeight, canvasSize, contentRect.size.height * 0.6f);
 
   NSLog(@"📏 字体大小调试 - baseFontSize: %.1f, primaryFontSize: %.1f, "
         @"secondaryFontSize: %.1f, logoHeight: %.1f",
-        baseFontSize, primaryFontSize, secondaryFontSize, logoHeight);
-
-  UIFont *primaryFont = [UIFont systemFontOfSize:primaryFontSize
-                                          weight:UIFontWeightSemibold];
-  UIFont *secondaryFont = [UIFont systemFontOfSize:secondaryFontSize
-                                            weight:UIFontWeightMedium];
+        primaryFont.pointSize, primaryFontSize, secondaryFontSize,
+        logoHeight);
 
   UIColor *blackColor = [UIColor blackColor];
   UIColor *grayColor = [UIColor colorWithRed:102.0 / 255.0
