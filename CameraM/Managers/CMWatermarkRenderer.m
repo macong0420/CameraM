@@ -139,10 +139,6 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
         MAX(0.0, frameDescriptor.bottomExpansionRatio * baseShortSide);
     const CGSize canvasSize = CGSizeMake(baseWidth, baseHeight + bottomPadding);
 
-    NSLog(@"📏 相框渲染 - 模式: %@, 原始图像: %.0fx%.0f, 画布: %.0fx%.0f",
-          frameDescriptor.identifier ?: @"none", baseWidth, baseHeight,
-          canvasSize.width, canvasSize.height);
-
     UIGraphicsImageRendererFormat *format =
         [UIGraphicsImageRendererFormat defaultFormat];
     format.scale = image.scale > 0 ? image.scale : [UIScreen mainScreen].scale;
@@ -875,9 +871,6 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
                                          metadata:
                                              (NSDictionary *_Nullable)metadata
                                        inlineMode:(BOOL)inlineMode {
-  NSLog(@"🔍 参数生成调试 - preference: %ld, preferenceOptions: %ld",
-        (long)configuration.preference, (long)configuration.preferenceOptions);
-
   if (configuration.preference == CMWatermarkPreferenceOff) {
     return configuration.auxiliaryText ?: @"";
   }
@@ -938,12 +931,10 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
 
 - (NSString *)exposureStringFromMetadata:(NSDictionary *)metadata
                                   inline:(BOOL)inlineMode {
-  NSLog(@"📊 曝光参数调试 - metadata存在: %@", metadata ? @"YES" : @"NO");
   if (!metadata) {
     if (inlineMode) {
       NSString *testParams =
           @"Aperture | f/2.8    Shutter | 1/60s    ISO | 800";
-      NSLog(@"📊 返回测试参数: %@", testParams);
       return testParams;
     }
     return @"800 ISO    2.8 F    24 mm    1/60 S";

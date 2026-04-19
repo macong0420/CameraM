@@ -46,6 +46,7 @@
 
 // 性能优化 - 队列管理
 @property(nonatomic, strong) dispatch_queue_t sessionQueue;
+@property(nonatomic, strong) dispatch_queue_t photoProcessingQueue;
 
 // 镜头管理 - 已迁移到CMDeviceManager
 // availableLensOptions, currentLensOption, lensDeviceMap 通过属性访问器桥接
@@ -131,6 +132,11 @@
   // 创建专用队列 - 避免主线程阻塞
   _sessionQueue =
       dispatch_queue_create("com.cameram.session", DISPATCH_QUEUE_SERIAL);
+  dispatch_queue_attr_t photoQueueAttr =
+      dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
+                                              QOS_CLASS_USER_INITIATED, 0);
+  _photoProcessingQueue =
+      dispatch_queue_create("com.cameram.photo.processing", photoQueueAttr);
 
   // 初始化方向监听
   _motionManager = [[CMMotionManager alloc] init];
@@ -1132,19 +1138,65 @@
       }
       return;
     }
+  });
 
-    NSData *imageData = photo.fileDataRepresentation;
-    if (imageData) {
-      UIImage *image = [UIImage imageWithData:imageData];
-      NSDictionary *enrichedMetadata =
-          [self enrichedMetadataFromPhoto:photo originalMetadata:photo.metadata];
-
-      if ([self.delegate respondsToSelector:@selector
-                         (cameraManager:didCapturePhoto:withMetadata:)]) {
-        [self.delegate cameraManager:self
-                     didCapturePhoto:image
-                        withMetadata:enrichedMetadata];
+  NSData *imageData = photo.fileDataRepresentation;
+  if (!imageData) {
+    NSError *invalidDataError =
+        [NSError errorWithDomain:@"CameraManager"
+                            code:1006
+                        userInfo:@{
+                          NSLocalizedDescriptionKey : @"无法从拍照结果中获取图像数据"
+                        }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if ([self.delegate respondsToSelector:@selector(cameraManager:
+                                                   didFailWithError:)]) {
+        [self.delegate cameraManager:self didFailWithError:invalidDataError];
       }
+    });
+    return;
+  }
+
+  __weak typeof(self) weakSelf = self;
+  dispatch_async(self.photoProcessingQueue, ^{
+    @autoreleasepool {
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (!strongSelf) {
+        return;
+      }
+
+      UIImage *image = [UIImage imageWithData:imageData];
+      if (!image) {
+        NSError *decodeError =
+            [NSError errorWithDomain:@"CameraManager"
+                                code:1007
+                            userInfo:@{
+                              NSLocalizedDescriptionKey : @"图像解码失败"
+                            }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+          if ([strongSelf.delegate
+                  respondsToSelector:@selector(cameraManager:
+                                               didFailWithError:)]) {
+            [strongSelf.delegate cameraManager:strongSelf
+                                didFailWithError:decodeError];
+          }
+        });
+        return;
+      }
+
+      NSDictionary *enrichedMetadata = [strongSelf
+          enrichedMetadataFromPhoto:photo
+                   originalMetadata:photo.metadata];
+
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if ([strongSelf.delegate respondsToSelector:@selector
+                                 (cameraManager:didCapturePhoto:
+                                                  withMetadata:)]) {
+          [strongSelf.delegate cameraManager:strongSelf
+                             didCapturePhoto:image
+                                withMetadata:enrichedMetadata];
+        }
+      });
     }
   });
 }

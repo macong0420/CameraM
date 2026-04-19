@@ -9,6 +9,8 @@
 #import <UIKit/UIKit.h>
 #import <ImageIO/ImageIO.h>
 
+static const CGFloat kCMPhotoSaveJPEGQuality = 0.96f;
+
 @implementation CMImageProcessor
 
 #pragma mark - Image Normalization
@@ -64,8 +66,6 @@
     cropRect = CGRectMake(0.0f, yOffset, imageWidth, targetHeight);
   }
 
-  NSLog(@"📐 [CMImageProcessor] 裁剪区域: %@, 原图尺寸: %.0fx%.0f, 目标比例: %.3f",
-        NSStringFromCGRect(cropRect), imageWidth, imageHeight, targetAspect);
   return CGRectIntegral(cropRect);
 }
 
@@ -76,39 +76,23 @@
     return nil;
   }
 
-  NSLog(@"🖼 [CMImageProcessor] 原始图像信息 - 尺寸: (%.0fx%.0f), 方向: %ld, 比例目标: %ld",
-        image.size.width, image.size.height, (long)image.imageOrientation,
-        (long)ratio);
-
   // 第一步：将图像标准化为UIImageOrientationUp方向
   UIImage *normalizedImage = [self normalizeImageOrientation:image];
-
-  NSLog(@"✅ [CMImageProcessor] 标准化后图像 - 尺寸: (%.0fx%.0f), 方向: %ld",
-        normalizedImage.size.width, normalizedImage.size.height,
-        (long)normalizedImage.imageOrientation);
 
   // 第二步：在标准化的图像上进行裁剪
   CGRect cropRect = [self cropRectForAspectRatio:ratio
                                      inImageSize:normalizedImage.size
                                  withOrientation:orientation];
 
-  NSLog(@"✂️ [CMImageProcessor] 计算的裁剪区域: (%.0f, %.0f, %.0f, %.0f)",
-        cropRect.origin.x, cropRect.origin.y, cropRect.size.width, cropRect.size.height);
-
   // 第三步：执行裁剪
   CGImageRef croppedCGImage =
       CGImageCreateWithImageInRect(normalizedImage.CGImage, cropRect);
   if (!croppedCGImage) {
-    NSLog(@"❌ [CMImageProcessor] 裁剪失败，返回原图");
     return image;
   }
 
   UIImage *croppedImage = [UIImage imageWithCGImage:croppedCGImage];
   CGImageRelease(croppedCGImage);
-
-  NSLog(@"🎉 [CMImageProcessor] 最终裁剪结果 - 尺寸: (%.0fx%.0f), 实际比例: %.2f:1",
-        croppedImage.size.width, croppedImage.size.height,
-        croppedImage.size.width / croppedImage.size.height);
 
   return croppedImage;
 }
@@ -132,60 +116,81 @@
     return;
   }
 
-  [PHPhotoLibrary
-      requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
-                                 handler:^(PHAuthorizationStatus status) {
-                                   if (status == PHAuthorizationStatusAuthorized ||
-                                       status == PHAuthorizationStatusLimited) {
-                                     [[PHPhotoLibrary sharedPhotoLibrary]
-                                         performChanges:^{
-                                           PHAssetCreationRequest *request =
-                                               [PHAssetCreationRequest
-                                                   creationRequestForAssetFromImage:image];
+  void (^performSaveBlock)(void) = ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      NSData *photoData = UIImageJPEGRepresentation(image, kCMPhotoSaveJPEGQuality);
 
-                                           // 设置创建日期
-                                           NSDate *creationDate =
-                                               [self creationDateFromMetadata:metadata];
-                                           if (creationDate) {
-                                             request.creationDate = creationDate;
-                                           }
+      [[PHPhotoLibrary sharedPhotoLibrary]
+          performChanges:^{
+            PHAssetCreationRequest *request = nil;
+            if (photoData.length > 0) {
+              request = [PHAssetCreationRequest creationRequestForAsset];
+              [request addResourceWithType:PHAssetResourceTypePhoto
+                                      data:photoData
+                                   options:nil];
+            } else {
+              request = [PHAssetCreationRequest creationRequestForAssetFromImage:image];
+            }
 
-                                           // 设置位置信息
-                                           CLLocation *location =
-                                               [self locationFromMetadata:metadata];
-                                           if (location) {
-                                             request.location = location;
-                                           }
-                                         }
-                                         completionHandler:^(BOOL success,
-                                                           NSError *error) {
-                                           if (!success && error) {
-                                             NSLog(@"❌ [CMImageProcessor] 保存图片失败: %@",
-                                                   error.localizedDescription);
-                                           } else {
-                                             NSLog(@"✅ [CMImageProcessor] 图片保存成功");
-                                           }
-                                           if (completion) {
-                                             dispatch_async(dispatch_get_main_queue(), ^{
-                                               completion(success, error);
-                                             });
-                                           }
-                                         }];
-                                   } else {
-                                     if (completion) {
-                                       NSError *permissionError =
-                                           [NSError errorWithDomain:@"CMImageProcessor"
-                                                               code:2002
-                                                           userInfo:@{
-                                                             NSLocalizedDescriptionKey :
-                                                                 @"Photo library permission denied"
-                                                           }];
-                                       dispatch_async(dispatch_get_main_queue(), ^{
-                                         completion(NO, permissionError);
-                                       });
-                                     }
-                                   }
-                                 }];
+            NSDate *creationDate = [self creationDateFromMetadata:metadata];
+            if (creationDate) {
+              request.creationDate = creationDate;
+            }
+
+            CLLocation *location = [self locationFromMetadata:metadata];
+            if (location) {
+              request.location = location;
+            }
+          }
+          completionHandler:^(BOOL success, NSError *error) {
+            if (completion) {
+              dispatch_async(dispatch_get_main_queue(), ^{
+                completion(success, error);
+              });
+            }
+          }];
+    });
+  };
+
+  PHAuthorizationStatus status =
+      [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
+  if (status == PHAuthorizationStatusAuthorized ||
+      status == PHAuthorizationStatusLimited) {
+    performSaveBlock();
+    return;
+  }
+
+  if (status == PHAuthorizationStatusNotDetermined) {
+    [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
+                                               handler:^(PHAuthorizationStatus grantedStatus) {
+      if (grantedStatus == PHAuthorizationStatusAuthorized ||
+          grantedStatus == PHAuthorizationStatusLimited) {
+        performSaveBlock();
+      } else if (completion) {
+        NSError *permissionError =
+            [NSError errorWithDomain:@"CMImageProcessor"
+                                code:2002
+                            userInfo:@{
+                              NSLocalizedDescriptionKey : @"Photo library permission denied"
+                            }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+          completion(NO, permissionError);
+        });
+      }
+    }];
+    return;
+  }
+
+  if (completion) {
+    NSError *permissionError = [NSError errorWithDomain:@"CMImageProcessor"
+                                                   code:2002
+                                               userInfo:@{
+                                                 NSLocalizedDescriptionKey : @"Photo library permission denied"
+                                               }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      completion(NO, permissionError);
+    });
+  }
 }
 
 #pragma mark - Helpers

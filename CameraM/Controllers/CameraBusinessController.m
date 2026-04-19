@@ -70,8 +70,11 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     [self loadPersistedWatermarkConfiguration];
     [self loadPersistedSettings];
     _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
+    dispatch_queue_attr_t renderQueueAttr =
+        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
+                                                QOS_CLASS_USER_INITIATED, 0);
     _renderQueue =
-        dispatch_queue_create("com.cameram.render", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_create("com.cameram.render", renderQueueAttr);
     _availableLensOptions = _captureService.availableLensOptions ?: @[];
     _currentLensOption = _captureService.currentLensOption;
     _restoredLensIdentifier = [[CMSettingsStorage sharedStorage] loadLensIdentifier];
