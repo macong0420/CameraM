@@ -199,7 +199,6 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   [self.topControlsView addSubview:self.flashButton];
   [self.topControlsView addSubview:self.gridButton];
   [self.topControlsView addSubview:self.aspectRatioButton];
-  [self.topControlsView addSubview:self.switchCameraButton];
   [self.topControlsView addSubview:self.frameWatermarkButton];
   [self.topControlsView addSubview:self.settingsButton];
 }
@@ -242,6 +241,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   [self.bottomControlsView addSubview:self.galleryButton];
   [self.bottomControlsView addSubview:self.captureButton];
+  [self.bottomControlsView addSubview:self.switchCameraButton];
   [self.bottomControlsView addSubview:self.modeSelector];
 
   [NSLayoutConstraint activateConstraints:@[
@@ -663,21 +663,21 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.settingsButton.widthAnchor constraintEqualToConstant:40],
     [self.settingsButton.heightAnchor constraintEqualToConstant:40],
 
-    [self.switchCameraButton.trailingAnchor
-        constraintEqualToAnchor:self.settingsButton.leadingAnchor
-                       constant:-15],
-    [self.switchCameraButton.centerYAnchor
-        constraintEqualToAnchor:self.topControlsView.centerYAnchor],
-    [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
-    [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
-
     [self.frameWatermarkButton.trailingAnchor
-        constraintEqualToAnchor:self.switchCameraButton.leadingAnchor
+        constraintEqualToAnchor:self.resolutionModeLabel.leadingAnchor
                        constant:-15],
     [self.frameWatermarkButton.centerYAnchor
         constraintEqualToAnchor:self.topControlsView.centerYAnchor],
     [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
-    [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40]
+    [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40],
+
+    [self.resolutionModeLabel.trailingAnchor
+        constraintEqualToAnchor:self.settingsButton.leadingAnchor
+                       constant:-15],
+    [self.resolutionModeLabel.centerYAnchor
+        constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+    [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:52],
+    [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:28]
   ]];
 
   // 底部控制栏
@@ -719,6 +719,14 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.captureButton.widthAnchor constraintEqualToConstant:70],
     [self.captureButton.heightAnchor constraintEqualToConstant:70],
 
+    [self.switchCameraButton.leadingAnchor
+        constraintEqualToAnchor:self.captureButton.trailingAnchor
+                       constant:30],
+    [self.switchCameraButton.centerYAnchor
+        constraintEqualToAnchor:self.captureButton.centerYAnchor],
+    [self.switchCameraButton.widthAnchor constraintEqualToConstant:50],
+    [self.switchCameraButton.heightAnchor constraintEqualToConstant:50],
+
   ]];
 
   // 专业控制区
@@ -741,18 +749,9 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   // 状态指示器
   [NSLayoutConstraint activateConstraints:@[
-    [self.resolutionModeLabel.topAnchor
+    [self.flashModeLabel.topAnchor
         constraintEqualToAnchor:self.topControlsView.bottomAnchor
                        constant:10],
-    [self.resolutionModeLabel.leadingAnchor
-        constraintEqualToAnchor:self.leadingAnchor
-                       constant:20],
-    [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:50],
-    [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:20],
-
-    [self.flashModeLabel.topAnchor
-        constraintEqualToAnchor:self.resolutionModeLabel.bottomAnchor
-                       constant:5],
     [self.flashModeLabel.leadingAnchor
         constraintEqualToAnchor:self.leadingAnchor
                        constant:20],
@@ -1512,21 +1511,21 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.settingsButton.widthAnchor constraintEqualToConstant:40],
     [self.settingsButton.heightAnchor constraintEqualToConstant:40],
 
-    [self.switchCameraButton.trailingAnchor
-        constraintEqualToAnchor:self.settingsButton.leadingAnchor
-                       constant:-10],
-    [self.switchCameraButton.centerYAnchor
-        constraintEqualToAnchor:self.topControlsView.centerYAnchor],
-    [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
-    [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
-
     [self.frameWatermarkButton.trailingAnchor
-        constraintEqualToAnchor:self.switchCameraButton.leadingAnchor
+        constraintEqualToAnchor:self.resolutionModeLabel.leadingAnchor
                        constant:-10],
     [self.frameWatermarkButton.centerYAnchor
         constraintEqualToAnchor:self.topControlsView.centerYAnchor],
     [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
-    [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40]
+    [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40],
+
+    [self.resolutionModeLabel.trailingAnchor
+        constraintEqualToAnchor:self.settingsButton.leadingAnchor
+                       constant:-10],
+    [self.resolutionModeLabel.centerYAnchor
+        constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+    [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:52],
+    [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:28]
   ]];
 
   // 底部控制栏
@@ -1571,6 +1570,14 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.captureButton.widthAnchor constraintEqualToConstant:70],
     [self.captureButton.heightAnchor constraintEqualToConstant:70],
 
+    [self.switchCameraButton.leadingAnchor
+        constraintEqualToAnchor:self.captureButton.trailingAnchor
+                       constant:30],
+    [self.switchCameraButton.centerYAnchor
+        constraintEqualToAnchor:self.captureButton.centerYAnchor],
+    [self.switchCameraButton.widthAnchor constraintEqualToConstant:50],
+    [self.switchCameraButton.heightAnchor constraintEqualToConstant:50],
+
     // 专业控制区域
     [self.professionalControlsView.trailingAnchor
         constraintEqualToAnchor:self.trailingAnchor],
@@ -1586,18 +1593,9 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.exposureSlider.widthAnchor constraintEqualToConstant:150],
 
     // 状态指示器
-    [self.resolutionModeLabel.topAnchor
+    [self.flashModeLabel.topAnchor
         constraintEqualToAnchor:self.topControlsView.bottomAnchor
                        constant:10],
-    [self.resolutionModeLabel.leadingAnchor
-        constraintEqualToAnchor:self.leadingAnchor
-                       constant:20],
-    [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:50],
-    [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:20],
-
-    [self.flashModeLabel.topAnchor
-        constraintEqualToAnchor:self.resolutionModeLabel.bottomAnchor
-                       constant:5],
     [self.flashModeLabel.leadingAnchor
         constraintEqualToAnchor:self.leadingAnchor
                        constant:20],
@@ -1701,21 +1699,21 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.settingsButton.widthAnchor constraintEqualToConstant:40],
     [self.settingsButton.heightAnchor constraintEqualToConstant:40],
 
-    [self.switchCameraButton.trailingAnchor
-        constraintEqualToAnchor:self.settingsButton.leadingAnchor
-                       constant:-20],
-    [self.switchCameraButton.centerYAnchor
-        constraintEqualToAnchor:self.topControlsView.centerYAnchor],
-    [self.switchCameraButton.widthAnchor constraintEqualToConstant:40],
-    [self.switchCameraButton.heightAnchor constraintEqualToConstant:40],
-
     [self.frameWatermarkButton.trailingAnchor
-        constraintEqualToAnchor:self.switchCameraButton.leadingAnchor
+        constraintEqualToAnchor:self.resolutionModeLabel.leadingAnchor
                        constant:-20],
     [self.frameWatermarkButton.centerYAnchor
         constraintEqualToAnchor:self.topControlsView.centerYAnchor],
     [self.frameWatermarkButton.widthAnchor constraintEqualToConstant:40],
-    [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40]
+    [self.frameWatermarkButton.heightAnchor constraintEqualToConstant:40],
+
+    [self.resolutionModeLabel.trailingAnchor
+        constraintEqualToAnchor:self.settingsButton.leadingAnchor
+                       constant:-20],
+    [self.resolutionModeLabel.centerYAnchor
+        constraintEqualToAnchor:self.topControlsView.centerYAnchor],
+    [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:52],
+    [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:28]
   ]];
 
   // 底部控制栏 - 保持横向排列
@@ -1761,6 +1759,14 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     [self.captureButton.widthAnchor constraintEqualToConstant:70],
     [self.captureButton.heightAnchor constraintEqualToConstant:70],
 
+    [self.switchCameraButton.leadingAnchor
+        constraintEqualToAnchor:self.captureButton.trailingAnchor
+                       constant:30],
+    [self.switchCameraButton.centerYAnchor
+        constraintEqualToAnchor:self.captureButton.centerYAnchor],
+    [self.switchCameraButton.widthAnchor constraintEqualToConstant:50],
+    [self.switchCameraButton.heightAnchor constraintEqualToConstant:50],
+
   ]];
 
   // 专业控制区域（横屏时保持右侧）
@@ -1783,18 +1789,9 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
   // 状态指示器与网格线
   [constraints addObjectsFromArray:@[
-    [self.resolutionModeLabel.topAnchor
+    [self.flashModeLabel.topAnchor
         constraintEqualToAnchor:self.topControlsView.bottomAnchor
                        constant:12],
-    [self.resolutionModeLabel.leadingAnchor
-        constraintEqualToAnchor:self.leadingAnchor
-                       constant:32],
-    [self.resolutionModeLabel.widthAnchor constraintEqualToConstant:50],
-    [self.resolutionModeLabel.heightAnchor constraintEqualToConstant:20],
-
-    [self.flashModeLabel.topAnchor
-        constraintEqualToAnchor:self.resolutionModeLabel.bottomAnchor
-                       constant:6],
     [self.flashModeLabel.leadingAnchor
         constraintEqualToAnchor:self.leadingAnchor
                        constant:32],
