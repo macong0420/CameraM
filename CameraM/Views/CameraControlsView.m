@@ -1218,25 +1218,36 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     return;
   }
 
+  // 基于真实视频显示区域计算，避免横竖屏切换后遮罩与取景内容错位。
+  CGRect referenceRect = CGRectIsEmpty(self.previewVideoRect)
+                             ? bounds
+                             : CGRectIntersection(self.previewVideoRect, bounds);
+  if (CGRectIsEmpty(referenceRect)) {
+    referenceRect = bounds;
+  }
+
   const CGFloat targetAspect =
       CMAspectRatioValue(ratio, self.currentOrientation);
-  const CGFloat screenAspect = bounds.size.width / bounds.size.height;
+  const CGFloat screenAspect = referenceRect.size.width / referenceRect.size.height;
 
-  // 计算最大化利用屏幕的活动区域
-  CGRect activeRect = bounds;
+  // 计算活动取景区域
+  CGRect activeRect = referenceRect;
 
   if (fabs(screenAspect - targetAspect) >= 0.0001f) {
     if (screenAspect > targetAspect) {
-      // 屏幕比目标更宽，在左右裁剪（横屏4:3 vs 屏幕16:9）
-      const CGFloat targetWidth = bounds.size.height * targetAspect;
-      const CGFloat xOffset = (bounds.size.width - targetWidth) / 2.0f;
-      activeRect = CGRectMake(xOffset, 0.0f, targetWidth, bounds.size.height);
+      // 显示区域比目标更宽，在左右裁剪
+      const CGFloat targetWidth = referenceRect.size.height * targetAspect;
+      const CGFloat xOffset =
+          referenceRect.origin.x + (referenceRect.size.width - targetWidth) / 2.0f;
+      activeRect = CGRectMake(xOffset, referenceRect.origin.y, targetWidth,
+                              referenceRect.size.height);
     } else {
-      // 屏幕比目标更窄，在上下裁剪（竖屏3:4 vs 屏幕19.5:9）
-      // 这种情况下，充分利用屏幕宽度，在上下裁剪
-      const CGFloat targetHeight = bounds.size.width / targetAspect;
-      const CGFloat yOffset = (bounds.size.height - targetHeight) / 2.0f;
-      activeRect = CGRectMake(0.0f, yOffset, bounds.size.width, targetHeight);
+      // 显示区域比目标更窄，在上下裁剪
+      const CGFloat targetHeight = referenceRect.size.width / targetAspect;
+      const CGFloat yOffset =
+          referenceRect.origin.y + (referenceRect.size.height - targetHeight) / 2.0f;
+      activeRect = CGRectMake(referenceRect.origin.x, yOffset,
+                              referenceRect.size.width, targetHeight);
     }
   }
 

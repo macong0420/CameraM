@@ -252,7 +252,13 @@
         [self.photoOutput connectionWithMediaType:AVMediaTypeVideo];
     if (photoConnection) {
       if (photoConnection.isVideoOrientationSupported) {
-        photoConnection.videoOrientation = [self currentVideoOrientation];
+        AVCaptureVideoOrientation orientationForCapture =
+            [self currentVideoOrientation];
+        AVCaptureConnection *previewConnection = self.previewLayer.connection;
+        if (previewConnection && previewConnection.isVideoOrientationSupported) {
+          orientationForCapture = previewConnection.videoOrientation;
+        }
+        photoConnection.videoOrientation = orientationForCapture;
       }
       if (photoConnection.isVideoMirroringSupported) {
         photoConnection.videoMirrored =

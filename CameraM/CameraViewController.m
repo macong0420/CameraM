@@ -71,6 +71,25 @@
   [self updatePreviewLayerFrame];
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+           (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+
+  [coordinator
+      animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>
+                                       _Nonnull context) {
+        [self.view layoutIfNeeded];
+        [self updatePreviewLayerFrame];
+      }
+                      completion:^(
+                          id<UIViewControllerTransitionCoordinatorContext>
+                              _Nonnull context) {
+                        [self.view layoutIfNeeded];
+                        [self updatePreviewLayerFrame];
+                      }];
+}
+
 - (void)dealloc {
   [self.businessController stopOrientationMonitoring]; // 停止方向监听
   [self.businessController cleanup];
@@ -251,9 +270,17 @@
   // 更新UI布局适配
   [self.controlsView updateLayoutForOrientation:orientation];
 
-  // 重要：更新预览层frame以适应新布局
+  // 重要：在方向切换时与动画结束后都刷新预览层，避免取景框错位
   dispatch_async(dispatch_get_main_queue(), ^{
+    [self.view layoutIfNeeded];
     [self updatePreviewLayerFrame];
+
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+          [self.view layoutIfNeeded];
+          [self updatePreviewLayerFrame];
+        });
   });
 
   NSLog(@"设备方向变化，UI适配: %ld", (long)orientation);
@@ -280,6 +307,13 @@
     // 使用CATransaction确保frame和方向同步更新
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
+    AVCaptureConnection *connection = previewLayer.connection;
+    AVCaptureVideoOrientation targetOrientation =
+        [self currentPreviewVideoOrientation];
+    if (connection && connection.isVideoOrientationSupported &&
+        connection.videoOrientation != targetOrientation) {
+      connection.videoOrientation = targetOrientation;
+    }
     BOOL frameChanged = !CGRectEqualToRect(previewLayer.frame, newFrame);
     if (frameChanged) {
       previewLayer.frame = newFrame;
@@ -293,6 +327,31 @@
     if (frameChanged) {
       NSLog(@"📐 预览层frame已更新: %@", NSStringFromCGRect(newFrame));
     }
+  }
+}
+
+- (AVCaptureVideoOrientation)currentPreviewVideoOrientation {
+  UIInterfaceOrientation interfaceOrientation = UIInterfaceOrientationUnknown;
+  if (@available(iOS 13.0, *)) {
+    interfaceOrientation = self.view.window.windowScene.interfaceOrientation;
+  } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    interfaceOrientation = [UIApplication sharedApplication].statusBarOrientation;
+#pragma clang diagnostic pop
+  }
+
+  switch (interfaceOrientation) {
+  case UIInterfaceOrientationLandscapeLeft:
+    return AVCaptureVideoOrientationLandscapeLeft;
+  case UIInterfaceOrientationLandscapeRight:
+    return AVCaptureVideoOrientationLandscapeRight;
+  case UIInterfaceOrientationPortraitUpsideDown:
+    return AVCaptureVideoOrientationPortraitUpsideDown;
+  case UIInterfaceOrientationPortrait:
+    return AVCaptureVideoOrientationPortrait;
+  default:
+    return self.businessController.previewLayer.connection.videoOrientation;
   }
 }
 
