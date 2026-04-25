@@ -142,6 +142,20 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 #pragma mark - 拍摄控制
 
 - (void)capturePhoto {
+  if (self.captureService.currentState != CameraStateRunning) {
+    NSError *stateError =
+        [NSError errorWithDomain:kCMBusinessControllerErrorDomain
+                            code:3002
+                        userInfo:@{
+                          NSLocalizedDescriptionKey : @"相机尚未就绪，请稍后重试"
+                        }];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if ([self.delegate respondsToSelector:@selector(didFailWithError:)]) {
+        [self.delegate didFailWithError:stateError];
+      }
+    });
+    return;
+  }
   [self.captureService capturePhoto];
 }
 

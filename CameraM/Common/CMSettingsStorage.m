@@ -32,7 +32,6 @@
     if (data && !archiveError) {
         [[NSUserDefaults standardUserDefaults] setObject:data
                                                   forKey:kCMWatermarkConfigurationStorageKey];
-        [[NSUserDefaults standardUserDefaults] synchronize];
     } else if (archiveError) {
         NSLog(@"⚠️ [CMSettingsStorage] Failed to save watermark configuration: %@",
               archiveError.localizedDescription);
@@ -66,7 +65,6 @@
 - (void)saveFlashMode:(FlashMode)mode {
     [[NSUserDefaults standardUserDefaults] setInteger:mode
                                                forKey:kCMFlashModeStorageKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (FlashMode)loadFlashModeWithDefault:(FlashMode)defaultMode {
@@ -88,7 +86,6 @@
 - (void)saveResolutionMode:(CameraResolutionMode)mode {
     [[NSUserDefaults standardUserDefaults] setInteger:mode
                                                forKey:kCMResolutionModeStorageKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (CameraResolutionMode)loadResolutionModeWithDefault:(CameraResolutionMode)defaultMode {
@@ -104,7 +101,6 @@
 - (void)saveGridVisibility:(BOOL)visible {
     [[NSUserDefaults standardUserDefaults] setBool:visible
                                             forKey:kCMGridVisibilityStorageKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (BOOL)loadGridVisibilityWithDefault:(BOOL)defaultValue {
@@ -126,7 +122,6 @@
 
     [[NSUserDefaults standardUserDefaults] setObject:identifier
                                                forKey:kCMLensSelectionStorageKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (NSString *)loadLensIdentifier {
@@ -136,7 +131,6 @@
 
 - (void)clearLensIdentifier {
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:kCMLensSelectionStorageKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 @end

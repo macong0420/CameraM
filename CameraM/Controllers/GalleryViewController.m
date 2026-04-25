@@ -349,30 +349,36 @@ static NSString *const kGalleryCellReuseIdentifier = @"GalleryCell";
                                                               NSString *_Nullable dataUTI,
                                                               CGImagePropertyOrientation orientation,
                                                               NSDictionary *_Nullable info) {
-                                                dispatch_async(dispatch_get_main_queue(), ^{
-                                                  __strong typeof(weakSelf) strongSelf =
-                                                      weakSelf;
-                                                  strongSelf.isLoadingSelection = NO;
-                                                  [strongSelf.loadingIndicator stopAnimating];
-                                                  strongSelf.collectionView.userInteractionEnabled = YES;
-
-                                                  if (!strongSelf) {
-                                                    return;
+                                                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                                                  UIImage *decodedImage = nil;
+                                                  @autoreleasepool {
+                                                    decodedImage =
+                                                        imageData ? [UIImage imageWithData:imageData] : nil;
                                                   }
 
-                                                  UIImage *image =
-                                                      imageData ? [UIImage imageWithData:imageData] : nil;
-                                                  if (image &&
+                                                  dispatch_async(dispatch_get_main_queue(), ^{
+                                                    __strong typeof(weakSelf) strongSelf =
+                                                        weakSelf;
+                                                    if (!strongSelf) {
+                                                      return;
+                                                    }
+
+                                                    strongSelf.isLoadingSelection = NO;
+                                                    [strongSelf.loadingIndicator stopAnimating];
+                                                    strongSelf.collectionView.userInteractionEnabled = YES;
+
+                                                    if (decodedImage &&
+                                                        [strongSelf.delegate
+                                                            respondsToSelector:@selector
+                                                            (galleryViewController:
+                                                                                 didSelectImage:)]) {
                                                       [strongSelf.delegate
-                                                          respondsToSelector:@selector
-                                                          (galleryViewController:
-                                                                               didSelectImage:)]) {
-                                                    [strongSelf.delegate
-                                                        galleryViewController:strongSelf
-                                                               didSelectImage:image];
-                                                  } else {
-                                                    [strongSelf showImageLoadFailure];
-                                                  }
+                                                          galleryViewController:strongSelf
+                                                                 didSelectImage:decodedImage];
+                                                    } else {
+                                                      [strongSelf showImageLoadFailure];
+                                                    }
+                                                  });
                                                 });
                                               }];
 }

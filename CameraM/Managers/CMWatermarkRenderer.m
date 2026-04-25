@@ -15,6 +15,7 @@
 static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 static const CGFloat CMWatermarkReferenceShortSide = 3024.0f;
 static const CGFloat CMWatermarkReferenceLongSide = 4032.0f;
+static const CGFloat CMWatermarkMaxRenderPixels = 22000000.0f; // ~22MP cap
 
 static inline CGFloat CMWatermarkCanvasScaleForSize(CGSize canvasSize) {
   CGFloat shortSide = MIN(canvasSize.width, canvasSize.height);
@@ -50,6 +51,21 @@ static inline CGFloat CMWatermarkScaledPointSize(CGSize canvasSize,
   }
 
   return target * CMWatermarkUIScaleFactor;
+}
+
+// Inline(无相框)模式使用更宽的分辨率自适应区间，避免高分辨率下logo/参数显得过小。
+static inline CGFloat CMWatermarkInlineAdaptiveScale(CGSize canvasSize) {
+  CGFloat width = MAX(canvasSize.width, 1.0f);
+  CGFloat height = MAX(canvasSize.height, 1.0f);
+  CGFloat shortSide = MIN(width, height);
+  CGFloat megaPixels = (width * height) / 1000000.0f;
+
+  // 以 12MP(4032x3024) 为基准做自适应。
+  CGFloat shortSideFactor = pow(shortSide / CMWatermarkReferenceShortSide, 0.60f);
+  CGFloat megaPixelFactor = pow(MAX(megaPixels / 12.0f, 0.2f), 0.20f);
+  CGFloat adaptive = shortSideFactor * megaPixelFactor;
+
+  return MIN(MAX(adaptive, 0.95f), 1.60f);
 }
 
 static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
@@ -132,16 +148,30 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
           logoDescriptorForIdentifier:effectiveConfiguration.logoIdentifier
                                           ?: CMWatermarkLogoIdentifierNone];
     }
-    const CGFloat baseWidth = image.size.width;
-    const CGFloat baseHeight = image.size.height;
-    const CGFloat baseShortSide = MIN(baseWidth, baseHeight);
+    CGFloat baseWidth = image.size.width;
+    CGFloat baseHeight = image.size.height;
+    CGFloat baseShortSide = MIN(baseWidth, baseHeight);
+    CGFloat bottomRatio = MAX(0.0f, frameDescriptor.bottomExpansionRatio);
+    CGFloat estimatedCanvasPixels =
+        baseWidth * (baseHeight + bottomRatio * baseShortSide);
+    if (estimatedCanvasPixels > CMWatermarkMaxRenderPixels &&
+        baseWidth > 0.0f && baseHeight > 0.0f) {
+      CGFloat renderScale =
+          sqrt(CMWatermarkMaxRenderPixels / estimatedCanvasPixels);
+      renderScale = MAX(MIN(renderScale, 1.0f), 0.2f);
+      baseWidth = MAX(1.0f, floor(baseWidth * renderScale));
+      baseHeight = MAX(1.0f, floor(baseHeight * renderScale));
+      baseShortSide = MIN(baseWidth, baseHeight);
+      NSLog(@"⚠️ [CMWatermarkRenderer] 超大图渲染降采样: scale=%.3f, %.0fx%.0f",
+            renderScale, baseWidth, baseHeight);
+    }
     const CGFloat bottomPadding =
         MAX(0.0, frameDescriptor.bottomExpansionRatio * baseShortSide);
     const CGSize canvasSize = CGSizeMake(baseWidth, baseHeight + bottomPadding);
 
     UIGraphicsImageRendererFormat *format =
         [UIGraphicsImageRendererFormat defaultFormat];
-    format.scale = image.scale > 0 ? image.scale : [UIScreen mainScreen].scale;
+    format.scale = 1.0f;
     format.opaque = YES;
     format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;
 
@@ -643,6 +673,8 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   // 使用统一的画布缩放策略，保持不同来源照片的水印观感一致
   CGFloat baseFontSize =
       CMWatermarkScaledPointSize(canvasSize, 12.0f, 42.0f);
+  CGFloat inlineAdaptiveScale = CMWatermarkInlineAdaptiveScale(canvasSize);
+  baseFontSize *= inlineAdaptiveScale;
   UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
                                           weight:UIFontWeightSemibold];
   CGFloat detailPointSize =
@@ -707,6 +739,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
       CGFloat targetLogoHeight =
           CMWatermarkConsistentLogoHeight(captionFont.lineHeight, canvasSize,
                                           maxContentHeight);
+      targetLogoHeight *= inlineAdaptiveScale;
       CGFloat aspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
       logoHeight = targetLogoHeight;
       logoWidth = logoHeight * aspect;
