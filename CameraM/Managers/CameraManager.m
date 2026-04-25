@@ -92,6 +92,8 @@
 - (void)setupPreviewLayerWithView:(UIView *)previewView;
 - (void)notifyDelegateStateChanged;
 - (AVCaptureVideoOrientation)currentVideoOrientation;
+- (AVCaptureVideoOrientation)effectivePreviewVideoOrientation;
+- (CameraDeviceOrientation)effectiveCompositionOrientation;
 - (AVCapturePhotoSettings *)createPhotoSettings;
 
 @end
@@ -521,17 +523,21 @@
 
 - (CGRect)cropRectForAspectRatio:(CameraAspectRatio)ratio
                      inImageSize:(CGSize)imageSize {
+  CameraDeviceOrientation compositionOrientation =
+      [self effectiveCompositionOrientation];
   // 委托给CMImageProcessor
   return [self.imageProcessor cropRectForAspectRatio:ratio
                                          inImageSize:imageSize
-                                     withOrientation:self.currentDeviceOrientation];
+                                     withOrientation:compositionOrientation];
 }
 
 - (UIImage *)cropImage:(UIImage *)image toAspectRatio:(CameraAspectRatio)ratio {
+  CameraDeviceOrientation compositionOrientation =
+      [self effectiveCompositionOrientation];
   // 使用CMImageProcessor处理图片裁剪
   return [self.imageProcessor cropImage:image
                          toAspectRatio:ratio
-                       withOrientation:self.currentDeviceOrientation];
+                       withOrientation:compositionOrientation];
 }
 
 // 标准化图像方向 - 委托给CMImageProcessor
@@ -541,7 +547,7 @@
 
 - (CGFloat)aspectRatioValueForRatio:(CameraAspectRatio)ratio {
   return [self aspectRatioValueForRatio:ratio
-                          inOrientation:self.currentDeviceOrientation];
+                          inOrientation:[self effectiveCompositionOrientation]];
 }
 
 - (CGFloat)aspectRatioValueForRatio:(CameraAspectRatio)ratio
@@ -593,7 +599,7 @@
 
   const CGFloat targetAspect =
       [self aspectRatioValueForRatio:ratio
-                       inOrientation:self.currentDeviceOrientation];
+                       inOrientation:[self effectiveCompositionOrientation]];
   const CGFloat viewAspect = viewWidth / viewHeight;
 
   CGRect rect = CGRectMake(0.0f, 0.0f, viewWidth, viewHeight);
@@ -628,10 +634,41 @@
     return CGRectIntegral(CGRectMake(0.0f, 0.0f, viewWidth, viewHeight));
   }
 
+  AVCaptureVideoOrientation orientation = [self effectivePreviewVideoOrientation];
+  BOOL previewIsPortrait = (orientation == AVCaptureVideoOrientationPortrait ||
+                            orientation == AVCaptureVideoOrientationPortraitUpsideDown);
+  BOOL dimensionsAreLandscape = (activeDimensions.width >= activeDimensions.height);
+  if (previewIsPortrait == dimensionsAreLandscape) {
+    activeDimensions =
+        CGSizeMake(activeDimensions.height, activeDimensions.width);
+  }
+
   CGRect boundingRect = CGRectMake(0.0f, 0.0f, viewWidth, viewHeight);
   CGRect videoRect =
       AVMakeRectWithAspectRatioInsideRect(activeDimensions, boundingRect);
   return CGRectIntegral(videoRect);
+}
+
+- (AVCaptureVideoOrientation)effectivePreviewVideoOrientation {
+  AVCaptureConnection *previewConnection = self.previewLayer.connection;
+  if (previewConnection && previewConnection.isVideoOrientationSupported) {
+    return previewConnection.videoOrientation;
+  }
+  return [self currentVideoOrientation];
+}
+
+- (CameraDeviceOrientation)effectiveCompositionOrientation {
+  AVCaptureVideoOrientation orientation = [self effectivePreviewVideoOrientation];
+  switch (orientation) {
+  case AVCaptureVideoOrientationPortrait:
+  case AVCaptureVideoOrientationPortraitUpsideDown:
+    return CameraDeviceOrientationPortrait;
+  case AVCaptureVideoOrientationLandscapeLeft:
+    return CameraDeviceOrientationLandscapeLeft;
+  case AVCaptureVideoOrientationLandscapeRight:
+    return CameraDeviceOrientationLandscapeRight;
+  }
+  return self.currentDeviceOrientation;
 }
 
 - (void)focusAtPoint:(CGPoint)point {
