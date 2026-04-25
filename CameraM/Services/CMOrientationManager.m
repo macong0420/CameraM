@@ -70,13 +70,15 @@
 }
 
 - (void)updateDeviceOrientation:(UIDeviceOrientation)deviceOrientation {
-  CameraDeviceOrientation newOrientation =
-      [self cameraOrientationFromDeviceOrientation:deviceOrientation];
-
-  // 如果转换失败(返回值为0表示无效方向),则不更新
-  if (newOrientation == 0) {
+  BOOL isSupportedOrientation = (deviceOrientation == UIDeviceOrientationPortrait ||
+                                 deviceOrientation == UIDeviceOrientationLandscapeLeft ||
+                                 deviceOrientation == UIDeviceOrientationLandscapeRight);
+  if (!isSupportedOrientation) {
     return;
   }
+
+  CameraDeviceOrientation newOrientation =
+      [self cameraOrientationFromDeviceOrientation:deviceOrientation];
 
   if (newOrientation != self.currentDeviceOrientation) {
     self.currentDeviceOrientation = newOrientation;
@@ -141,7 +143,7 @@
     return CameraDeviceOrientationLandscapeRight;
   default:
     // 忽略其他方向(面朝上、面朝下等)
-    return 0; // 返回0表示无效方向
+    return self.currentDeviceOrientation;
   }
 }
 

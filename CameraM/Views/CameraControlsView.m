@@ -69,6 +69,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 @property(nonatomic, strong) UIButton *aspectRatioButton;
 @property(nonatomic, strong) UIView *aspectRatioPopover;
 @property(nonatomic, strong) CAShapeLayer *aspectRatioMaskLayer;
+@property(nonatomic, strong) NSArray<NSLayoutConstraint *> *aspectRatioPopoverConstraints;
 
 // 镜头选择
 @property(nonatomic, strong) UIView *lensSelectorContainer;
@@ -469,16 +470,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     ]];
   }
 
-  // 弹层约束
-  [NSLayoutConstraint activateConstraints:@[
-    [self.aspectRatioPopover.topAnchor
-        constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor
-                       constant:10],
-    [self.aspectRatioPopover.centerXAnchor
-        constraintEqualToAnchor:self.aspectRatioButton.centerXAnchor],
-    [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
-    [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
-  ]];
+  [self updateAspectRatioPopoverConstraintsForOrientation:self.currentOrientation];
 }
 
 - (void)setupAspectRatioMask {
@@ -909,6 +901,10 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 }
 
 - (void)showAspectRatioPopover {
+  [self updateAspectRatioPopoverConstraintsForOrientation:self.currentOrientation];
+  [self bringSubviewToFront:self.aspectRatioPopover];
+  [self layoutIfNeeded];
+
   self.aspectRatioPopover.hidden = NO;
   self.aspectRatioPopover.alpha = 0.0;
   self.aspectRatioPopover.transform = CGAffineTransformMakeScale(0.8, 0.8);
@@ -1218,13 +1214,9 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
     return;
   }
 
-  // 基于真实视频显示区域计算，避免横竖屏切换后遮罩与取景内容错位。
-  CGRect referenceRect = CGRectIsEmpty(self.previewVideoRect)
-                             ? bounds
-                             : CGRectIntersection(self.previewVideoRect, bounds);
-  if (CGRectIsEmpty(referenceRect)) {
-    referenceRect = bounds;
-  }
+  // 预览层使用AspectFill时，取景内容覆盖整个previewContainer。
+  // 遮罩按容器全区域计算，避免竖屏Xpan/4:3被压成窄条。
+  CGRect referenceRect = bounds;
 
   const CGFloat targetAspect =
       CMAspectRatioValue(ratio, self.currentOrientation);
@@ -1845,34 +1837,22 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 
 - (void)updateAspectRatioPopoverConstraintsForOrientation:
     (CameraDeviceOrientation)orientation {
-  // 移除现有约束
-  [self.aspectRatioPopover removeFromSuperview];
-  [self addSubview:self.aspectRatioPopover];
-  self.aspectRatioPopover.translatesAutoresizingMaskIntoConstraints = NO;
+  (void)orientation;
 
-  if (orientation == CameraDeviceOrientationPortrait) {
-    // 竖屏时向下弹出
-    [NSLayoutConstraint activateConstraints:@[
-      [self.aspectRatioPopover.topAnchor
-          constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor
-                         constant:10],
-      [self.aspectRatioPopover.centerXAnchor
-          constraintEqualToAnchor:self.aspectRatioButton.centerXAnchor],
-      [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
-      [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
-    ]];
-  } else {
-    // 横屏时向左弹出
-    [NSLayoutConstraint activateConstraints:@[
-      [self.aspectRatioPopover.trailingAnchor
-          constraintEqualToAnchor:self.aspectRatioButton.leadingAnchor
-                         constant:-10],
-      [self.aspectRatioPopover.centerYAnchor
-          constraintEqualToAnchor:self.aspectRatioButton.centerYAnchor],
-      [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
-      [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
-    ]];
+  if (self.aspectRatioPopoverConstraints.count > 0) {
+    [NSLayoutConstraint deactivateConstraints:self.aspectRatioPopoverConstraints];
   }
+
+  self.aspectRatioPopoverConstraints = @[
+    [self.aspectRatioPopover.topAnchor
+        constraintEqualToAnchor:self.aspectRatioButton.bottomAnchor
+                       constant:10],
+    [self.aspectRatioPopover.centerXAnchor
+        constraintEqualToAnchor:self.aspectRatioButton.centerXAnchor],
+    [self.aspectRatioPopover.widthAnchor constraintEqualToConstant:140],
+    [self.aspectRatioPopover.heightAnchor constraintEqualToConstant:150]
+  ];
+  [NSLayoutConstraint activateConstraints:self.aspectRatioPopoverConstraints];
 }
 
 #pragma mark - 布局更新
