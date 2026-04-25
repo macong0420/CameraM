@@ -814,11 +814,24 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
     CGRect lineRect =
         CGRectMake(horizontalMargin, currentY, textWidth, font.lineHeight);
     if (isDetailLine && [text containsString:@"|"]) {
-      UIColor *labelColor = [UIColor colorWithRed:199.0 / 255.0
-                                            green:201.0 / 255.0
-                                             blue:200.0 / 255.0
-                                            alpha:1.0];
-      UIColor *valueColor = [UIColor whiteColor];
+      BOOL isHasselbladInlineMode =
+          hasLogoAsset &&
+          [logoDescriptor.identifier hasPrefix:@"logo.hasselblad"];
+      UIColor *labelColor = isHasselbladInlineMode
+                                ? [UIColor colorWithRed:208.0 / 255.0
+                                                  green:208.0 / 255.0
+                                                   blue:208.0 / 255.0
+                                                  alpha:1.0] // #D0D0D0
+                                : [UIColor colorWithRed:199.0 / 255.0
+                                                  green:201.0 / 255.0
+                                                   blue:200.0 / 255.0
+                                                  alpha:1.0];
+      UIColor *valueColor = isHasselbladInlineMode
+                                ? [UIColor colorWithRed:245.0 / 255.0
+                                                  green:245.0 / 255.0
+                                                   blue:245.0 / 255.0
+                                                  alpha:1.0] // #F5F5F5
+                                : [UIColor whiteColor];
       NSMutableParagraphStyle *paragraph =
           [[NSMutableParagraphStyle alloc] init];
       paragraph.alignment = NSTextAlignmentCenter;
