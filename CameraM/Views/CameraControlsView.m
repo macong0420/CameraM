@@ -330,6 +330,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   self.flashModeLabel.layer.cornerRadius = 4;
   self.flashModeLabel.textAlignment = NSTextAlignmentCenter;
   self.flashModeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+  self.flashModeLabel.hidden = YES;
   [self addSubview:self.flashModeLabel];
 
   self.frameWatermarkIndicator = [[UIView alloc] init];
@@ -989,10 +990,33 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
 }
 
 - (void)updateFlashMode:(NSString *)modeText highlighted:(BOOL)highlighted {
-  self.flashModeLabel.text = modeText;
-  self.flashModeLabel.backgroundColor =
-      highlighted ? [UIColor systemYellowColor]
-                  : [UIColor colorWithWhite:0.0 alpha:0.5];
+  self.flashModeLabel.hidden = YES;
+
+  NSString *symbolName = @"bolt.fill";
+  UIColor *tintColor = [UIColor whiteColor];
+  NSString *accessibilityValue = @"Auto";
+
+  if ([modeText isEqualToString:@"ON"]) {
+    symbolName = @"bolt.fill";
+    tintColor = [UIColor systemYellowColor];
+    accessibilityValue = @"On";
+  } else if ([modeText isEqualToString:@"OFF"]) {
+    symbolName = @"bolt.slash.fill";
+    tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+    accessibilityValue = @"Off";
+  } else {
+    symbolName = @"bolt.badge.a.fill";
+    tintColor = [UIColor whiteColor];
+    accessibilityValue = @"Auto";
+  }
+
+  UIImage *icon = [UIImage systemImageNamed:symbolName];
+  if (!icon) {
+    icon = [UIImage systemImageNamed:@"bolt.fill"];
+  }
+  [self.flashButton setImage:icon forState:UIControlStateNormal];
+  self.flashButton.tintColor = tintColor;
+  self.flashButton.accessibilityValue = accessibilityValue;
 }
 
 - (void)updateFrameWatermarkStatus:(BOOL)enabled {
