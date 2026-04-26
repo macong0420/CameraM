@@ -10,6 +10,28 @@
 #import "CMWatermarkRenderer.h"
 #import <math.h>
 
+typedef struct {
+    BOOL supportsLogoSelection;
+    BOOL supportsCustomText;
+    BOOL supportsShootingDataMasterSwitch;
+    BOOL supportsAnchorPlacement;
+    BOOL supportsCustomFont;
+    BOOL supportsDetailMetadata;
+    BOOL supportsPlacement;
+} CMWatermarkUIAvailability;
+
+static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabled) {
+    CMWatermarkUIAvailability availability;
+    availability.supportsLogoSelection = enabled;
+    availability.supportsCustomText = enabled;
+    availability.supportsShootingDataMasterSwitch = enabled;
+    availability.supportsAnchorPlacement = enabled;
+    availability.supportsCustomFont = enabled;
+    availability.supportsDetailMetadata = enabled;
+    availability.supportsPlacement = enabled;
+    return availability;
+}
+
 @interface WatermarkOptionCell : UICollectionViewCell
 
 @property (nonatomic, strong) UIImageView *imageView;
@@ -120,11 +142,19 @@
 @property (nonatomic, strong) UIView *displayParamsSectionContainer;
 @property (nonatomic, strong) UISwitch *displayParamsSwitch;
 @property (nonatomic, strong) UIButton *detailSettingsButton;
+@property (nonatomic, strong) UIView *textSectionContainer;
+@property (nonatomic, strong) UIView *textRowContainer;
+@property (nonatomic, strong) UILabel *textPresetHintLabel;
 
 @property (nonatomic, strong) UIView *detailBackdropView;
 @property (nonatomic, strong) UIView *detailCardView;
 @property (nonatomic, strong) UISegmentedControl *detailAnchorControl;
 @property (nonatomic, strong) UILabel *detailFontValueLabel;
+@property (nonatomic, strong) UILabel *detailAnchorSectionLabel;
+@property (nonatomic, strong) UILabel *detailFontSectionLabel;
+@property (nonatomic, strong) UILabel *detailMetadataSectionLabel;
+@property (nonatomic, strong) UIView *detailFontRow;
+@property (nonatomic, strong) NSArray<UIView *> *detailMetadataRows;
 @property (nonatomic, strong) UISwitch *detailLensSwitch;
 @property (nonatomic, strong) UISwitch *detailShutterSwitch;
 @property (nonatomic, strong) UISwitch *detailApertureSwitch;
@@ -157,6 +187,10 @@
 @property (nonatomic, weak) UITextField *activeTextField;
 @property (nonatomic, assign) UIEdgeInsets scrollViewBaseContentInset;
 @property (nonatomic, assign) UIEdgeInsets scrollViewBaseIndicatorInsets;
+
+- (CMWatermarkUIAvailability)availabilityForFrameDescriptor:(CMWatermarkFrameDescriptor * _Nullable)descriptor;
+- (void)applyEnabledState:(BOOL)enabled toView:(UIView * _Nullable)view;
+- (BOOL)applyRestrictionsForFrameDescriptor:(CMWatermarkFrameDescriptor * _Nullable)descriptor;
 
 @end
 
@@ -559,15 +593,18 @@
         [self.captionSwitch addTarget:self action:@selector(handleCaptionSwitch:) forControlEvents:UIControlEventValueChanged];
         [container addArrangedSubview:self.captionSwitch];
     }];
+    self.textRowContainer = row;
     [stack addArrangedSubview:row];
 
     UILabel *presetHint = [[UILabel alloc] init];
     presetHint.text = @"Preset | Custom | Fast Gr. | Garamond Premier Pro / Helvetica Neue";
     presetHint.textColor = [UIColor colorWithWhite:1.0 alpha:0.45];
     presetHint.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightRegular];
+    self.textPresetHintLabel = presetHint;
     [stack addArrangedSubview:presetHint];
 
-    return [self containerWrappingStack:stack];
+    self.textSectionContainer = [self containerWrappingStack:stack];
+    return self.textSectionContainer;
 }
 
 - (UIView *)buildDisplayParamsSectionView {
@@ -821,6 +858,7 @@
     [stack addArrangedSubview:self.detailFrameButtonsStack];
 
     UILabel *anchorLabel = [self sectionLabelWithText:@"2. WATERMARK PLACEMENT"];
+    self.detailAnchorSectionLabel = anchorLabel;
     [stack addArrangedSubview:anchorLabel];
     self.detailAnchorControl = [[UISegmentedControl alloc] initWithItems:@[@"TL", @"TR", @"BL", @"BR", @"C", @"BC"]];
     self.detailAnchorControl.selectedSegmentTintColor = [UIColor systemOrangeColor];
@@ -831,6 +869,7 @@
     [stack addArrangedSubview:self.detailAnchorControl];
 
     UILabel *fontLabel = [self sectionLabelWithText:@"3. CUSTOM TEXT FONTS"];
+    self.detailFontSectionLabel = fontLabel;
     [stack addArrangedSubview:fontLabel];
     UIView *fontRow = [[UIView alloc] init];
     fontRow.translatesAutoresizingMaskIntoConstraints = NO;
@@ -846,15 +885,23 @@
         [self.detailFontValueLabel.leadingAnchor constraintEqualToAnchor:fontRow.leadingAnchor constant:12.0],
         [self.detailFontValueLabel.centerYAnchor constraintEqualToAnchor:fontRow.centerYAnchor]
     ]];
+    self.detailFontRow = fontRow;
     [stack addArrangedSubview:fontRow];
 
     UILabel *metaLabel = [self sectionLabelWithText:@"4. METADATA INTEGRATION"];
+    self.detailMetadataSectionLabel = metaLabel;
     [stack addArrangedSubview:metaLabel];
-    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Lens" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)]];
-    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Shutter" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)]];
-    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Aperture" switchOut:&_detailApertureSwitch action:@selector(handleDetailMetadataChanged:)]];
-    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Date" switchOut:&_detailDateSwitch action:@selector(handleDetailMetadataChanged:)]];
-    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Location" switchOut:&_detailLocationSwitch action:@selector(handleDetailMetadataChanged:)]];
+    UIView *lensRow = [self detailToggleRowWithTitle:@"Lens" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *shutterRow = [self detailToggleRowWithTitle:@"Shutter" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *apertureRow = [self detailToggleRowWithTitle:@"Aperture" switchOut:&_detailApertureSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *dateRow = [self detailToggleRowWithTitle:@"Date" switchOut:&_detailDateSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *locationRow = [self detailToggleRowWithTitle:@"Location" switchOut:&_detailLocationSwitch action:@selector(handleDetailMetadataChanged:)];
+    self.detailMetadataRows = @[lensRow, shutterRow, apertureRow, dateRow, locationRow];
+    [stack addArrangedSubview:lensRow];
+    [stack addArrangedSubview:shutterRow];
+    [stack addArrangedSubview:apertureRow];
+    [stack addArrangedSubview:dateRow];
+    [stack addArrangedSubview:locationRow];
 
     [self rebuildDetailFrameButtons];
 }
@@ -1083,7 +1130,7 @@
             self.controlsContainer.alpha = enabled ? 1.0 : 0.6;
         }
         if (self.scrollView) {
-            self.scrollView.userInteractionEnabled = enabled;
+            self.scrollView.userInteractionEnabled = YES;
         }
 
     };
@@ -1093,6 +1140,9 @@
         updates();
     }
     self.enableSwitch.on = enabled;
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    (void)[self applyRestrictionsForFrameDescriptor:descriptor];
     [self markPreviewNeedsRender];
 }
 
@@ -1174,15 +1224,55 @@
 
     self.placementControl.selectedSegmentIndex = self.internalConfiguration.placement;
     self.placementControl.enabled = enabled;
-    if (self.preferencesSectionContainer) {
-        self.preferencesSectionContainer.hidden = YES;
-    }
-    if (self.placementSectionContainer) {
-        self.placementSectionContainer.hidden = YES;
-    }
     [self updateDetailSettingsCardUI];
 
     return didMutateConfiguration;
+}
+
+- (CMWatermarkUIAvailability)availabilityForFrameDescriptor:(CMWatermarkFrameDescriptor * _Nullable)descriptor {
+    CMWatermarkUIAvailability availability = CMWatermarkUIAvailabilityMake(YES);
+    NSString *identifier = descriptor.identifier ?: CMWatermarkFrameIdentifierNone;
+
+    if ([identifier isEqualToString:CMWatermarkFrameIdentifierNone]) {
+        return availability;
+    }
+
+    if ([identifier isEqualToString:CMWatermarkFrameIdentifierPolaroid]) {
+        availability.supportsAnchorPlacement = NO;
+        availability.supportsCustomFont = NO;
+        availability.supportsPlacement = NO;
+        return availability;
+    }
+
+    if ([identifier isEqualToString:CMWatermarkFrameIdentifierInfo]) {
+        availability.supportsCustomText = NO;
+        availability.supportsShootingDataMasterSwitch = NO;
+        availability.supportsAnchorPlacement = NO;
+        availability.supportsCustomFont = NO;
+        availability.supportsPlacement = NO;
+        return availability;
+    }
+
+    if ([identifier isEqualToString:CMWatermarkFrameIdentifierStudio] ||
+        [identifier isEqualToString:@"frame.hasselblad.minimalist"]) {
+        availability.supportsLogoSelection = NO;
+        availability.supportsCustomText = NO;
+        availability.supportsShootingDataMasterSwitch = NO;
+        availability.supportsAnchorPlacement = NO;
+        availability.supportsCustomFont = NO;
+        availability.supportsPlacement = NO;
+        return availability;
+    }
+
+    return availability;
+}
+
+- (void)applyEnabledState:(BOOL)enabled toView:(UIView * _Nullable)view {
+    if (!view) {
+        return;
+    }
+    view.userInteractionEnabled = enabled;
+    view.alpha = enabled ? 1.0 : 0.35;
 }
 
 - (void)updateDetailSettingsCardUI {
@@ -1247,17 +1337,11 @@
     BOOL configurationChanged = NO;
 
     BOOL panelEnabled = self.internalConfiguration.isEnabled;
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
 
-    BOOL allowsLogo = descriptor ? descriptor.allowsLogoEditing : YES;
-    if (self.logosSectionContainer) {
-        self.logosSectionContainer.hidden = !allowsLogo;
-        self.logosSectionContainer.alpha = allowsLogo ? (panelEnabled ? 1.0 : 0.35) : 0.0;
-    }
-    if (self.logoCollectionView) {
-        self.logoCollectionView.hidden = !allowsLogo;
-        self.logoCollectionView.alpha = allowsLogo ? (panelEnabled ? 1.0 : 0.35) : 0.0;
-        self.logoCollectionView.userInteractionEnabled = allowsLogo && panelEnabled;
-    }
+    BOOL allowsLogo = availability.supportsLogoSelection;
+    [self applyEnabledState:(allowsLogo && panelEnabled) toView:self.logosSectionContainer];
+    [self applyEnabledState:(allowsLogo && panelEnabled) toView:self.logoCollectionView];
     if (!allowsLogo) {
         BOOL needsReset = self.internalConfiguration.logoEnabled || ![self.internalConfiguration.logoIdentifier isEqualToString:CMWatermarkLogoIdentifierNone];
         if (needsReset) {
@@ -1268,17 +1352,14 @@
         }
     }
 
-    BOOL allowsParameters = descriptor ? descriptor.allowsParameterEditing : YES;
-    if (self.preferencesSectionContainer) {
-        self.preferencesSectionContainer.hidden = !allowsParameters;
-        self.preferencesSectionContainer.alpha = allowsParameters ? (panelEnabled ? 1.0 : 0.35) : 0.0;
-    }
-    if (self.preferenceRow) {
-        self.preferenceRow.hidden = !allowsParameters;
-        self.preferenceRow.alpha = allowsParameters ? (panelEnabled ? 1.0 : 0.35) : 0.0;
-    }
+    BOOL allowsParameters = availability.supportsShootingDataMasterSwitch;
+    [self applyEnabledState:(allowsParameters && panelEnabled) toView:self.displayParamsSectionContainer];
+    [self applyEnabledState:(allowsParameters && panelEnabled) toView:self.displayParamsSwitch];
+    [self applyEnabledState:(allowsParameters && panelEnabled) toView:self.preferencesSectionContainer];
+    [self applyEnabledState:(allowsParameters && panelEnabled) toView:self.preferenceRow];
     if (self.preferenceControl) {
         self.preferenceControl.userInteractionEnabled = allowsParameters && panelEnabled;
+        self.preferenceControl.enabled = allowsParameters && panelEnabled;
     }
     NSInteger enforcedPreference = descriptor ? descriptor.enforcedPreferenceRawValue : NSNotFound;
     if (!allowsParameters && enforcedPreference != NSNotFound && self.preferenceControl.selectedSegmentIndex != enforcedPreference) {
@@ -1311,20 +1392,47 @@
     //     }
     // }
     
-    // 宝丽来模式不允许位置设置
-    BOOL allowsPlacement = !(descriptor && [descriptor.identifier isEqualToString:@"frame.polaroid"]);
-    if (self.placementSectionContainer) {
-        self.placementSectionContainer.hidden = !allowsPlacement;
-        self.placementSectionContainer.alpha = allowsPlacement ? (panelEnabled ? 1.0 : 0.35) : 0.0;
-    }
-    if (self.placementRow) {
-        self.placementRow.hidden = !allowsPlacement;
-        self.placementRow.alpha = allowsPlacement ? (panelEnabled ? 1.0 : 0.35) : 0.0;
-    }
+    BOOL allowsPlacement = availability.supportsPlacement;
+    [self applyEnabledState:(allowsPlacement && panelEnabled) toView:self.placementSectionContainer];
+    [self applyEnabledState:(allowsPlacement && panelEnabled) toView:self.placementRow];
     if (self.placementControl) {
         self.placementControl.userInteractionEnabled = allowsPlacement && panelEnabled;
         self.placementControl.enabled = allowsPlacement && panelEnabled;
     }
+
+    BOOL allowsCustomText = availability.supportsCustomText;
+    [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.textSectionContainer];
+    [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.textRowContainer];
+    [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.textPresetHintLabel];
+    if (self.captionSwitch) {
+        self.captionSwitch.enabled = allowsCustomText && panelEnabled;
+        self.captionSwitch.userInteractionEnabled = allowsCustomText && panelEnabled;
+    }
+    if (self.captionField) {
+        BOOL textFieldEnabled = allowsCustomText && panelEnabled && self.internalConfiguration.isCaptionEnabled;
+        self.captionField.enabled = textFieldEnabled;
+        self.captionField.userInteractionEnabled = textFieldEnabled;
+    }
+
+    BOOL allowsDetailAnchor = availability.supportsAnchorPlacement;
+    [self applyEnabledState:(allowsDetailAnchor && panelEnabled) toView:self.detailAnchorSectionLabel];
+    [self applyEnabledState:(allowsDetailAnchor && panelEnabled) toView:self.detailAnchorControl];
+    self.detailAnchorControl.enabled = allowsDetailAnchor && panelEnabled;
+
+    BOOL allowsDetailFont = availability.supportsCustomFont;
+    [self applyEnabledState:(allowsDetailFont && panelEnabled) toView:self.detailFontSectionLabel];
+    [self applyEnabledState:(allowsDetailFont && panelEnabled) toView:self.detailFontRow];
+
+    BOOL allowsDetailMetadata = availability.supportsDetailMetadata;
+    [self applyEnabledState:(allowsDetailMetadata && panelEnabled) toView:self.detailMetadataSectionLabel];
+    for (UIView *row in self.detailMetadataRows) {
+        [self applyEnabledState:(allowsDetailMetadata && panelEnabled) toView:row];
+    }
+    self.detailLensSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailShutterSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailApertureSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailDateSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailLocationSwitch.enabled = allowsDetailMetadata && panelEnabled;
 
     [self setNeedsLayout];
 
@@ -1354,6 +1462,14 @@
 }
 
 - (void)handleDisplayParamsSwitch:(UISwitch *)sender {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsShootingDataMasterSwitch)) {
+        sender.on = (self.internalConfiguration.metadataOptions != CMWatermarkMetadataOptionsNone);
+        return;
+    }
+
     if (sender.isOn) {
         if (self.internalConfiguration.metadataOptions == CMWatermarkMetadataOptionsNone) {
             self.internalConfiguration.metadataOptions =
@@ -1403,6 +1519,14 @@
 }
 
 - (void)handleDetailAnchorChanged:(UISegmentedControl *)sender {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsAnchorPlacement)) {
+        [self updateDetailSettingsCardUI];
+        return;
+    }
+
     switch (sender.selectedSegmentIndex) {
         case 0:
             self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorTopLeft;
@@ -1430,6 +1554,14 @@
 }
 
 - (void)handleDetailMetadataChanged:(UISwitch *)sender {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsDetailMetadata)) {
+        [self updateDetailSettingsCardUI];
+        return;
+    }
+
     CMWatermarkMetadataOptions options = CMWatermarkMetadataOptionsNone;
     if (self.detailLensSwitch.isOn) {
         options |= CMWatermarkMetadataOptionsLens;
@@ -1462,6 +1594,14 @@
 }
 
 - (void)handleCaptionSwitch:(UISwitch *)sender {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsCustomText)) {
+        sender.on = self.internalConfiguration.isCaptionEnabled;
+        return;
+    }
+
     self.internalConfiguration.captionEnabled = sender.isOn;
     self.captionField.enabled = sender.isOn && self.internalConfiguration.isEnabled;
     [self notifyUpdate];
@@ -1504,11 +1644,27 @@
 }
 
 - (void)handlePlacementChanged:(UISegmentedControl *)sender {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsPlacement)) {
+        self.placementControl.selectedSegmentIndex = self.internalConfiguration.placement;
+        return;
+    }
+
     self.internalConfiguration.placement = (CMWatermarkPlacement)sender.selectedSegmentIndex;
     [self notifyUpdate];
 }
 
 - (void)handleCaptionEditingChanged:(UITextField *)textField {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsCustomText)) {
+        textField.text = self.internalConfiguration.captionText ?: @"";
+        return;
+    }
+
     self.internalConfiguration.captionText = textField.text ?: @"";
     [self notifyUpdate];
 }
