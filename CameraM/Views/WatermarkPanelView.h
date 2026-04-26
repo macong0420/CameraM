@@ -16,6 +16,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)watermarkPanelDidRequestDismiss:(WatermarkPanelView *)panel;
 - (void)watermarkPanel:(WatermarkPanelView *)panel didUpdateConfiguration:(CMWatermarkConfiguration *)configuration;
+@optional
+- (void)watermarkPanel:(WatermarkPanelView *)panel didChangeDetailVisibility:(BOOL)isVisible;
 
 @end
 
@@ -27,6 +29,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)applyConfiguration:(CMWatermarkConfiguration *)configuration animated:(BOOL)animated;
 - (void)setPanelEnabled:(BOOL)enabled animated:(BOOL)animated;
 - (void)updatePreviewWithImage:(nullable UIImage *)image metadata:(nullable NSDictionary *)metadata;
+- (void)dismissDetailSettingsIfNeeded;
+- (BOOL)isDetailSettingsVisible;
 
 @end
 

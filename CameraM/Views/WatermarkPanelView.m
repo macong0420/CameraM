@@ -27,10 +27,10 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.contentView.layer.cornerRadius = 14.0;
+        self.contentView.layer.cornerRadius = 10.0;
         self.contentView.layer.borderWidth = 1.0;
-        self.contentView.layer.borderColor = [[UIColor colorWithWhite:1.0 alpha:0.15] CGColor];
-        self.contentView.backgroundColor = [[UIColor colorWithWhite:1.0 alpha:0.05] colorWithAlphaComponent:0.08];
+        self.contentView.layer.borderColor = [[UIColor colorWithWhite:1.0 alpha:0.12] CGColor];
+        self.contentView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.06];
         self.imageView = [[UIImageView alloc] init];
         self.imageView.translatesAutoresizingMaskIntoConstraints = NO;
         self.imageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -38,21 +38,21 @@
 
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.titleLabel.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightSemibold];
+        self.titleLabel.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightSemibold];
         self.titleLabel.textAlignment = NSTextAlignmentCenter;
         self.titleLabel.textColor = [UIColor colorWithWhite:0.92 alpha:0.9];
         [self.contentView addSubview:self.titleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [self.imageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12.0],
-            [self.imageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:10.0],
-            [self.imageView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10.0],
-            [self.imageView.heightAnchor constraintEqualToAnchor:self.contentView.heightAnchor multiplier:0.68],
+            [self.imageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:8.0],
+            [self.imageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:8.0],
+            [self.imageView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8.0],
+            [self.imageView.heightAnchor constraintEqualToAnchor:self.contentView.heightAnchor multiplier:0.66],
 
-            [self.titleLabel.topAnchor constraintEqualToAnchor:self.imageView.bottomAnchor constant:8.0],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.imageView.bottomAnchor constant:4.0],
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:6.0],
             [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-6.0],
-            [self.titleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-6.0]
+            [self.titleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-4.0]
         ]];
     }
     return self;
@@ -82,9 +82,9 @@
 
 - (void)setSelected:(BOOL)selected {
     [super setSelected:selected];
-    self.contentView.layer.borderColor = selected ? [UIColor systemOrangeColor].CGColor : [[UIColor colorWithWhite:1.0 alpha:0.2] CGColor];
+    self.contentView.layer.borderColor = selected ? [UIColor colorWithWhite:0.95 alpha:1.0].CGColor : [[UIColor colorWithWhite:1.0 alpha:0.2] CGColor];
     self.contentView.layer.borderWidth = selected ? 2.0 : 1.0;
-    self.contentView.backgroundColor = selected ? [[UIColor colorWithRed:1.0 green:0.35 blue:0.1 alpha:1.0] colorWithAlphaComponent:0.18] : [[UIColor colorWithWhite:1.0 alpha:0.05] colorWithAlphaComponent:0.08];
+    self.contentView.backgroundColor = selected ? [UIColor colorWithWhite:1.0 alpha:0.16] : [UIColor colorWithWhite:1.0 alpha:0.06];
 }
 
 @end
@@ -117,6 +117,20 @@
 @property (nonatomic, strong) UIView *logosSectionContainer;
 @property (nonatomic, strong) UIView *preferencesSectionContainer;
 @property (nonatomic, strong) UIView *placementSectionContainer;
+@property (nonatomic, strong) UIView *displayParamsSectionContainer;
+@property (nonatomic, strong) UISwitch *displayParamsSwitch;
+@property (nonatomic, strong) UIButton *detailSettingsButton;
+
+@property (nonatomic, strong) UIView *detailBackdropView;
+@property (nonatomic, strong) UIView *detailCardView;
+@property (nonatomic, strong) UISegmentedControl *detailAnchorControl;
+@property (nonatomic, strong) UILabel *detailFontValueLabel;
+@property (nonatomic, strong) UISwitch *detailLensSwitch;
+@property (nonatomic, strong) UISwitch *detailShutterSwitch;
+@property (nonatomic, strong) UISwitch *detailApertureSwitch;
+@property (nonatomic, strong) UISwitch *detailDateSwitch;
+@property (nonatomic, strong) UISwitch *detailLocationSwitch;
+@property (nonatomic, strong) UIStackView *detailFrameButtonsStack;
 
 
 @property (nonatomic, strong) UIView *controlsContainer;
@@ -174,6 +188,7 @@
         [self setupPreviewSection];
         [self setupContentStack];
         [self buildSectionContentViews];
+        [self setupDetailSettingsCard];
         (void)[self updateUIFromConfigurationAnimated:NO];
         [self schedulePreviewRenderIfNeeded];
     }
@@ -356,16 +371,17 @@
     [self.backButton setImage:[UIImage systemImageNamed:@"chevron.backward"] forState:UIControlStateNormal];
     self.backButton.tintColor = [UIColor whiteColor];
     [self.backButton addTarget:self action:@selector(handleDismissTap) forControlEvents:UIControlEventTouchUpInside];
+    self.backButton.hidden = YES;
 
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"水印";
+    self.titleLabel.text = @"CAPTURE PERSONALIZATION";
     self.titleLabel.textColor = [UIColor whiteColor];
-    self.titleLabel.font = [UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold];
+    self.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
 
     self.enableLabel = [[UILabel alloc] init];
     self.enableLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.enableLabel.text = @"启用";
+    self.enableLabel.text = @"Enable Watermark";
     self.enableLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
     self.enableLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
 
@@ -390,7 +406,8 @@
         [self.backButton.widthAnchor constraintEqualToConstant:36.0],
         [self.backButton.heightAnchor constraintEqualToConstant:36.0],
 
-        [self.titleLabel.centerXAnchor constraintEqualToAnchor:self.headerView.centerXAnchor],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.headerView.leadingAnchor],
+        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.enableLabel.leadingAnchor constant:-10.0],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.headerView.centerYAnchor],
 
         [self.enableSwitch.trailingAnchor constraintEqualToAnchor:self.headerView.trailingAnchor],
@@ -439,14 +456,14 @@
     UIView *framesSection = [self buildFrameSectionView];
     self.logosSectionContainer = [self buildLogoSectionView];
     UIView *textSection = [self buildTextSectionView];
-    self.preferencesSectionContainer = [self buildPreferenceSectionView];
-    self.placementSectionContainer = [self buildPlacementSectionView];
+    self.displayParamsSectionContainer = [self buildDisplayParamsSectionView];
+    UIView *detailEntrySection = [self buildDetailEntrySectionView];
 
     NSArray<UIView *> *sections = @[ framesSection,
                                      self.logosSectionContainer,
                                      textSection,
-                                     self.preferencesSectionContainer,
-                                     self.placementSectionContainer ];
+                                     self.displayParamsSectionContainer,
+                                     detailEntrySection ];
 
     for (UIView *sectionView in sections) {
         if (sectionView) {
@@ -476,10 +493,10 @@
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 12.0;
 
-    self.frameSectionLabel = [self sectionLabelWithText:@"模板"];
+    self.frameSectionLabel = [self sectionLabelWithText:@"Frame Style"];
     [stack addArrangedSubview:self.frameSectionLabel];
     [stack addArrangedSubview:self.frameCollectionView];
-    [self.frameCollectionView.heightAnchor constraintEqualToConstant:128.0].active = YES;
+    [self.frameCollectionView.heightAnchor constraintEqualToConstant:92.0].active = YES;
 
     return [self containerWrappingStack:stack];
 }
@@ -503,10 +520,10 @@
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 12.0;
 
-    self.logoSectionLabel = [self sectionLabelWithText:@"Logo"];
+    self.logoSectionLabel = [self sectionLabelWithText:@"Logo Selection"];
     [stack addArrangedSubview:self.logoSectionLabel];
     [stack addArrangedSubview:self.logoCollectionView];
-    [self.logoCollectionView.heightAnchor constraintEqualToConstant:104.0].active = YES;
+    [self.logoCollectionView.heightAnchor constraintEqualToConstant:74.0].active = YES;
 
     return [self containerWrappingStack:stack];
 
@@ -518,13 +535,13 @@
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 16.0;
 
-    UILabel *sectionLabel = [self sectionLabelWithText:@"文字"];
+    UILabel *sectionLabel = [self sectionLabelWithText:@"Custom Text"];
     [stack addArrangedSubview:sectionLabel];
 
-    UIView *row = [self formRowWithTitle:@"内容" content:^(UIStackView *container) {
+    UIView *row = [self formRowWithTitle:@"Custom Text" content:^(UIStackView *container) {
         self.captionField = [[UITextField alloc] init];
         self.captionField.translatesAutoresizingMaskIntoConstraints = NO;
-        self.captionField.placeholder = @"输入水印文字";
+        self.captionField.placeholder = @"Mr.C | PHOTOGRAPHY 2026";
         self.captionField.textColor = [UIColor whiteColor];
         self.captionField.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightMedium];
         self.captionField.delegate = self;
@@ -544,7 +561,61 @@
     }];
     [stack addArrangedSubview:row];
 
+    UILabel *presetHint = [[UILabel alloc] init];
+    presetHint.text = @"Preset | Custom | Fast Gr. | Garamond Premier Pro / Helvetica Neue";
+    presetHint.textColor = [UIColor colorWithWhite:1.0 alpha:0.45];
+    presetHint.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightRegular];
+    [stack addArrangedSubview:presetHint];
+
     return [self containerWrappingStack:stack];
+}
+
+- (UIView *)buildDisplayParamsSectionView {
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 12.0;
+
+    UILabel *sectionLabel = [self sectionLabelWithText:@"Shooting Data"];
+    [stack addArrangedSubview:sectionLabel];
+
+    UIView *row = [self formRowWithTitle:@"Display Parameters" content:^(UIStackView *container) {
+        self.displayParamsSwitch = [[UISwitch alloc] init];
+        self.displayParamsSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+        self.displayParamsSwitch.onTintColor = [UIColor systemOrangeColor];
+        [self.displayParamsSwitch addTarget:self
+                                     action:@selector(handleDisplayParamsSwitch:)
+                           forControlEvents:UIControlEventValueChanged];
+        [container addArrangedSubview:self.displayParamsSwitch];
+    }];
+    [stack addArrangedSubview:row];
+    return [self containerWrappingStack:stack];
+}
+
+- (UIView *)buildDetailEntrySectionView {
+    UIView *container = [[UIView alloc] init];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+
+    self.detailSettingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.detailSettingsButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.detailSettingsButton.layer.cornerRadius = 12.0;
+    self.detailSettingsButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.09];
+    [self.detailSettingsButton setTitle:@"Frame & Watermark Library" forState:UIControlStateNormal];
+    [self.detailSettingsButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.detailSettingsButton.titleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
+    [self.detailSettingsButton addTarget:self
+                                  action:@selector(handleDetailSettingsTap)
+                        forControlEvents:UIControlEventTouchUpInside];
+    [container addSubview:self.detailSettingsButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.detailSettingsButton.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [self.detailSettingsButton.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [self.detailSettingsButton.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [self.detailSettingsButton.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+        [self.detailSettingsButton.heightAnchor constraintEqualToConstant:44.0]
+    ]];
+    return container;
 }
 
 - (UIView *)buildPreferenceSectionView {
@@ -603,8 +674,8 @@
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = text;
-    label.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
-    label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
+    label.textColor = [UIColor colorWithWhite:0.92 alpha:0.95];
+    label.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
     return label;
 }
 
@@ -659,6 +730,186 @@
     ]];
 
     return row;
+}
+
+- (void)setupDetailSettingsCard {
+    self.detailBackdropView = [[UIView alloc] init];
+    self.detailBackdropView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.detailBackdropView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+    self.detailBackdropView.hidden = YES;
+    self.detailBackdropView.alpha = 0.0;
+    [self addSubview:self.detailBackdropView];
+
+    UITapGestureRecognizer *backdropTap =
+        [[UITapGestureRecognizer alloc] initWithTarget:self
+                                                action:@selector(dismissDetailSettingsCard)];
+    [self.detailBackdropView addGestureRecognizer:backdropTap];
+
+    self.detailCardView = [[UIView alloc] init];
+    self.detailCardView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.detailCardView.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.98];
+    self.detailCardView.layer.cornerRadius = 18.0;
+    self.detailCardView.layer.masksToBounds = YES;
+    self.detailCardView.hidden = YES;
+    [self addSubview:self.detailCardView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.detailBackdropView.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.detailBackdropView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.detailBackdropView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.detailBackdropView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+
+        [self.detailCardView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12.0],
+        [self.detailCardView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12.0],
+        [self.detailCardView.topAnchor constraintEqualToAnchor:self.topAnchor constant:60.0],
+        [self.detailCardView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-16.0]
+    ]];
+
+    UILabel *title = [[UILabel alloc] init];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"FRAME & WATERMARK LIBRARY";
+    title.textColor = [UIColor whiteColor];
+    title.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
+    [self.detailCardView addSubview:title];
+
+    UIButton *backButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    backButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [backButton setTitle:@"Back" forState:UIControlStateNormal];
+    [backButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    backButton.titleLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightMedium];
+    [backButton addTarget:self
+                   action:@selector(dismissDetailSettingsCard)
+         forControlEvents:UIControlEventTouchUpInside];
+    [self.detailCardView addSubview:backButton];
+
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.alwaysBounceVertical = YES;
+    [self.detailCardView addSubview:scroll];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 14.0;
+    [scroll addSubview:stack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [backButton.leadingAnchor constraintEqualToAnchor:self.detailCardView.leadingAnchor constant:12.0],
+        [backButton.topAnchor constraintEqualToAnchor:self.detailCardView.topAnchor constant:10.0],
+
+        [title.leadingAnchor constraintEqualToAnchor:self.detailCardView.leadingAnchor constant:16.0],
+        [title.topAnchor constraintEqualToAnchor:backButton.bottomAnchor constant:10.0],
+        [title.trailingAnchor constraintEqualToAnchor:self.detailCardView.trailingAnchor constant:-16.0],
+
+        [scroll.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:10.0],
+        [scroll.leadingAnchor constraintEqualToAnchor:self.detailCardView.leadingAnchor],
+        [scroll.trailingAnchor constraintEqualToAnchor:self.detailCardView.trailingAnchor],
+        [scroll.bottomAnchor constraintEqualToAnchor:self.detailCardView.bottomAnchor],
+
+        [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.leadingAnchor constant:16.0],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.trailingAnchor constant:-16.0],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20.0]
+    ]];
+
+    UILabel *frameLabel = [self sectionLabelWithText:@"1. FRAME LIBRARY"];
+    [stack addArrangedSubview:frameLabel];
+    self.detailFrameButtonsStack = [[UIStackView alloc] init];
+    self.detailFrameButtonsStack.axis = UILayoutConstraintAxisHorizontal;
+    self.detailFrameButtonsStack.spacing = 8.0;
+    self.detailFrameButtonsStack.distribution = UIStackViewDistributionFillEqually;
+    [stack addArrangedSubview:self.detailFrameButtonsStack];
+
+    UILabel *anchorLabel = [self sectionLabelWithText:@"2. WATERMARK PLACEMENT"];
+    [stack addArrangedSubview:anchorLabel];
+    self.detailAnchorControl = [[UISegmentedControl alloc] initWithItems:@[@"TL", @"TR", @"BL", @"BR", @"C", @"BC"]];
+    self.detailAnchorControl.selectedSegmentTintColor = [UIColor systemOrangeColor];
+    self.detailAnchorControl.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.1];
+    [self.detailAnchorControl setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor whiteColor]} forState:UIControlStateNormal];
+    [self.detailAnchorControl setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor blackColor]} forState:UIControlStateSelected];
+    [self.detailAnchorControl addTarget:self action:@selector(handleDetailAnchorChanged:) forControlEvents:UIControlEventValueChanged];
+    [stack addArrangedSubview:self.detailAnchorControl];
+
+    UILabel *fontLabel = [self sectionLabelWithText:@"3. CUSTOM TEXT FONTS"];
+    [stack addArrangedSubview:fontLabel];
+    UIView *fontRow = [[UIView alloc] init];
+    fontRow.translatesAutoresizingMaskIntoConstraints = NO;
+    fontRow.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    fontRow.layer.cornerRadius = 10.0;
+    [fontRow.heightAnchor constraintEqualToConstant:44.0].active = YES;
+    self.detailFontValueLabel = [[UILabel alloc] init];
+    self.detailFontValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.detailFontValueLabel.textColor = [UIColor whiteColor];
+    self.detailFontValueLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightMedium];
+    [fontRow addSubview:self.detailFontValueLabel];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.detailFontValueLabel.leadingAnchor constraintEqualToAnchor:fontRow.leadingAnchor constant:12.0],
+        [self.detailFontValueLabel.centerYAnchor constraintEqualToAnchor:fontRow.centerYAnchor]
+    ]];
+    [stack addArrangedSubview:fontRow];
+
+    UILabel *metaLabel = [self sectionLabelWithText:@"4. METADATA INTEGRATION"];
+    [stack addArrangedSubview:metaLabel];
+    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Lens" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)]];
+    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Shutter" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)]];
+    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Aperture" switchOut:&_detailApertureSwitch action:@selector(handleDetailMetadataChanged:)]];
+    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Date" switchOut:&_detailDateSwitch action:@selector(handleDetailMetadataChanged:)]];
+    [stack addArrangedSubview:[self detailToggleRowWithTitle:@"Location" switchOut:&_detailLocationSwitch action:@selector(handleDetailMetadataChanged:)]];
+
+    [self rebuildDetailFrameButtons];
+}
+
+- (UIView *)detailToggleRowWithTitle:(NSString *)title
+                           switchOut:(UISwitch * __strong *)switchOut
+                              action:(SEL)action {
+    UIView *row = [[UIView alloc] init];
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+    [row.heightAnchor constraintEqualToConstant:40.0].active = YES;
+    UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = title;
+    label.textColor = [UIColor whiteColor];
+    label.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightRegular];
+    [row addSubview:label];
+
+    UISwitch *toggle = [[UISwitch alloc] init];
+    toggle.translatesAutoresizingMaskIntoConstraints = NO;
+    toggle.onTintColor = [UIColor systemOrangeColor];
+    [toggle addTarget:self action:action forControlEvents:UIControlEventValueChanged];
+    [row addSubview:toggle];
+    if (switchOut) {
+        *switchOut = toggle;
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [label.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
+        [label.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
+        [toggle.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
+        [toggle.centerYAnchor constraintEqualToAnchor:row.centerYAnchor]
+    ]];
+    return row;
+}
+
+- (void)rebuildDetailFrameButtons {
+    for (UIView *view in self.detailFrameButtonsStack.arrangedSubviews) {
+        [self.detailFrameButtonsStack removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+
+    NSInteger maxButtons = MIN((NSInteger)self.frameDescriptors.count, 5);
+    for (NSInteger index = 0; index < maxButtons; index++) {
+        CMWatermarkFrameDescriptor *descriptor = self.frameDescriptors[index];
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+        button.tag = index;
+        button.layer.cornerRadius = 8.0;
+        button.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.1];
+        [button setTitle:descriptor.displayName forState:UIControlStateNormal];
+        [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        button.titleLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
+        [button addTarget:self action:@selector(handleDetailFrameTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [button.heightAnchor constraintEqualToConstant:56.0].active = YES;
+        [self.detailFrameButtonsStack addArrangedSubview:button];
+    }
 }
 
 #pragma mark - Preview Rendering
@@ -723,7 +974,7 @@
     if (self.userPreviewImage) {
         return self.userPreviewImage;
     }
-    return [self fallbackPreviewImageForFrameDescriptor:descriptor];
+    return nil;
 }
 
 - (void)markPreviewNeedsRender {
@@ -753,12 +1004,15 @@
     [self updatePreviewAspectConstraintForImage:sourceImage];
 
     if (!sourceImage) {
+        self.previewContainer.hidden = YES;
+        self.previewMaxHeightConstraint.constant = 0.0f;
         self.previewPlaceholderLabel.hidden = NO;
         self.previewImageView.image = nil;
         [self updatePreviewLoadingState:NO];
         self.previewRenderToken = nil;
         return;
     }
+    self.previewContainer.hidden = NO;
 
     self.previewPlaceholderLabel.hidden = YES;
     self.previewImageView.image = sourceImage;
@@ -809,6 +1063,9 @@
 - (void)applyConfiguration:(CMWatermarkConfiguration *)configuration animated:(BOOL)animated {
     if (!configuration) { return; }
     self.internalConfiguration = [configuration copy];
+    if (self.internalConfiguration.textFontName.length == 0) {
+        self.internalConfiguration.textFontName = @"Garamond Premier Pro";
+    }
     (void)[self updateUIFromConfigurationAnimated:animated];
     [self markPreviewNeedsRender];
 }
@@ -891,6 +1148,10 @@
 
     self.preferenceControl.selectedSegmentIndex = self.internalConfiguration.preference;
     self.preferenceControl.enabled = enabled && self.preferenceControl.userInteractionEnabled;
+    if (self.displayParamsSwitch) {
+        self.displayParamsSwitch.on = (self.internalConfiguration.metadataOptions != CMWatermarkMetadataOptionsNone);
+        self.displayParamsSwitch.enabled = enabled;
+    }
     
     // 确保宝丽来模式下preferenceOptions与preference同步
     NSString *currentFrameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
@@ -913,8 +1174,73 @@
 
     self.placementControl.selectedSegmentIndex = self.internalConfiguration.placement;
     self.placementControl.enabled = enabled;
+    if (self.preferencesSectionContainer) {
+        self.preferencesSectionContainer.hidden = YES;
+    }
+    if (self.placementSectionContainer) {
+        self.placementSectionContainer.hidden = YES;
+    }
+    [self updateDetailSettingsCardUI];
 
     return didMutateConfiguration;
+}
+
+- (void)updateDetailSettingsCardUI {
+    if (!self.detailCardView) {
+        return;
+    }
+    self.detailFontValueLabel.text = self.internalConfiguration.textFontName.length > 0
+        ? self.internalConfiguration.textFontName
+        : @"Garamond Premier Pro";
+
+    switch (self.internalConfiguration.watermarkAnchor) {
+        case CMWatermarkAnchorTopLeft:
+            self.detailAnchorControl.selectedSegmentIndex = 0;
+            break;
+        case CMWatermarkAnchorTopRight:
+            self.detailAnchorControl.selectedSegmentIndex = 1;
+            break;
+        case CMWatermarkAnchorBottomLeft:
+            self.detailAnchorControl.selectedSegmentIndex = 2;
+            break;
+        case CMWatermarkAnchorBottomRight:
+            self.detailAnchorControl.selectedSegmentIndex = 3;
+            break;
+        case CMWatermarkAnchorCenter:
+            self.detailAnchorControl.selectedSegmentIndex = 4;
+            break;
+        case CMWatermarkAnchorBottomCenter:
+            self.detailAnchorControl.selectedSegmentIndex = 5;
+            break;
+        default:
+            self.detailAnchorControl.selectedSegmentIndex = 2;
+            break;
+    }
+
+    CMWatermarkMetadataOptions options = self.internalConfiguration.metadataOptions;
+    self.detailLensSwitch.on = (options & CMWatermarkMetadataOptionsLens) != 0;
+    self.detailShutterSwitch.on = (options & CMWatermarkMetadataOptionsShutter) != 0;
+    self.detailApertureSwitch.on = (options & CMWatermarkMetadataOptionsAperture) != 0;
+    self.detailDateSwitch.on = (options & CMWatermarkMetadataOptionsDate) != 0;
+    self.detailLocationSwitch.on = (options & CMWatermarkMetadataOptionsLocation) != 0;
+
+    NSString *activeFrameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    for (UIButton *button in self.detailFrameButtonsStack.arrangedSubviews) {
+        if (![button isKindOfClass:[UIButton class]]) {
+            continue;
+        }
+        NSInteger index = button.tag;
+        BOOL selected = NO;
+        if (index >= 0 && index < self.frameDescriptors.count) {
+            CMWatermarkFrameDescriptor *descriptor = self.frameDescriptors[index];
+            selected = [descriptor.identifier isEqualToString:activeFrameId];
+        }
+        button.backgroundColor = selected
+            ? [[UIColor systemOrangeColor] colorWithAlphaComponent:0.9]
+            : [UIColor colorWithWhite:1.0 alpha:0.1];
+        [button setTitleColor:(selected ? [UIColor blackColor] : [UIColor whiteColor])
+                     forState:UIControlStateNormal];
+    }
 }
 
 - (BOOL)applyRestrictionsForFrameDescriptor:(CMWatermarkFrameDescriptor * _Nullable)descriptor {
@@ -1008,6 +1334,7 @@
 #pragma mark - Actions
 
 - (void)handleDismissTap {
+    [self dismissDetailSettingsCard];
     if ([self.delegate respondsToSelector:@selector(watermarkPanelDidRequestDismiss:)]) {
         [self.delegate watermarkPanelDidRequestDismiss:self];
     }
@@ -1023,6 +1350,114 @@
         descriptor = self.frameDescriptors[frameIndex];
     }
     (void)[self applyRestrictionsForFrameDescriptor:descriptor];
+    [self notifyUpdate];
+}
+
+- (void)handleDisplayParamsSwitch:(UISwitch *)sender {
+    if (sender.isOn) {
+        if (self.internalConfiguration.metadataOptions == CMWatermarkMetadataOptionsNone) {
+            self.internalConfiguration.metadataOptions =
+                (CMWatermarkMetadataOptionsLens |
+                 CMWatermarkMetadataOptionsShutter |
+                 CMWatermarkMetadataOptionsAperture);
+        }
+    } else {
+        self.internalConfiguration.metadataOptions = CMWatermarkMetadataOptionsNone;
+    }
+    [self notifyUpdate];
+}
+
+- (void)handleDetailSettingsTap {
+    [self updateDetailSettingsCardUI];
+    self.detailBackdropView.hidden = NO;
+    self.detailCardView.hidden = NO;
+    self.detailBackdropView.alpha = 0.0;
+    self.detailCardView.alpha = 0.0;
+    self.detailCardView.transform = CGAffineTransformMakeTranslation(0.0, 24.0);
+    [UIView animateWithDuration:0.22 animations:^{
+        self.detailBackdropView.alpha = 1.0;
+        self.detailCardView.alpha = 1.0;
+        self.detailCardView.transform = CGAffineTransformIdentity;
+    }];
+    if ([self.delegate respondsToSelector:@selector(watermarkPanel:didChangeDetailVisibility:)]) {
+        [self.delegate watermarkPanel:self didChangeDetailVisibility:YES];
+    }
+}
+
+- (void)dismissDetailSettingsCard {
+    if (self.detailCardView.hidden) {
+        return;
+    }
+    [UIView animateWithDuration:0.18 animations:^{
+        self.detailBackdropView.alpha = 0.0;
+        self.detailCardView.alpha = 0.0;
+        self.detailCardView.transform = CGAffineTransformMakeTranslation(0.0, 16.0);
+    } completion:^(BOOL finished) {
+        self.detailBackdropView.hidden = YES;
+        self.detailCardView.hidden = YES;
+        self.detailCardView.transform = CGAffineTransformIdentity;
+    }];
+    if ([self.delegate respondsToSelector:@selector(watermarkPanel:didChangeDetailVisibility:)]) {
+        [self.delegate watermarkPanel:self didChangeDetailVisibility:NO];
+    }
+}
+
+- (void)handleDetailAnchorChanged:(UISegmentedControl *)sender {
+    switch (sender.selectedSegmentIndex) {
+        case 0:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorTopLeft;
+            break;
+        case 1:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorTopRight;
+            break;
+        case 2:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorBottomLeft;
+            break;
+        case 3:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorBottomRight;
+            break;
+        case 4:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorCenter;
+            break;
+        case 5:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorBottomCenter;
+            break;
+        default:
+            self.internalConfiguration.watermarkAnchor = CMWatermarkAnchorBottomLeft;
+            break;
+    }
+    [self notifyUpdate];
+}
+
+- (void)handleDetailMetadataChanged:(UISwitch *)sender {
+    CMWatermarkMetadataOptions options = CMWatermarkMetadataOptionsNone;
+    if (self.detailLensSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsLens;
+    }
+    if (self.detailShutterSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsShutter;
+    }
+    if (self.detailApertureSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsAperture;
+    }
+    if (self.detailDateSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsDate;
+    }
+    if (self.detailLocationSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsLocation;
+    }
+    self.internalConfiguration.metadataOptions = options;
+    [self notifyUpdate];
+}
+
+- (void)handleDetailFrameTapped:(UIButton *)sender {
+    NSInteger index = sender.tag;
+    if (index < 0 || index >= self.frameDescriptors.count) {
+        return;
+    }
+    CMWatermarkFrameDescriptor *descriptor = self.frameDescriptors[index];
+    self.internalConfiguration.frameIdentifier = descriptor.identifier;
+    [self updateUIFromConfigurationAnimated:YES];
     [self notifyUpdate];
 }
 
@@ -1161,9 +1596,9 @@
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     if (collectionView == self.frameCollectionView) {
-        return CGSizeMake(132.0, 112.0);
+        return CGSizeMake(74.0, 84.0);
     }
-    return CGSizeMake(96.0, 84.0);
+    return CGSizeMake(74.0, 62.0);
 }
 
 #pragma mark - Helpers
@@ -1251,6 +1686,14 @@
     if ([self.delegate respondsToSelector:@selector(watermarkPanel:didUpdateConfiguration:)]) {
         [self.delegate watermarkPanel:self didUpdateConfiguration:[self configuration]];
     }
+}
+
+- (void)dismissDetailSettingsIfNeeded {
+    [self dismissDetailSettingsCard];
+}
+
+- (BOOL)isDetailSettingsVisible {
+    return !self.detailCardView.hidden;
 }
 
 @end

@@ -92,6 +92,14 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   return targetHeight;
 }
 
+static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier) {
+  if (identifier.length == 0) {
+    return NO;
+  }
+  return [identifier isEqualToString:@"frame.studio"] ||
+         [identifier isEqualToString:@"frame.hasselblad.minimalist"];
+}
+
 @interface CMWatermarkRenderer ()
 
 @property(nonatomic, strong) NSDateFormatter *dateFormatter;
@@ -183,7 +191,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
           CGContextSaveGState(ctx);
 
           // 对于Studio模式、Polaroid模式和Info模式，使用白色背景，否则使用黑色
-          if ([frameDescriptor.identifier isEqualToString:@"frame.studio"] ||
+          if (CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) ||
               [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
               [frameDescriptor.identifier isEqualToString:@"frame.info"]) {
             CGContextSetFillColorWithColor(ctx, [UIColor whiteColor].CGColor);
@@ -321,7 +329,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
 
           // 对于Studio模式，使用sign_b保持比例显示在底部区域
           if (frameDescriptor &&
-              [frameDescriptor.identifier isEqualToString:@"frame.studio"] &&
+              CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) &&
               bottomPadding > 0.0) {
             if (frameDescriptor.backgroundAssetName.length > 0) {
               UIImage *background =
@@ -466,7 +474,8 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   CGRect contentRect;
   if (!CGRectIsEmpty(footerOverrideRect)) {
     contentRect = footerOverrideRect;
-  } else if (configuration.placement == CMWatermarkPlacementMiddle) {
+  } else if (configuration.placement == CMWatermarkPlacementMiddle ||
+             configuration.watermarkAnchor == CMWatermarkAnchorCenter) {
     CGFloat contentHeight = MIN(footerHeight, imageHeight * 0.28);
     CGFloat originY = MAX(0.0, (imageHeight - contentHeight) / 2.0);
     contentRect = CGRectMake(0.0, originY, canvasSize.width, contentHeight);
@@ -493,7 +502,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   // Studio模式、Polaroid模式和Info模式不在此处显示logo
   if (logoDescriptor && logoDescriptor.assetName.length > 0 &&
       !(frameDescriptor &&
-        ([frameDescriptor.identifier isEqualToString:@"frame.studio"] ||
+        (CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) ||
          [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
          [frameDescriptor.identifier isEqualToString:@"frame.info"]))) {
     UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
@@ -542,7 +551,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   // 根据相框类型选择文本颜色
   UIColor *textColor = [UIColor whiteColor];
   if (frameDescriptor &&
-      [frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
+      CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier)) {
     textColor = [UIColor blackColor]; // Studio模式使用黑色文字
   }
 
@@ -556,7 +565,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   NSString *captionText = @"";
   CGRect captionRect = CGRectZero;
   if (frameDescriptor &&
-      ![frameDescriptor.identifier isEqualToString:@"frame.studio"] &&
+      !CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) &&
       ![frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
     captionText =
         (configuration.isCaptionEnabled && configuration.captionText.length)
@@ -593,7 +602,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   } else if (detailString.length > 0) {
     // 对于Studio模式，使用专门的参数布局
     if (frameDescriptor &&
-        [frameDescriptor.identifier isEqualToString:@"frame.studio"]) {
+        CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier)) {
       [self drawStudioParametersInRect:contentRect
                           detailString:detailString
                             canvasSize:canvasSize];
@@ -668,25 +677,44 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
   }
 
   const CGFloat horizontalMargin = MAX(canvasSize.width * 0.05f, 40.0f);
-  const CGFloat bottomInset = MAX(canvasSize.height * 0.06f, 80.0f);
+  const CGFloat verticalInset = MAX(canvasSize.height * 0.06f, 80.0f);
 
   // 使用统一的画布缩放策略，保持不同来源照片的水印观感一致
   CGFloat baseFontSize =
       CMWatermarkScaledPointSize(canvasSize, 12.0f, 42.0f);
   CGFloat inlineAdaptiveScale = CMWatermarkInlineAdaptiveScale(canvasSize);
   baseFontSize *= inlineAdaptiveScale;
-  UIFont *captionFont = [UIFont systemFontOfSize:baseFontSize
-                                          weight:UIFontWeightSemibold];
+  UIFont *captionFont = [UIFont fontWithName:configuration.textFontName
+                                        size:baseFontSize];
+  if (!captionFont) {
+    captionFont = [UIFont systemFontOfSize:baseFontSize
+                                    weight:UIFontWeightSemibold];
+  }
   CGFloat detailPointSize =
       MAX(10.0f * CMWatermarkUIScaleFactor, baseFontSize * 0.58f);
   UIFont *detailFont =
       [UIFont systemFontOfSize:detailPointSize weight:UIFontWeightMedium];
   const CGFloat lineSpacing = baseFontSize * 0.35f;
 
-  NSMutableParagraphStyle *centerParagraph =
-      [[NSMutableParagraphStyle alloc] init];
-  centerParagraph.alignment = NSTextAlignmentCenter;
-  centerParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+  NSTextAlignment textAlignment = NSTextAlignmentCenter;
+  switch (configuration.watermarkAnchor) {
+    case CMWatermarkAnchorTopLeft:
+    case CMWatermarkAnchorBottomLeft:
+      textAlignment = NSTextAlignmentLeft;
+      break;
+    case CMWatermarkAnchorTopRight:
+    case CMWatermarkAnchorBottomRight:
+      textAlignment = NSTextAlignmentRight;
+      break;
+    case CMWatermarkAnchorCenter:
+    case CMWatermarkAnchorBottomCenter:
+      textAlignment = NSTextAlignmentCenter;
+      break;
+  }
+
+  NSMutableParagraphStyle *textParagraph = [[NSMutableParagraphStyle alloc] init];
+  textParagraph.alignment = textAlignment;
+  textParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
 
   CGFloat rendererScale = 1.0f;
   if ([context.format isKindOfClass:[UIGraphicsImageRendererFormat class]]) {
@@ -706,7 +734,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
         return @{
           NSFontAttributeName : font,
           NSForegroundColorAttributeName : [UIColor whiteColor],
-          NSParagraphStyleAttributeName : centerParagraph,
+          NSParagraphStyleAttributeName : textParagraph,
           NSShadowAttributeName : textShadow
         };
       };
@@ -770,15 +798,40 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
     return;
   }
 
-  CGFloat startY = canvasSize.height - bottomInset - blockHeight;
-  CGFloat minimumTop = MAX(horizontalMargin, canvasSize.height * 0.08f);
-  if (startY < minimumTop) {
-    startY = minimumTop;
+  CGFloat startY = canvasSize.height - verticalInset - blockHeight;
+  if (configuration.watermarkAnchor == CMWatermarkAnchorTopLeft ||
+      configuration.watermarkAnchor == CMWatermarkAnchorTopRight) {
+    startY = verticalInset;
+  } else if (configuration.watermarkAnchor == CMWatermarkAnchorCenter) {
+    startY = (canvasSize.height - blockHeight) * 0.5f;
   }
+  CGFloat minimumTop = MAX(horizontalMargin, canvasSize.height * 0.08f);
+  startY = MAX(startY, minimumTop);
 
   CGFloat currentY = startY;
+  CGFloat anchorX = horizontalMargin;
+  CGFloat availableWidth = canvasSize.width - horizontalMargin * 2.0f;
+  if (availableWidth <= 0.0f) {
+    availableWidth = canvasSize.width;
+    anchorX = 0.0f;
+  }
+  if (configuration.watermarkAnchor == CMWatermarkAnchorTopRight ||
+      configuration.watermarkAnchor == CMWatermarkAnchorBottomRight) {
+    anchorX = canvasSize.width - horizontalMargin - availableWidth;
+  } else if (configuration.watermarkAnchor == CMWatermarkAnchorCenter ||
+             configuration.watermarkAnchor == CMWatermarkAnchorBottomCenter) {
+    anchorX = (canvasSize.width - availableWidth) * 0.5f;
+  }
+
   if (hasLogoAsset) {
-    CGFloat logoX = (canvasSize.width - logoWidth) / 2.0f;
+    CGFloat logoX = (canvasSize.width - logoWidth) * 0.5f;
+    if (configuration.watermarkAnchor == CMWatermarkAnchorTopLeft ||
+        configuration.watermarkAnchor == CMWatermarkAnchorBottomLeft) {
+      logoX = anchorX;
+    } else if (configuration.watermarkAnchor == CMWatermarkAnchorTopRight ||
+               configuration.watermarkAnchor == CMWatermarkAnchorBottomRight) {
+      logoX = CGRectGetMaxX(CGRectMake(anchorX, 0.0f, availableWidth, 0.0f)) - logoWidth;
+    }
     CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
     UIImage *renderableLogo =
         logoDescriptor.prefersTemplateRendering
@@ -798,11 +851,6 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
     }
   }
 
-  CGFloat textWidth = canvasSize.width - horizontalMargin * 2.0f;
-  if (textWidth <= 0.0f) {
-    textWidth = canvasSize.width;
-  }
-
   for (NSUInteger index = 0; index < lines.count; index++) {
     NSString *text = lines[index][@"text"];
     UIFont *font = lines[index][@"font"];
@@ -812,7 +860,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
     }
     NSDictionary *fillAttributes = fillAttributesForFont(font);
     CGRect lineRect =
-        CGRectMake(horizontalMargin, currentY, textWidth, font.lineHeight);
+        CGRectMake(anchorX, currentY, availableWidth, font.lineHeight);
     if (isDetailLine && [text containsString:@"|"]) {
       BOOL isHasselbladInlineMode =
           hasLogoAsset &&
@@ -834,7 +882,7 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
                                 : [UIColor whiteColor];
       NSMutableParagraphStyle *paragraph =
           [[NSMutableParagraphStyle alloc] init];
-      paragraph.alignment = NSTextAlignmentCenter;
+      paragraph.alignment = textAlignment;
       paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
 
       NSDictionary *labelAttributes = @{
@@ -917,54 +965,155 @@ static inline CGFloat CMWatermarkConsistentLogoHeight(CGFloat captionLineHeight,
                                          metadata:
                                              (NSDictionary *_Nullable)metadata
                                        inlineMode:(BOOL)inlineMode {
-  if (configuration.preference == CMWatermarkPreferenceOff) {
+  NSMutableArray<NSString *> *components = [NSMutableArray array];
+  CMWatermarkMetadataOptions options = configuration.metadataOptions;
+
+  if (options == CMWatermarkMetadataOptionsNone) {
+    if (configuration.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
+      if (configuration.preferenceOptions &
+          CMWatermarkPreferenceOptionsExposure) {
+        options |= (CMWatermarkMetadataOptionsLens |
+                    CMWatermarkMetadataOptionsShutter |
+                    CMWatermarkMetadataOptionsAperture);
+      }
+      if (configuration.preferenceOptions &
+          CMWatermarkPreferenceOptionsCoordinates) {
+        options |= CMWatermarkMetadataOptionsLocation;
+      }
+      if (configuration.preferenceOptions &
+          CMWatermarkPreferenceOptionsDate) {
+        options |= CMWatermarkMetadataOptionsDate;
+      }
+    } else {
+      switch (configuration.preference) {
+      case CMWatermarkPreferenceExposure:
+        options |= (CMWatermarkMetadataOptionsLens |
+                    CMWatermarkMetadataOptionsShutter |
+                    CMWatermarkMetadataOptionsAperture);
+        break;
+      case CMWatermarkPreferenceCoordinates:
+        options |= CMWatermarkMetadataOptionsLocation;
+        break;
+      case CMWatermarkPreferenceDate:
+        options |= CMWatermarkMetadataOptionsDate;
+        break;
+      case CMWatermarkPreferenceOff:
+      default:
+        break;
+      }
+    }
+  }
+
+  if (options == CMWatermarkMetadataOptionsNone) {
     return configuration.auxiliaryText ?: @"";
   }
 
-  // 对于宝丽来模式，支持多选参数显示
-  if (configuration.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
-    NSMutableArray *components = [NSMutableArray array];
-
-    if (configuration.preferenceOptions &
-        CMWatermarkPreferenceOptionsExposure) {
-      NSString *exposure =
-          inlineMode ? [self inlineExposureStringFromMetadata:metadata]
-                     : [self exposureStringFromMetadata:metadata];
-      if (exposure.length > 0) {
-        [components addObject:exposure];
-      }
+  if (options & CMWatermarkMetadataOptionsLens) {
+    NSString *lens = [self lensStringFromMetadata:metadata inline:inlineMode];
+    if (lens.length > 0) {
+      [components addObject:lens];
     }
-
-    if (configuration.preferenceOptions &
-        CMWatermarkPreferenceOptionsCoordinates) {
-      NSString *coordinates = [self coordinateStringFromMetadata:metadata];
-      if (coordinates.length > 0) {
-        [components addObject:coordinates];
-      }
+  }
+  if (options & CMWatermarkMetadataOptionsShutter) {
+    NSString *shutter =
+        [self shutterStringFromMetadata:metadata inline:inlineMode];
+    if (shutter.length > 0) {
+      [components addObject:shutter];
     }
-
-    if (configuration.preferenceOptions & CMWatermarkPreferenceOptionsDate) {
-      NSString *date = [self dateStringFromMetadata:metadata];
-      if (date.length > 0) {
-        [components addObject:date];
-      }
+  }
+  if (options & CMWatermarkMetadataOptionsAperture) {
+    NSString *aperture =
+        [self apertureStringFromMetadata:metadata inline:inlineMode];
+    if (aperture.length > 0) {
+      [components addObject:aperture];
     }
-
-    return [components componentsJoinedByString:@"    "];
+  }
+  if (options & CMWatermarkMetadataOptionsDate) {
+    NSString *date = [self dateStringFromMetadata:metadata];
+    if (date.length > 0) {
+      [components addObject:(inlineMode
+                                 ? [NSString stringWithFormat:@"Date | %@", date]
+                                 : date)];
+    }
+  }
+  if (options & CMWatermarkMetadataOptionsLocation) {
+    NSString *coordinates = [self coordinateStringFromMetadata:metadata];
+    if (coordinates.length > 0) {
+      [components addObject:(inlineMode
+                                 ? [NSString stringWithFormat:@"Location | %@",
+                                                              coordinates]
+                                 : coordinates)];
+    }
   }
 
-  // 兼容旧的单选模式
-  switch (configuration.preference) {
-  case CMWatermarkPreferenceOff:
-    return configuration.auxiliaryText;
-  case CMWatermarkPreferenceExposure:
-    return inlineMode ? [self inlineExposureStringFromMetadata:metadata]
-                      : [self exposureStringFromMetadata:metadata];
-  case CMWatermarkPreferenceCoordinates:
-    return [self coordinateStringFromMetadata:metadata];
-  case CMWatermarkPreferenceDate:
-    return [self dateStringFromMetadata:metadata];
+  if (components.count == 0) {
+    return configuration.auxiliaryText ?: @"";
   }
+  return [components componentsJoinedByString:@"    "];
+}
+
+- (NSString *)lensStringFromMetadata:(NSDictionary *)metadata
+                              inline:(BOOL)inlineMode {
+  NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
+  double focalLength = [exif[(NSString *)kCGImagePropertyExifFocalLength]
+      doubleValue];
+  if (focalLength <= 0.0) {
+    focalLength = [exif[(NSString *)kCGImagePropertyExifFocalLenIn35mmFilm]
+        doubleValue];
+  }
+  if (focalLength <= 0.0) {
+    return inlineMode ? @"Lens | --mm" : @"-- mm";
+  }
+  return inlineMode ? [NSString stringWithFormat:@"Lens | %.0fmm", focalLength]
+                    : [NSString stringWithFormat:@"%.0f mm", focalLength];
+}
+
+- (NSString *)apertureStringFromMetadata:(NSDictionary *)metadata
+                                  inline:(BOOL)inlineMode {
+  NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
+  double fNumber = [exif[(NSString *)kCGImagePropertyExifFNumber] doubleValue];
+  if (fNumber <= 0.0) {
+    double apertureValue =
+        [exif[(NSString *)kCGImagePropertyExifApertureValue] doubleValue];
+    if (apertureValue > 0.0) {
+      fNumber = pow(2.0, apertureValue / 2.0);
+    }
+  }
+  if (fNumber <= 0.0) {
+    return inlineMode ? @"Aperture | --" : @"-- F";
+  }
+  return inlineMode ? [NSString stringWithFormat:@"Aperture | f/%.1f", fNumber]
+                    : [NSString stringWithFormat:@"%.1f F", fNumber];
+}
+
+- (NSString *)shutterStringFromMetadata:(NSDictionary *)metadata
+                                 inline:(BOOL)inlineMode {
+  NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
+  double exposureTime =
+      [exif[(NSString *)kCGImagePropertyExifExposureTime] doubleValue];
+  if (exposureTime <= 0.0) {
+    double shutterSpeedValue =
+        [exif[(NSString *)kCGImagePropertyExifShutterSpeedValue] doubleValue];
+    if (shutterSpeedValue != 0.0) {
+      exposureTime = 1.0 / pow(2.0, shutterSpeedValue);
+    }
+  }
+
+  NSString *formatted = @"--";
+  if (exposureTime > 0.0) {
+    if (exposureTime >= 1.0) {
+      formatted = [NSString stringWithFormat:@"%.1fs", exposureTime];
+    } else {
+      formatted = [NSString stringWithFormat:@"1/%.0fs",
+                                             round(1.0 / exposureTime)];
+    }
+  }
+
+  if (inlineMode) {
+    return [NSString stringWithFormat:@"Shutter | %@", formatted];
+  }
+  return [formatted stringByReplacingOccurrencesOfString:@"s"
+                                              withString:@" S"];
 }
 
 - (NSString *)exposureStringFromMetadata:(NSDictionary *)metadata {

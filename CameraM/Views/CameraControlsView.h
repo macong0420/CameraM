@@ -49,6 +49,7 @@ typedef NS_ENUM(NSInteger, CameraDeviceOrientation);
 // 水印设置
 - (void)didUpdateWatermarkConfiguration:(CMWatermarkConfiguration *)configuration;
 - (void)didChangeWatermarkPanelVisibility:(BOOL)isVisible;
+- (void)didChangeWatermarkDetailVisibility:(BOOL)isVisible;
 
 // 预览交互
 - (void)didTapPreviewAtPoint:(CGPoint)point;

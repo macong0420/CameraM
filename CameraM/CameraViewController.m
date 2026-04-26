@@ -17,6 +17,12 @@
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
+typedef NS_ENUM(NSInteger, CMWatermarkInteractionState) {
+  CMWatermarkInteractionStateNone = 0,
+  CMWatermarkInteractionStateQuickPanel = 1,
+  CMWatermarkInteractionStateDetailCard = 2
+};
+
 @interface CameraViewController () <
     CameraControlsDelegate, CameraBusinessDelegate,
     PHPickerViewControllerDelegate, WatermarkPanelViewDelegate,
@@ -40,6 +46,8 @@
 // 控制下次点击相册按钮时是否优先展示最新拍摄的快速预览
 @property(nonatomic, assign) BOOL shouldShowCapturePreview;
 @property(nonatomic, strong) NSDictionary *latestCaptureMetadata;
+@property(nonatomic, assign)
+    CMWatermarkInteractionState watermarkInteractionState;
 
 @end
 
@@ -49,6 +57,7 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.watermarkInteractionState = CMWatermarkInteractionStateNone;
   [self setupComponents];
   [self setupCamera];
   self.hasCapturedPhotoInSession =
@@ -59,11 +68,14 @@
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
   [self.businessController startSession];
+  [self applyWatermarkOrientationPolicyForCurrentState];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
   [super viewWillDisappear:animated];
   [self.businessController stopSession];
+  self.watermarkInteractionState = CMWatermarkInteractionStateNone;
+  [self applyWatermarkOrientationPolicyForCurrentState];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -246,7 +258,22 @@
 }
 
 - (void)didChangeWatermarkPanelVisibility:(BOOL)isVisible {
+  self.watermarkInteractionState =
+      isVisible ? CMWatermarkInteractionStateQuickPanel
+                : CMWatermarkInteractionStateNone;
+  [self applyWatermarkOrientationPolicyForCurrentState];
   NSLog(@"水印面板%@", isVisible ? @"展开" : @"收起");
+}
+
+- (void)didChangeWatermarkDetailVisibility:(BOOL)isVisible {
+  if (isVisible) {
+    self.watermarkInteractionState = CMWatermarkInteractionStateDetailCard;
+  } else if ([self.controlsView isWatermarkPanelVisible]) {
+    self.watermarkInteractionState = CMWatermarkInteractionStateQuickPanel;
+  } else {
+    self.watermarkInteractionState = CMWatermarkInteractionStateNone;
+  }
+  [self applyWatermarkOrientationPolicyForCurrentState];
 }
 
 #pragma mark - CameraBusinessDelegate (业务事件处理)
@@ -267,6 +294,12 @@
 }
 
 - (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation {
+  if (self.watermarkInteractionState != CMWatermarkInteractionStateNone) {
+    [self.controlsView updateLayoutForOrientation:CameraDeviceOrientationPortrait];
+    [self updatePreviewLayerFrame];
+    return;
+  }
+
   // 更新UI布局适配
   [self.controlsView updateLayoutForOrientation:orientation];
 
@@ -284,6 +317,45 @@
   });
 
   NSLog(@"设备方向变化，UI适配: %ld", (long)orientation);
+}
+
+#pragma mark - Orientation Policy
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+  if (self.watermarkInteractionState == CMWatermarkInteractionStateNone) {
+    return UIInterfaceOrientationMaskAllButUpsideDown;
+  }
+  return UIInterfaceOrientationMaskPortrait;
+}
+
+- (BOOL)shouldAutorotate {
+  return YES;
+}
+
+- (void)applyWatermarkOrientationPolicyForCurrentState {
+  if (@available(iOS 16.0, *)) {
+    [self setNeedsUpdateOfSupportedInterfaceOrientations];
+  }
+  [UIViewController attemptRotationToDeviceOrientation];
+
+  if (@available(iOS 16.0, *)) {
+    UIWindowScene *scene = self.view.window.windowScene;
+    if (!scene) {
+      return;
+    }
+    UIInterfaceOrientationMask mask =
+        (self.watermarkInteractionState == CMWatermarkInteractionStateNone)
+            ? UIInterfaceOrientationMaskAllButUpsideDown
+            : UIInterfaceOrientationMaskPortrait;
+    UIWindowSceneGeometryPreferencesIOS *preferences =
+        [[UIWindowSceneGeometryPreferencesIOS alloc]
+            initWithInterfaceOrientations:mask];
+    [scene requestGeometryUpdateWithPreferences:preferences
+                                   errorHandler:^(NSError *_Nonnull error) {
+                                     NSLog(@"方向策略切换失败: %@",
+                                           error.localizedDescription);
+                                   }];
+  }
 }
 
 - (void)didUpdateAvailableLensOptions:

@@ -30,6 +30,24 @@ typedef NS_ENUM(NSInteger, CMWatermarkPlacement) {
     CMWatermarkPlacementMiddle
 };
 
+typedef NS_OPTIONS(NSInteger, CMWatermarkMetadataOptions) {
+    CMWatermarkMetadataOptionsNone = 0,
+    CMWatermarkMetadataOptionsLens = 1 << 0,
+    CMWatermarkMetadataOptionsShutter = 1 << 1,
+    CMWatermarkMetadataOptionsAperture = 1 << 2,
+    CMWatermarkMetadataOptionsDate = 1 << 3,
+    CMWatermarkMetadataOptionsLocation = 1 << 4
+};
+
+typedef NS_ENUM(NSInteger, CMWatermarkAnchor) {
+    CMWatermarkAnchorBottomLeft = 0,
+    CMWatermarkAnchorBottomRight = 1,
+    CMWatermarkAnchorTopLeft = 2,
+    CMWatermarkAnchorTopRight = 3,
+    CMWatermarkAnchorCenter = 4,
+    CMWatermarkAnchorBottomCenter = 5
+};
+
 @interface CMWatermarkConfiguration : NSObject <NSCopying, NSSecureCoding>
 
 @property (nonatomic, assign, getter=isEnabled) BOOL enabled;
@@ -44,6 +62,9 @@ typedef NS_ENUM(NSInteger, CMWatermarkPlacement) {
 @property (nonatomic, assign, getter=isSignatureEnabled) BOOL signatureEnabled;
 @property (nonatomic, copy) NSString *signatureText;
 @property (nonatomic, copy) NSString *auxiliaryText;
+@property (nonatomic, assign) CMWatermarkMetadataOptions metadataOptions;
+@property (nonatomic, assign) CMWatermarkAnchor watermarkAnchor;
+@property (nonatomic, copy) NSString *textFontName;
 
 + (instancetype)defaultConfiguration;
 

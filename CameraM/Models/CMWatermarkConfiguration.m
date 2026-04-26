@@ -14,6 +14,69 @@
     return YES;
 }
 
+- (CMWatermarkMetadataOptions)metadataOptionsFromLegacyPreference {
+    CMWatermarkMetadataOptions options = CMWatermarkMetadataOptionsNone;
+    if (self.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
+        if (self.preferenceOptions & CMWatermarkPreferenceOptionsExposure) {
+            options |= (CMWatermarkMetadataOptionsLens |
+                        CMWatermarkMetadataOptionsShutter |
+                        CMWatermarkMetadataOptionsAperture);
+        }
+        if (self.preferenceOptions & CMWatermarkPreferenceOptionsCoordinates) {
+            options |= CMWatermarkMetadataOptionsLocation;
+        }
+        if (self.preferenceOptions & CMWatermarkPreferenceOptionsDate) {
+            options |= CMWatermarkMetadataOptionsDate;
+        }
+        return options;
+    }
+
+    switch (self.preference) {
+        case CMWatermarkPreferenceExposure:
+            return (CMWatermarkMetadataOptionsLens |
+                    CMWatermarkMetadataOptionsShutter |
+                    CMWatermarkMetadataOptionsAperture);
+        case CMWatermarkPreferenceCoordinates:
+            return CMWatermarkMetadataOptionsLocation;
+        case CMWatermarkPreferenceDate:
+            return CMWatermarkMetadataOptionsDate;
+        case CMWatermarkPreferenceOff:
+        default:
+            return CMWatermarkMetadataOptionsNone;
+    }
+}
+
+- (void)syncLegacyPreferenceFromMetadataOptions {
+    BOOL hasExposureGroup = ((self.metadataOptions &
+                             (CMWatermarkMetadataOptionsLens |
+                              CMWatermarkMetadataOptionsShutter |
+                              CMWatermarkMetadataOptionsAperture)) != 0);
+    BOOL hasLocation = (self.metadataOptions & CMWatermarkMetadataOptionsLocation) != 0;
+    BOOL hasDate = (self.metadataOptions & CMWatermarkMetadataOptionsDate) != 0;
+
+    CMWatermarkPreferenceOptions legacyOptions = CMWatermarkPreferenceOptionsNone;
+    if (hasExposureGroup) {
+        legacyOptions |= CMWatermarkPreferenceOptionsExposure;
+    }
+    if (hasLocation) {
+        legacyOptions |= CMWatermarkPreferenceOptionsCoordinates;
+    }
+    if (hasDate) {
+        legacyOptions |= CMWatermarkPreferenceOptionsDate;
+    }
+
+    self.preferenceOptions = legacyOptions;
+    if (legacyOptions == CMWatermarkPreferenceOptionsNone) {
+        self.preference = CMWatermarkPreferenceOff;
+    } else if (hasExposureGroup) {
+        self.preference = CMWatermarkPreferenceExposure;
+    } else if (hasLocation) {
+        self.preference = CMWatermarkPreferenceCoordinates;
+    } else if (hasDate) {
+        self.preference = CMWatermarkPreferenceDate;
+    }
+}
+
 - (instancetype)init {
     self = [super init];
     if (self) {
@@ -29,6 +92,12 @@
         _signatureEnabled = NO;
         _signatureText = @"";
         _auxiliaryText = @"";
+        _metadataOptions = (CMWatermarkMetadataOptionsLens |
+                            CMWatermarkMetadataOptionsShutter |
+                            CMWatermarkMetadataOptionsAperture);
+        _watermarkAnchor = CMWatermarkAnchorBottomLeft;
+        _textFontName = @"Garamond Premier Pro";
+        [self syncLegacyPreferenceFromMetadataOptions];
     }
     return self;
 }
@@ -51,10 +120,15 @@
     copy.signatureEnabled = self.signatureEnabled;
     copy.signatureText = [self.signatureText copy];
     copy.auxiliaryText = [self.auxiliaryText copy];
+    copy.metadataOptions = self.metadataOptions;
+    copy.watermarkAnchor = self.watermarkAnchor;
+    copy.textFontName = [self.textFontName copy];
+    [copy syncLegacyPreferenceFromMetadataOptions];
     return copy;
 }
 
 - (void)encodeWithCoder:(NSCoder *)coder {
+    [self syncLegacyPreferenceFromMetadataOptions];
     [coder encodeBool:self.enabled forKey:@"enabled"];
     [coder encodeObject:self.frameIdentifier forKey:@"frameIdentifier"];
     [coder encodeObject:self.logoIdentifier forKey:@"logoIdentifier"];
@@ -67,6 +141,9 @@
     [coder encodeBool:self.signatureEnabled forKey:@"signatureEnabled"];
     [coder encodeObject:self.signatureText forKey:@"signatureText"];
     [coder encodeObject:self.auxiliaryText forKey:@"auxiliaryText"];
+    [coder encodeInteger:self.metadataOptions forKey:@"metadataOptions"];
+    [coder encodeInteger:self.watermarkAnchor forKey:@"watermarkAnchor"];
+    [coder encodeObject:self.textFontName forKey:@"textFontName"];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
@@ -78,6 +155,7 @@
         NSString *decodedCaption = [coder decodeObjectOfClass:[NSString class] forKey:@"captionText"];
         NSString *decodedSignature = [coder decodeObjectOfClass:[NSString class] forKey:@"signatureText"];
         NSString *decodedAux = [coder decodeObjectOfClass:[NSString class] forKey:@"auxiliaryText"];
+        NSString *decodedFontName = [coder decodeObjectOfClass:[NSString class] forKey:@"textFontName"];
 
         _frameIdentifier = decodedFrame.length ? [decodedFrame copy] : CMWatermarkFrameIdentifierStudio;
         _logoIdentifier = decodedLogo.length ? [decodedLogo copy] : @"logo.canon";
@@ -94,6 +172,21 @@
         _signatureEnabled = [coder decodeBoolForKey:@"signatureEnabled"];
         _signatureText = decodedSignature.length ? [decodedSignature copy] : @"";
         _auxiliaryText = decodedAux.length ? [decodedAux copy] : @"";
+        _watermarkAnchor = [coder containsValueForKey:@"watermarkAnchor"]
+                               ? (CMWatermarkAnchor)[coder decodeIntegerForKey:@"watermarkAnchor"]
+                               : CMWatermarkAnchorBottomLeft;
+        if (_watermarkAnchor < CMWatermarkAnchorBottomLeft ||
+            _watermarkAnchor > CMWatermarkAnchorBottomCenter) {
+            _watermarkAnchor = CMWatermarkAnchorBottomLeft;
+        }
+        _textFontName = decodedFontName.length ? [decodedFontName copy] : @"Garamond Premier Pro";
+
+        if ([coder containsValueForKey:@"metadataOptions"]) {
+            _metadataOptions = (CMWatermarkMetadataOptions)[coder decodeIntegerForKey:@"metadataOptions"];
+        } else {
+            _metadataOptions = [self metadataOptionsFromLegacyPreference];
+        }
+        [self syncLegacyPreferenceFromMetadataOptions];
     }
     return self;
 }

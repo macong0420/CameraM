@@ -1071,6 +1071,7 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   if (!self.watermarkPanelVisible) {
     return;
   }
+  [self.watermarkPanel dismissDetailSettingsIfNeeded];
   [self layoutIfNeeded];
   self.watermarkPanelVisible = NO;
   [self updateWatermarkPanelHeightConstraints];
@@ -1106,6 +1107,14 @@ static const CGFloat CMModeSelectorWidth = 60.0f;
   if ([self.delegate
           respondsToSelector:@selector(didUpdateWatermarkConfiguration:)]) {
     [self.delegate didUpdateWatermarkConfiguration:configuration];
+  }
+}
+
+- (void)watermarkPanel:(WatermarkPanelView *)panel
+    didChangeDetailVisibility:(BOOL)isVisible {
+  if ([self.delegate
+          respondsToSelector:@selector(didChangeWatermarkDetailVisibility:)]) {
+    [self.delegate didChangeWatermarkDetailVisibility:isVisible];
   }
 }
 
