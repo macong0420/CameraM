@@ -47,6 +47,12 @@
 // 性能优化 - 队列管理
 @property(nonatomic, strong) dispatch_queue_t sessionQueue;
 @property(nonatomic, strong) dispatch_queue_t photoProcessingQueue;
+@property(nonatomic, strong)
+    NSMutableDictionary<NSNumber *, NSNumber *> *captureRequestTimesBySettingsID;
+@property(nonatomic, assign) uint64_t totalCaptureRequests;
+@property(nonatomic, assign) uint64_t totalCaptureFailures;
+@property(nonatomic, assign) NSInteger pendingPhotoProcessingCount;
+@property(nonatomic, assign) NSInteger maxObservedPhotoProcessingDepth;
 
 // 镜头管理 - 已迁移到CMDeviceManager
 // availableLensOptions, currentLensOption, lensDeviceMap 通过属性访问器桥接
@@ -100,6 +106,14 @@
 
 @implementation CameraManager
 
+static inline CFTimeInterval CMPerfNow(void) {
+  return CFAbsoluteTimeGetCurrent();
+}
+
+static inline double CMPerfDurationMs(CFTimeInterval start, CFTimeInterval end) {
+  return (end - start) * 1000.0;
+}
+
 #pragma mark - 单例模式
 
 + (instancetype)sharedManager {
@@ -139,6 +153,11 @@
                                               QOS_CLASS_USER_INITIATED, 0);
   _photoProcessingQueue =
       dispatch_queue_create("com.cameram.photo.processing", photoQueueAttr);
+  _captureRequestTimesBySettingsID = [NSMutableDictionary dictionary];
+  _totalCaptureRequests = 0;
+  _totalCaptureFailures = 0;
+  _pendingPhotoProcessingCount = 0;
+  _maxObservedPhotoProcessingDepth = 0;
 
   // 初始化方向监听
   _motionManager = [[CMMotionManager alloc] init];
@@ -268,6 +287,14 @@
       }
     }
     AVCapturePhotoSettings *settings = [self createPhotoSettings];
+    CFTimeInterval requestTime = CMPerfNow();
+    NSNumber *settingsID = @(settings.uniqueID);
+    @synchronized(self) {
+      self.captureRequestTimesBySettingsID[settingsID] = @(requestTime);
+      self.totalCaptureRequests += 1;
+    }
+    NSLog(@"📊 [Perf][Capture][Request] settings=%ld total=%llu",
+          (long)settings.uniqueID, self.totalCaptureRequests);
     [self.photoOutput capturePhotoWithSettings:settings delegate:self];
   });
 
@@ -1170,11 +1197,35 @@
     didFinishProcessingPhoto:(AVCapturePhoto *)photo
                        error:(NSError *)error {
 
+  NSNumber *settingsID = @(photo.resolvedSettings.uniqueID);
+  CFTimeInterval now = CMPerfNow();
+  CFTimeInterval requestTime = 0;
+  BOOL foundRequestTime = NO;
+  @synchronized(self) {
+    NSNumber *storedTime = self.captureRequestTimesBySettingsID[settingsID];
+    if (storedTime) {
+      requestTime = storedTime.doubleValue;
+      foundRequestTime = YES;
+      [self.captureRequestTimesBySettingsID removeObjectForKey:settingsID];
+    }
+  }
+  if (foundRequestTime) {
+    NSLog(@"📊 [Perf][Capture][AVCallback] settings=%ld latency=%.2fms",
+          (long)photo.resolvedSettings.uniqueID,
+          CMPerfDurationMs(requestTime, now));
+  }
+
   dispatch_async(dispatch_get_main_queue(), ^{
     self.currentState = CameraStateRunning;
     [self notifyDelegateStateChanged];
 
     if (error) {
+      @synchronized(self) {
+        self.totalCaptureFailures += 1;
+      }
+      NSLog(@"📊 [Perf][Capture][Error] settings=%ld totalFail=%llu err=%@",
+            (long)photo.resolvedSettings.uniqueID, self.totalCaptureFailures,
+            error.localizedDescription);
       if ([self.delegate respondsToSelector:@selector(cameraManager:
                                                    didFailWithError:)]) {
         [self.delegate cameraManager:self didFailWithError:error];
@@ -1184,6 +1235,7 @@
   });
 
   NSData *imageData = photo.fileDataRepresentation;
+  CFTimeInterval dataReadyTime = CMPerfNow();
   if (!imageData) {
     NSError *invalidDataError =
         [NSError errorWithDomain:@"CameraManager"
@@ -1201,21 +1253,48 @@
   }
 
   __weak typeof(self) weakSelf = self;
+  NSInteger queueDepth = 0;
+  @synchronized(self) {
+    self.pendingPhotoProcessingCount += 1;
+    queueDepth = self.pendingPhotoProcessingCount;
+    if (self.pendingPhotoProcessingCount > self.maxObservedPhotoProcessingDepth) {
+      self.maxObservedPhotoProcessingDepth = self.pendingPhotoProcessingCount;
+    }
+  }
+  NSLog(@"📊 [Perf][Capture][DecodeEnqueue] settings=%ld imageData=%.2fMB queueDepth=%ld maxDepth=%ld",
+        (long)photo.resolvedSettings.uniqueID,
+        (double)imageData.length / (1024.0 * 1024.0), (long)queueDepth,
+        (long)self.maxObservedPhotoProcessingDepth);
   dispatch_async(self.photoProcessingQueue, ^{
     @autoreleasepool {
       __strong typeof(weakSelf) strongSelf = weakSelf;
       if (!strongSelf) {
         return;
       }
+      CFTimeInterval decodeStart = CMPerfNow();
+      NSLog(@"📊 [Perf][Capture][DecodeStart] settings=%ld queueWait=%.2fms",
+            (long)photo.resolvedSettings.uniqueID,
+            CMPerfDurationMs(dataReadyTime, decodeStart));
 
       UIImage *image = [UIImage imageWithData:imageData];
       if (!image) {
+        NSInteger remainDepth = 0;
+        @synchronized(strongSelf) {
+          strongSelf.totalCaptureFailures += 1;
+          if (strongSelf.pendingPhotoProcessingCount > 0) {
+            strongSelf.pendingPhotoProcessingCount -= 1;
+          }
+          remainDepth = strongSelf.pendingPhotoProcessingCount;
+        }
         NSError *decodeError =
             [NSError errorWithDomain:@"CameraManager"
                                 code:1007
                             userInfo:@{
                               NSLocalizedDescriptionKey : @"图像解码失败"
                             }];
+        NSLog(@"📊 [Perf][Capture][DecodeError] settings=%ld queueDepth=%ld totalFail=%llu",
+              (long)photo.resolvedSettings.uniqueID, (long)remainDepth,
+              strongSelf.totalCaptureFailures);
         dispatch_async(dispatch_get_main_queue(), ^{
           if ([strongSelf.delegate
                   respondsToSelector:@selector(cameraManager:
@@ -1226,10 +1305,26 @@
         });
         return;
       }
+      CFTimeInterval decodeEnd = CMPerfNow();
 
+      CFTimeInterval metadataStart = CMPerfNow();
       NSDictionary *enrichedMetadata = [strongSelf
           enrichedMetadataFromPhoto:photo
                    originalMetadata:photo.metadata];
+      CFTimeInterval metadataEnd = CMPerfNow();
+      NSInteger remainDepth = 0;
+      @synchronized(strongSelf) {
+        if (strongSelf.pendingPhotoProcessingCount > 0) {
+          strongSelf.pendingPhotoProcessingCount -= 1;
+        }
+        remainDepth = strongSelf.pendingPhotoProcessingCount;
+      }
+      NSLog(
+          @"📊 [Perf][Capture][DecodeDone] settings=%ld decode=%.2fms metadata=%.2fms total=%.2fms queueDepth=%ld",
+          (long)photo.resolvedSettings.uniqueID,
+          CMPerfDurationMs(decodeStart, decodeEnd),
+          CMPerfDurationMs(metadataStart, metadataEnd),
+          CMPerfDurationMs(dataReadyTime, metadataEnd), (long)remainDepth);
 
       dispatch_async(dispatch_get_main_queue(), ^{
         if ([strongSelf.delegate respondsToSelector:@selector

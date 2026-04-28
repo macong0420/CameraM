@@ -103,6 +103,12 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
 @interface CMWatermarkRenderer ()
 
 @property(nonatomic, strong) NSDateFormatter *dateFormatter;
+@property(nonatomic, strong) NSCache<NSString *, UIImage *> *assetImageCache;
+@property(nonatomic, strong) NSCache<NSString *, UIImage *> *renderableLogoCache;
+
+- (UIImage *_Nullable)cachedAssetImageNamed:(NSString *)assetName;
+- (UIImage *_Nullable)cachedRenderableLogoForDescriptor:
+    (CMWatermarkLogoDescriptor *)logoDescriptor;
 
 @end
 
@@ -116,8 +122,53 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     _dateFormatter.locale =
         [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     _dateFormatter.timeZone = [NSTimeZone localTimeZone];
+    _assetImageCache = [[NSCache alloc] init];
+    _assetImageCache.name = @"com.cameram.watermark.assets";
+    _assetImageCache.countLimit = 128;
+    _renderableLogoCache = [[NSCache alloc] init];
+    _renderableLogoCache.name = @"com.cameram.watermark.logos";
+    _renderableLogoCache.countLimit = 64;
   }
   return self;
+}
+
+- (UIImage *)cachedAssetImageNamed:(NSString *)assetName {
+  if (assetName.length == 0) {
+    return nil;
+  }
+  UIImage *cached = [self.assetImageCache objectForKey:assetName];
+  if (cached) {
+    return cached;
+  }
+  UIImage *image = [UIImage imageNamed:assetName];
+  if (image) {
+    [self.assetImageCache setObject:image forKey:assetName];
+  }
+  return image;
+}
+
+- (UIImage *)cachedRenderableLogoForDescriptor:
+    (CMWatermarkLogoDescriptor *)logoDescriptor {
+  if (logoDescriptor.assetName.length == 0) {
+    return nil;
+  }
+  NSString *cacheKey =
+      [NSString stringWithFormat:@"%@#tpl=%d", logoDescriptor.assetName,
+                                 logoDescriptor.prefersTemplateRendering ? 1 : 0];
+  UIImage *cached = [self.renderableLogoCache objectForKey:cacheKey];
+  if (cached) {
+    return cached;
+  }
+  UIImage *baseLogo = [self cachedAssetImageNamed:logoDescriptor.assetName];
+  if (!baseLogo) {
+    return nil;
+  }
+  UIImage *renderable =
+      logoDescriptor.prefersTemplateRendering
+          ? [baseLogo imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+          : baseLogo;
+  [self.renderableLogoCache setObject:renderable forKey:cacheKey];
+  return renderable;
 }
 
 - (UIImage *)renderImage:(UIImage *)image
@@ -206,7 +257,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
           void (^drawOverlay)(CGRect photoMaskRect, BOOL usesMask) = nil;
           BOOL overlayShouldDrawAbovePhoto = YES;
           if (frameDescriptor.overlayAssetName.length > 0) {
-            overlay = [UIImage imageNamed:frameDescriptor.overlayAssetName];
+            overlay = [self cachedAssetImageNamed:frameDescriptor.overlayAssetName];
             if (overlay) {
               overlayShouldDrawAbovePhoto =
                   frameDescriptor.overlayDrawsAbovePhoto;
@@ -332,8 +383,8 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
               CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) &&
               bottomPadding > 0.0) {
             if (frameDescriptor.backgroundAssetName.length > 0) {
-              UIImage *background =
-                  [UIImage imageNamed:frameDescriptor.backgroundAssetName];
+              UIImage *background = [self
+                  cachedAssetImageNamed:frameDescriptor.backgroundAssetName];
               if (background) {
                 // sign_b高度为底部区域的四分之一，保持原始比例
                 CGFloat signBHeight = bottomPadding * 0.25;
@@ -386,8 +437,8 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
           } else if (frameDescriptor.backgroundAssetName.length > 0 &&
                      bottomPadding > 0.0) {
             // 其他相框模式的原有逻辑
-            UIImage *background =
-                [UIImage imageNamed:frameDescriptor.backgroundAssetName];
+            UIImage *background = [self
+                cachedAssetImageNamed:frameDescriptor.backgroundAssetName];
             if (background) {
               CGRect backgroundRect =
                   CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
@@ -505,7 +556,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
         (CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) ||
          [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
          [frameDescriptor.identifier isEqualToString:@"frame.info"]))) {
-    UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+    UIImage *logoImage = [self cachedAssetImageNamed:logoDescriptor.assetName];
     if (logoImage) {
       CGFloat maxContentHeight = contentRect.size.height * 0.6f;
       CGFloat logoHeight = CMWatermarkConsistentLogoHeight(
@@ -523,10 +574,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
       CGRect logoRect = CGRectMake(cursorX, contentCenterY - logoHeight / 2.0,
                                    logoWidth, logoHeight);
       UIImage *renderableLogo =
-          logoDescriptor.prefersTemplateRendering
-              ? [logoImage
-                    imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
-              : logoImage;
+          [self cachedRenderableLogoForDescriptor:logoDescriptor] ?: logoImage;
       if (logoDescriptor.prefersTemplateRendering) {
         [[UIColor whiteColor] setFill];
         [[UIColor whiteColor] setStroke];
@@ -759,7 +807,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   CGFloat logoHeight = 0.0f;
   CGFloat logoWidth = 0.0f;
   if (hasLogoAsset) {
-    logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+    logoImage = [self cachedAssetImageNamed:logoDescriptor.assetName];
     if (!logoImage) {
       hasLogoAsset = NO;
     } else {
@@ -834,10 +882,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     }
     CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
     UIImage *renderableLogo =
-        logoDescriptor.prefersTemplateRendering
-            ? [logoImage
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
-            : logoImage;
+        [self cachedRenderableLogoForDescriptor:logoDescriptor] ?: logoImage;
     if (logoDescriptor.prefersTemplateRendering) {
       [[UIColor whiteColor] setFill];
       [[UIColor whiteColor] setStroke];
@@ -1404,7 +1449,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   UIImage *logoImage = nil;
   BOOL hasLogo = NO;
   if (logoDescriptor && logoDescriptor.assetName.length > 0) {
-    logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+    logoImage = [self cachedAssetImageNamed:logoDescriptor.assetName];
     hasLogo = (logoImage != nil);
   }
 
@@ -1494,10 +1539,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     CGRect logoRect = CGRectMake(logoX, currentY, logoWidth, logoHeight);
 
     UIImage *renderableLogo =
-        logoDescriptor.prefersTemplateRendering
-            ? [logoImage
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
-            : logoImage;
+        [self cachedRenderableLogoForDescriptor:logoDescriptor] ?: logoImage;
     if (logoDescriptor.prefersTemplateRendering) {
       [[UIColor blackColor] setFill];
       [[UIColor blackColor] setStroke];
@@ -1762,7 +1804,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
 
     // Logo绘制 - 紧靠右侧参数左边，垂直居中并向上调整
     if (logoDescriptor && logoDescriptor.assetName.length > 0) {
-      UIImage *logoImage = [UIImage imageNamed:logoDescriptor.assetName];
+      UIImage *logoImage = [self cachedAssetImageNamed:logoDescriptor.assetName];
       if (logoImage) {
         CGFloat aspect =
             logoImage.size.width / MAX(logoImage.size.height, 1.0f);
@@ -1784,10 +1826,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
         CGRect logoRect = CGRectMake(logoX, logoY, logoWidth, logoHeight);
 
         UIImage *renderableLogo =
-            logoDescriptor.prefersTemplateRendering
-                ? [logoImage
-                      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
-                : logoImage;
+            [self cachedRenderableLogoForDescriptor:logoDescriptor] ?: logoImage;
         if (logoDescriptor.prefersTemplateRendering) {
           [[UIColor blackColor] setFill];
           [[UIColor blackColor] setStroke];

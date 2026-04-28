@@ -33,6 +33,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)didChangeAspectRatio:(CameraAspectRatio)ratio;
 - (void)didChangeDeviceOrientation:(CameraDeviceOrientation)orientation;
 - (void)didUpdateAvailableLensOptions:(NSArray<CMCameraLensOption *> *)lensOptions currentLens:(CMCameraLensOption *)currentLens;
+- (void)didReceiveCaptureAck;
 - (void)didCapturePhoto:(UIImage *)image withMetadata:(NSDictionary *)metadata;
 - (void)didFailWithError:(NSError *)error;
 

@@ -432,8 +432,11 @@ typedef NS_ENUM(NSInteger, CMWatermarkInteractionState) {
   self.hasCapturedPhotoInSession = YES;
   self.shouldShowCapturePreview = YES;
   self.latestCaptureMetadata = metadata;
-  [self.controlsView setCaptureButtonLoading:NO];
   [self.controlsView updateGalleryButtonWithImage:image];
+}
+
+- (void)didReceiveCaptureAck {
+  [self.controlsView setCaptureButtonLoading:NO];
 }
 
 - (void)didFailWithError:(NSError *)error {

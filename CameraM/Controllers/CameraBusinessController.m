@@ -10,6 +10,26 @@
 #import "../Services/CMCaptureSessionService.h"
 #import "../Common/CMConstants.h"
 #import "../Common/CMSettingsStorage.h"
+#import <mach/mach.h>
+
+static inline CFTimeInterval CMPerfNow(void) {
+  return CFAbsoluteTimeGetCurrent();
+}
+
+static inline double CMPerfDurationMs(CFTimeInterval start, CFTimeInterval end) {
+  return (end - start) * 1000.0;
+}
+
+static double CMResidentMemoryMB(void) {
+  mach_task_basic_info_data_t info;
+  mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+  kern_return_t kr =
+      task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count);
+  if (kr != KERN_SUCCESS) {
+    return 0.0;
+  }
+  return (double)info.resident_size / (1024.0 * 1024.0);
+}
 
 static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   if (!image || image.imageOrientation == UIImageOrientationUp) {
@@ -31,10 +51,21 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 @property(nonatomic, assign) BOOL isGridLinesVisible;
 @property(nonatomic, copy) CMWatermarkConfiguration *watermarkConfiguration;
 @property(nonatomic, strong) CMWatermarkRenderer *watermarkRenderer;
-@property(nonatomic, strong) dispatch_queue_t renderQueue;
+@property(nonatomic, strong) NSOperationQueue *decodeQueue;
+@property(nonatomic, strong) NSOperationQueue *composeQueue;
+@property(nonatomic, strong) NSOperationQueue *saveQueue;
 @property(nonatomic, copy) NSArray<CMCameraLensOption *> *availableLensOptions;
 @property(nonatomic, strong) CMCameraLensOption *currentLensOption;
 @property(nonatomic, copy) NSString *restoredLensIdentifier;
+@property(nonatomic, assign) uint64_t perfJobSequence;
+@property(nonatomic, assign) NSInteger pendingRenderTaskCount;
+@property(nonatomic, assign) NSInteger maxObservedRenderQueueDepth;
+@property(nonatomic, assign) NSUInteger totalProcessedJobs;
+@property(nonatomic, assign) NSUInteger totalFailedJobs;
+@property(nonatomic, assign) NSInteger maxPendingJobs;
+@property(nonatomic, assign) NSInteger dropThresholdJobs;
+@property(nonatomic, assign) uint64_t nextCompletionJobID;
+@property(nonatomic, strong) NSMutableDictionary<NSNumber *, NSDictionary *> *pendingOrderedCompletions;
 
 - (void)persistWatermarkConfiguration;
 - (void)loadPersistedWatermarkConfiguration;
@@ -43,6 +74,12 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 - (void)persistFlashMode;
 - (void)persistGridVisibility;
 - (void)persistCurrentResolutionMode;
+- (void)enqueueOrderedCompletionForJobID:(uint64_t)jobID
+                             finalImage:(nullable UIImage *)finalImage
+                                  error:(nullable NSError *)error
+                             completion:
+                                 (void (^)(UIImage *_Nullable processedImage,
+                                           NSError *_Nullable error))completion;
 
 @end
 
@@ -70,16 +107,86 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     [self loadPersistedWatermarkConfiguration];
     [self loadPersistedSettings];
     _watermarkRenderer = [[CMWatermarkRenderer alloc] init];
-    dispatch_queue_attr_t renderQueueAttr =
-        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
-                                                QOS_CLASS_USER_INITIATED, 0);
-    _renderQueue =
-        dispatch_queue_create("com.cameram.render", renderQueueAttr);
+    _decodeQueue = [[NSOperationQueue alloc] init];
+    _decodeQueue.name = @"com.cameram.pipeline.decode";
+    _decodeQueue.qualityOfService = NSQualityOfServiceUserInitiated;
+    _decodeQueue.maxConcurrentOperationCount = 2;
+    _composeQueue = [[NSOperationQueue alloc] init];
+    _composeQueue.name = @"com.cameram.pipeline.compose";
+    _composeQueue.qualityOfService = NSQualityOfServiceUserInitiated;
+    _composeQueue.maxConcurrentOperationCount = 2;
+    _saveQueue = [[NSOperationQueue alloc] init];
+    _saveQueue.name = @"com.cameram.pipeline.save";
+    _saveQueue.qualityOfService = NSQualityOfServiceUtility;
+    _saveQueue.maxConcurrentOperationCount = 1;
     _availableLensOptions = _captureService.availableLensOptions ?: @[];
     _currentLensOption = _captureService.currentLensOption;
     _restoredLensIdentifier = [[CMSettingsStorage sharedStorage] loadLensIdentifier];
+    _perfJobSequence = 0;
+    _pendingRenderTaskCount = 0;
+    _maxObservedRenderQueueDepth = 0;
+    _totalProcessedJobs = 0;
+    _totalFailedJobs = 0;
+    _maxPendingJobs = 8;
+    _dropThresholdJobs = 12;
+    _nextCompletionJobID = 1;
+    _pendingOrderedCompletions = [NSMutableDictionary dictionary];
   }
   return self;
+}
+
+- (void)enqueueOrderedCompletionForJobID:(uint64_t)jobID
+                             finalImage:(UIImage *)finalImage
+                                  error:(NSError *)error
+                             completion:
+                                 (void (^)(UIImage *_Nullable processedImage,
+                                           NSError *_Nullable error))completion {
+  if (!completion) {
+    if (error) {
+      NSLog(@"⚠️ 保存图片失败: %@", error.localizedDescription);
+    }
+    return;
+  }
+
+  NSMutableArray<NSDictionary *> *readyEntries = [NSMutableArray array];
+  @synchronized(self) {
+    self.pendingOrderedCompletions[@(jobID)] = @{
+      @"completion" : [completion copy],
+      @"image" : finalImage ?: [NSNull null],
+      @"error" : error ?: [NSNull null]
+    };
+
+    while (YES) {
+      NSNumber *nextKey = @(self.nextCompletionJobID);
+      NSDictionary *entry = self.pendingOrderedCompletions[nextKey];
+      if (!entry) {
+        break;
+      }
+      [readyEntries addObject:entry];
+      [self.pendingOrderedCompletions removeObjectForKey:nextKey];
+      self.nextCompletionJobID += 1;
+    }
+  }
+
+  if (readyEntries.count == 0) {
+    return;
+  }
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    for (NSDictionary *entry in readyEntries) {
+      void (^entryCompletion)(UIImage *_Nullable, NSError *_Nullable) =
+          entry[@"completion"];
+      id imageValue = entry[@"image"];
+      id errorValue = entry[@"error"];
+      UIImage *orderedImage =
+          [imageValue isKindOfClass:[NSNull class]] ? nil : (UIImage *)imageValue;
+      NSError *orderedError =
+          [errorValue isKindOfClass:[NSNull class]] ? nil : (NSError *)errorValue;
+      if (entryCompletion) {
+        entryCompletion(orderedImage, orderedError);
+      }
+    }
+  });
 }
 
 // Convenience accessor for preview layer
@@ -128,6 +235,13 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
 }
 
 - (void)cleanup {
+  [self.decodeQueue cancelAllOperations];
+  [self.composeQueue cancelAllOperations];
+  [self.saveQueue cancelAllOperations];
+  @synchronized(self) {
+    [self.pendingOrderedCompletions removeAllObjects];
+    self.nextCompletionJobID = self.perfJobSequence + 1;
+  }
   [self.captureService cleanup];
 }
 
@@ -156,6 +270,9 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
     });
     return;
   }
+  CFTimeInterval captureRequestTime = CMPerfNow();
+  NSLog(@"📊 [Perf][Capture] request state=%ld t=%.6f",
+        (long)self.captureService.currentState, captureRequestTime);
   [self.captureService capturePhoto];
 }
 
@@ -267,33 +384,108 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
   }
 
   __weak typeof(self) weakSelf = self;
+  __block uint64_t jobID = 0;
+  CFTimeInterval enqueueTime = CMPerfNow();
+  NSInteger queueDepth = 0;
+  BOOL shouldUseFastPath = NO;
+  @synchronized(self) {
+    self.perfJobSequence += 1;
+    jobID = self.perfJobSequence;
+    self.pendingRenderTaskCount += 1;
+    queueDepth = self.pendingRenderTaskCount;
+    if (self.pendingRenderTaskCount > self.maxObservedRenderQueueDepth) {
+      self.maxObservedRenderQueueDepth = self.pendingRenderTaskCount;
+    }
+    shouldUseFastPath = (self.pendingRenderTaskCount > self.maxPendingJobs);
+  }
 
-  dispatch_async(self.renderQueue, ^{
+  NSLog(
+      @"📊 [Perf][Pipeline][Enqueue] job=%llu queueDepth=%ld maxDepth=%ld image=%.0fx%.0f mem=%.1fMB",
+      jobID, (long)queueDepth, (long)self.maxObservedRenderQueueDepth, image.size.width,
+      image.size.height, CMResidentMemoryMB());
+  if (shouldUseFastPath) {
+    NSLog(@"⚠️ [Backpressure] job=%llu queueDepth=%ld > maxPending=%ld, fast-path enabled",
+          jobID, (long)queueDepth, (long)self.maxPendingJobs);
+  }
+  if (queueDepth > self.dropThresholdJobs) {
+    NSInteger remainingQueueDepth = 0;
+    NSUInteger failedCount = 0;
+    @synchronized(self) {
+      if (self.pendingRenderTaskCount > 0) {
+        self.pendingRenderTaskCount -= 1;
+      }
+      self.totalFailedJobs += 1;
+      remainingQueueDepth = self.pendingRenderTaskCount;
+      failedCount = self.totalFailedJobs;
+    }
+    NSError *overloadError = [NSError
+        errorWithDomain:kCMBusinessControllerErrorDomain
+                   code:3003
+               userInfo:@{
+                 NSLocalizedDescriptionKey :
+                     @"处理队列繁忙，已触发过载保护，请稍后重试"
+               }];
+    NSLog(
+        @"⛔️ [Backpressure] drop job=%llu queueDepth=%ld threshold=%ld stats(failed=%lu)",
+        jobID, (long)remainingQueueDepth, (long)self.dropThresholdJobs,
+        (unsigned long)failedCount);
+    [self enqueueOrderedCompletionForJobID:jobID
+                                finalImage:nil
+                                     error:overloadError
+                                completion:completion];
+    return;
+  }
+  __block UIImage *workingImage = image;
+  __block UIImage *finalImage = image;
+  __block NSError *pipelineError = nil;
+  __block CFTimeInterval cropStart = 0;
+  __block CFTimeInterval cropEnd = 0;
+  __block CFTimeInterval composeStart = 0;
+  __block CFTimeInterval composeEnd = 0;
+  __block CFTimeInterval saveStart = 0;
+  __block CFTimeInterval saveEnd = 0;
+
+  NSBlockOperation *decodeOp = [NSBlockOperation blockOperationWithBlock:^{
     @autoreleasepool {
       __strong typeof(weakSelf) strongSelf = weakSelf;
       if (!strongSelf) {
         return;
       }
+      CFTimeInterval startTime = CMPerfNow();
+      CFTimeInterval dequeueWaitMs = CMPerfDurationMs(enqueueTime, startTime);
+      NSLog(@"📊 [Perf][Pipeline][Start] job=%llu queueWait=%.2fms stage=decode",
+            jobID, dequeueWaitMs);
 
-      UIImage *workingImage = image;
+      cropStart = CMPerfNow();
       if (applyCrop) {
         CameraAspectRatio aspectRatio = strongSelf.currentAspectRatio;
         UIImage *croppedImage =
-            [strongSelf.captureService cropImage:image
-                                   toAspectRatio:aspectRatio];
+            [strongSelf.captureService cropImage:image toAspectRatio:aspectRatio];
         if (croppedImage) {
           workingImage = croppedImage;
         }
       } else {
         workingImage = CMNormalizeImageOrientation(image);
       }
+      cropEnd = CMPerfNow();
+    }
+  }];
 
-      // 应用水印
+  NSBlockOperation *composeOp = [NSBlockOperation blockOperationWithBlock:^{
+    @autoreleasepool {
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (!strongSelf) {
+        return;
+      }
+      if (decodeOp.isCancelled) {
+        return;
+      }
+      composeStart = CMPerfNow();
       CMWatermarkConfiguration *configurationSnapshot =
           configuration ? [configuration copy]
                         : [strongSelf.watermarkConfiguration copy];
       UIImage *renderedImage = workingImage;
-      if (configurationSnapshot) {
+      if (configurationSnapshot && !shouldUseFastPath) {
         UIImage *watermarked =
             [strongSelf.watermarkRenderer renderImage:workingImage
                                     withConfiguration:configurationSnapshot
@@ -301,25 +493,81 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
         if (watermarked) {
           renderedImage = watermarked;
         }
+      } else if (shouldUseFastPath) {
+        NSLog(@"⚡️ [Backpressure] job=%llu skip compose to reduce latency",
+              jobID);
       }
+      finalImage = renderedImage ?: workingImage;
+      composeEnd = CMPerfNow();
+    }
+  }];
+  [composeOp addDependency:decodeOp];
 
-      UIImage *finalImage = renderedImage ?: workingImage;
+  NSBlockOperation *saveOp = [NSBlockOperation blockOperationWithBlock:^{
+    @autoreleasepool {
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (!strongSelf) {
+        return;
+      }
+      if (decodeOp.isCancelled || composeOp.isCancelled) {
+        return;
+      }
+      saveStart = CMPerfNow();
+      dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+      __block NSError *saveError = nil;
+      __block BOOL saveSuccess = NO;
 
       [strongSelf.captureService
           saveImageToPhotosLibrary:finalImage
                           metadata:metadata
                         completion:^(BOOL success, NSError *_Nullable error) {
-                          if (completion) {
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                              completion(finalImage, error);
-                            });
-                          } else if (error) {
-                            NSLog(@"⚠️ 保存图片失败: %@",
-                                  error.localizedDescription);
-                          }
+                          saveSuccess = success;
+                          saveError = error;
+                          dispatch_semaphore_signal(sema);
                         }];
+      dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+      saveEnd = CMPerfNow();
+
+      if (!saveSuccess || saveError) {
+        pipelineError = saveError;
+      }
+
+      NSInteger remainingQueueDepth = 0;
+      NSUInteger processedCount = 0;
+      NSUInteger failedCount = 0;
+      @synchronized(strongSelf) {
+        if (strongSelf.pendingRenderTaskCount > 0) {
+          strongSelf.pendingRenderTaskCount -= 1;
+        }
+        remainingQueueDepth = strongSelf.pendingRenderTaskCount;
+        strongSelf.totalProcessedJobs += 1;
+        if (!saveSuccess || saveError) {
+          strongSelf.totalFailedJobs += 1;
+        }
+        processedCount = strongSelf.totalProcessedJobs;
+        failedCount = strongSelf.totalFailedJobs;
+      }
+      NSLog(
+          @"📊 [Perf][Pipeline][Done] job=%llu crop=%.2fms compose=%.2fms save=%.2fms total=%.2fms queueDepth=%ld fail=%@ stats(total=%lu failed=%lu) mem=%.1fMB",
+          jobID, CMPerfDurationMs(cropStart, cropEnd),
+          CMPerfDurationMs(composeStart, composeEnd),
+          CMPerfDurationMs(saveStart, saveEnd),
+          CMPerfDurationMs(enqueueTime, saveEnd), (long)remainingQueueDepth,
+          (saveError || !saveSuccess) ? @"YES" : @"NO",
+          (unsigned long)processedCount, (unsigned long)failedCount,
+          CMResidentMemoryMB());
+
+      [strongSelf enqueueOrderedCompletionForJobID:jobID
+                                        finalImage:finalImage
+                                             error:pipelineError
+                                        completion:completion];
     }
-  });
+  }];
+  [saveOp addDependency:composeOp];
+
+  [self.decodeQueue addOperation:decodeOp];
+  [self.composeQueue addOperation:composeOp];
+  [self.saveQueue addOperation:saveOp];
 }
 
 - (void)processImportedImage:(UIImage *)image
@@ -438,6 +686,11 @@ static UIImage *CMNormalizeImageOrientation(UIImage *image) {
          withMetadata:(NSDictionary *)metadata {
   if (!image) {
     return;
+  }
+  NSLog(@"📊 [Perf][Capture] didCapture image=%.0fx%.0f mem=%.1fMB",
+        image.size.width, image.size.height, CMResidentMemoryMB());
+  if ([self.delegate respondsToSelector:@selector(didReceiveCaptureAck)]) {
+    [self.delegate didReceiveCaptureAck];
   }
 
   [self processImage:image
