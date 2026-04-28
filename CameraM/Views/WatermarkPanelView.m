@@ -1253,8 +1253,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
         return availability;
     }
 
-    if ([identifier isEqualToString:CMWatermarkFrameIdentifierStudio] ||
-        [identifier isEqualToString:@"frame.hasselblad.minimalist"]) {
+    if ([identifier isEqualToString:CMWatermarkFrameIdentifierStudio]) {
         availability.supportsLogoSelection = NO;
         availability.supportsCustomText = NO;
         availability.supportsShootingDataMasterSwitch = NO;

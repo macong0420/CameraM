@@ -12,7 +12,6 @@ NSString * const CMWatermarkFrameIdentifierNone = @"frame.none";
 NSString * const CMWatermarkFrameIdentifierStudio = @"frame.studio";
 NSString * const CMWatermarkFrameIdentifierPolaroid = @"frame.polaroid";
 NSString * const CMWatermarkFrameIdentifierInfo = @"frame.info";
-static NSString * const CMWatermarkFrameIdentifierHasselbladMinimalist = @"frame.hasselblad.minimalist";
 
 NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
 
@@ -136,24 +135,6 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
         // 参数显示区域：底部15%高度的下半部分，用于显示拍摄参数
         studio.footerContentRect = CGRectMake(0.05, 0.90, 0.90, 0.08);
 
-        CMWatermarkFrameDescriptor *hasselbladMinimalist = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierHasselbladMinimalist
-                                                                                                      displayName:@"Hasselblad Minimalist"
-                                                                                                 overlayAssetName:nil
-                                                                                              backgroundAssetName:@"sign_b"
-                                                                                              bottomExpansionRatio:0.35
-                                                                                                  previewAssetName:@"master_xiangkuang"
-                                                                                                overlayInsetsRatio:0.0
-                                                                                               contentInsetsRatio:UIEdgeInsetsMake(0.02, 0.02, 0.37, 0.02)
-                                                                                             photoContentScale:CGSizeMake(0.96, 0.76)
-                                                                                            photoContentOffset:CGPointMake(0.02, 0.02)
-                                                                                         photoCornerRadiusRatio:0.0];
-        hasselbladMinimalist.overlayDrawsAbovePhoto = YES;
-        hasselbladMinimalist.allowsLogoEditing = NO;
-        hasselbladMinimalist.allowsParameterEditing = NO;
-        hasselbladMinimalist.allowsSignatureEditing = NO;
-        hasselbladMinimalist.enforcedPreferenceRawValue = CMWatermarkPreferenceExposure;
-        hasselbladMinimalist.footerContentRect = CGRectMake(0.05, 0.90, 0.90, 0.08);
-
         CMWatermarkFrameDescriptor *polaroid = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierPolaroid
                                                                                         displayName:@"Polaroid"
                                                                                    overlayAssetName:nil
@@ -184,7 +165,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
         info.enforcedPreferenceRawValue = CMWatermarkPreferenceExposure;
         info.footerContentRect = CGRectMake(0.02, 0.96, 0.96, 0.03);
 
-        frames = @[none, hasselbladMinimalist, info, studio, polaroid];
+        frames = @[none, info, studio, polaroid];
     });
     return frames;
 }

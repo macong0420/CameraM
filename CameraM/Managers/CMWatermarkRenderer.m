@@ -98,8 +98,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   if (identifier.length == 0) {
     return NO;
   }
-  return [identifier isEqualToString:@"frame.studio"] ||
-         [identifier isEqualToString:@"frame.hasselblad.minimalist"];
+  return [identifier isEqualToString:@"frame.studio"];
 }
 
 @interface CMWatermarkRenderer ()
