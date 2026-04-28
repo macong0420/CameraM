@@ -15,7 +15,9 @@
 static const CGFloat CMWatermarkUIScaleFactor = 1.5f;
 static const CGFloat CMWatermarkReferenceShortSide = 3024.0f;
 static const CGFloat CMWatermarkReferenceLongSide = 4032.0f;
-static const CGFloat CMWatermarkMaxRenderPixels = 22000000.0f; // ~22MP cap
+// Keep 48MP capture output intact after frame expansion.
+// 8064x6048 ~= 48.8MP; with footer/frame expansion it can exceed 55MP.
+static const CGFloat CMWatermarkMaxRenderPixels = 90000000.0f; // ~90MP cap
 
 static inline CGFloat CMWatermarkCanvasScaleForSize(CGSize canvasSize) {
   CGFloat shortSide = MIN(canvasSize.width, canvasSize.height);
