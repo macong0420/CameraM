@@ -266,6 +266,9 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
 
 + (nullable CMWatermarkFrameDescriptor *)frameDescriptorForIdentifier:(NSString *)identifier {
     if (identifier.length == 0) { return [self frameDescriptors].firstObject; }
+    if ([identifier isEqualToString:@"frame.hasselblad.minimalist"]) {
+        identifier = CMWatermarkFrameIdentifierStudio;
+    }
     for (CMWatermarkFrameDescriptor *descriptor in [self frameDescriptors]) {
         if ([descriptor.identifier isEqualToString:identifier]) {
             return descriptor;

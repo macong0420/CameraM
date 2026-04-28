@@ -648,12 +648,18 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                     canvasSize:canvasSize
              horizontalPadding:horizontalPadding
                       metadata:metadata];
-  } else if (detailString.length > 0) {
+  } else if ((frameDescriptor &&
+              CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier)) ||
+             detailString.length > 0) {
     // 对于Studio模式，使用专门的参数布局
     if (frameDescriptor &&
         CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier)) {
+      NSString *studioDetailString = [self exposureStringFromMetadata:metadata];
+      if (studioDetailString.length == 0) {
+        studioDetailString = detailString;
+      }
       [self drawStudioParametersInRect:contentRect
-                          detailString:detailString
+                          detailString:studioDetailString
                             canvasSize:canvasSize];
     } else {
       // 其他相框模式使用原有样式
