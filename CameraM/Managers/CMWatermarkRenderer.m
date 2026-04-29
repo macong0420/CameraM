@@ -668,8 +668,9 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     [self drawHasuBorderLayoutInRect:contentRect
                        configuration:configuration
                       logoDescriptor:logoDescriptor
-                            metadata:metadata
-                          canvasSize:canvasSize];
+                        detailString:detailString ?: @""
+                          canvasSize:canvasSize
+                            metadata:metadata];
   } else if ((frameDescriptor &&
               CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier)) ||
              detailString.length > 0) {
@@ -738,9 +739,9 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                      configuration:(CMWatermarkConfiguration *)configuration
                     logoDescriptor:
                         (CMWatermarkLogoDescriptor *_Nullable)logoDescriptor
-                          metadata:(NSDictionary *_Nullable)metadata
-                        canvasSize:(CGSize)canvasSize {
-  (void)metadata;
+                      detailString:(NSString *)detailString
+                        canvasSize:(CGSize)canvasSize
+                          metadata:(NSDictionary *_Nullable)metadata {
   UIImage *logoImage = nil;
   if (configuration.logoEnabled && logoDescriptor.assetName.length > 0) {
     logoImage = [self cachedRenderableLogoForDescriptor:logoDescriptor];
@@ -767,14 +768,14 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                                            weight:UIFontWeightMedium];
   UIFont *sublineFont = [UIFont systemFontOfSize:sublineSize
                                           weight:UIFontWeightRegular];
-  UIColor *headlineColor = [UIColor colorWithWhite:0.08 alpha:1.0];
-  UIColor *sublineColor = [UIColor colorWithWhite:0.63 alpha:1.0];
+  UIColor *headlineColor = [UIColor colorWithWhite:0.10 alpha:1.0];
+  UIColor *sublineColor = [UIColor colorWithWhite:0.45 alpha:1.0];
 
-  CGFloat availableWidth = contentRect.size.width * 0.9f;
+  CGFloat availableWidth = contentRect.size.width * 0.85f;
   CGFloat centerX = CGRectGetMidX(contentRect);
-  CGFloat currentY = contentRect.origin.y + footerHeight * 0.03f;
-  CGFloat logoToHeadlineSpacing = footerHeight * 0.05f;
-  CGFloat headlineToSublineSpacing = footerHeight * 0.028f;
+  CGFloat currentY = contentRect.origin.y + footerHeight * 0.06f;
+  CGFloat logoToHeadlineSpacing = footerHeight * 0.07f;
+  CGFloat headlineToSublineSpacing = footerHeight * 0.035f;
   CGFloat resolvedLogoHeight = 0.0f;
 
   if (logoImage) {
@@ -851,6 +852,32 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                                     availableWidth,
                                     sublineFont.lineHeight);
     [subline drawInRect:sublineRect withAttributes:sublineAttributes];
+  }
+
+  // Render parameters line (e.g., "F2.5  1/125  ISO 100  38mm")
+  if (detailString.length > 0) {
+    CGFloat paramSize = sublineSize * 0.85f;
+    UIFont *paramFont = [UIFont systemFontOfSize:paramSize
+                                          weight:UIFontWeightRegular];
+    UIColor *paramColor = [UIColor colorWithWhite:0.55 alpha:1.0];
+    NSMutableParagraphStyle *paramParagraph =
+        [[NSMutableParagraphStyle alloc] init];
+    paramParagraph.alignment = NSTextAlignmentCenter;
+    paramParagraph.lineBreakMode = NSLineBreakByTruncatingTail;
+    NSDictionary *paramAttributes = @{
+      NSFontAttributeName : paramFont,
+      NSForegroundColorAttributeName : paramColor,
+      NSParagraphStyleAttributeName : paramParagraph
+    };
+    CGFloat paramY = hasSubline
+                         ? CGRectGetMaxY(headlineRect) + headlineToSublineSpacing +
+                               sublineFont.lineHeight + headlineToSublineSpacing
+                         : CGRectGetMaxY(headlineRect) + headlineToSublineSpacing;
+    CGRect paramRect = CGRectMake(centerX - availableWidth * 0.5f,
+                                  paramY,
+                                  availableWidth,
+                                  paramFont.lineHeight);
+    [detailString drawInRect:paramRect withAttributes:paramAttributes];
   }
 }
 
@@ -1064,16 +1091,13 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                                                   green:208.0 / 255.0
                                                    blue:208.0 / 255.0
                                                   alpha:1.0] // #D0D0D0
-                                : [UIColor colorWithRed:199.0 / 255.0
-                                                  green:201.0 / 255.0
-                                                   blue:200.0 / 255.0
-                                                  alpha:1.0];
+                                : [UIColor colorWithWhite:0.75 alpha:1.0];
       UIColor *valueColor = isHasselbladInlineMode
                                 ? [UIColor colorWithRed:245.0 / 255.0
                                                   green:245.0 / 255.0
                                                    blue:245.0 / 255.0
                                                   alpha:1.0] // #F5F5F5
-                                : [UIColor whiteColor];
+                                : [UIColor colorWithWhite:0.95 alpha:1.0];
       NSMutableParagraphStyle *paragraph =
           [[NSMutableParagraphStyle alloc] init];
       paragraph.alignment = textAlignment;
@@ -1099,7 +1123,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
       };
 
       NSArray<NSString *> *components =
-          [text componentsSeparatedByString:@"    "];
+          [text componentsSeparatedByString:@"      "];
       NSMutableAttributedString *formatted =
           [[NSMutableAttributedString alloc] init];
       for (NSUInteger idx = 0; idx < components.count; idx++) {
@@ -1119,7 +1143,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
 
         if (idx > 0) {
           NSAttributedString *separator =
-              [[NSAttributedString alloc] initWithString:@"    "
+              [[NSAttributedString alloc] initWithString:@"      "
                                               attributes:separatorAttributes];
           [formatted appendAttributedString:separator];
         }
@@ -1254,7 +1278,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                ? (configuration.auxiliaryText ?: @"")
                : @"";
   }
-  return [components componentsJoinedByString:@"    "];
+  return [components componentsJoinedByString:@"      "];
 }
 
 - (NSString *)lensStringFromMetadata:(NSDictionary *)metadata
@@ -1451,7 +1475,7 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
       [NSString stringWithFormat:@"Shutter | %@", shutterValue],
       [NSString stringWithFormat:@"ISO | %@", isoValueString]
     ];
-    return [components componentsJoinedByString:@"    "];
+    return [components componentsJoinedByString:@"      "];
   }
 
   NSString *isoString =
