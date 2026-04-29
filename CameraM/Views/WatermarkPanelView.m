@@ -413,13 +413,13 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
 
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"CAPTURE PERSONALIZATION";
+    self.titleLabel.text = @"拍摄个性化";
     self.titleLabel.textColor = [UIColor whiteColor];
     self.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
 
     self.enableLabel = [[UILabel alloc] init];
     self.enableLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.enableLabel.text = @"Enable Watermark";
+    self.enableLabel.text = @"启用水印";
     self.enableLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
     self.enableLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
 
@@ -531,7 +531,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 12.0;
 
-    self.frameSectionLabel = [self sectionLabelWithText:@"Frame Style"];
+    self.frameSectionLabel = [self sectionLabelWithText:@"相框样式"];
     [stack addArrangedSubview:self.frameSectionLabel];
     [stack addArrangedSubview:self.frameCollectionView];
     [self.frameCollectionView.heightAnchor constraintEqualToConstant:92.0].active = YES;
@@ -558,7 +558,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 12.0;
 
-    self.logoSectionLabel = [self sectionLabelWithText:@"Logo Selection"];
+    self.logoSectionLabel = [self sectionLabelWithText:@"Logo 选择"];
     [stack addArrangedSubview:self.logoSectionLabel];
     [stack addArrangedSubview:self.logoCollectionView];
     [self.logoCollectionView.heightAnchor constraintEqualToConstant:74.0].active = YES;
@@ -573,10 +573,10 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 16.0;
 
-    UILabel *sectionLabel = [self sectionLabelWithText:@"Custom Text"];
+    UILabel *sectionLabel = [self sectionLabelWithText:@"自定义文字"];
     [stack addArrangedSubview:sectionLabel];
 
-    UIView *row = [self formRowWithTitle:@"Custom Text" content:^(UIStackView *container) {
+    UIView *row = [self formRowWithTitle:@"自定义文字" content:^(UIStackView *container) {
         self.captionField = [[UITextField alloc] init];
         self.captionField.translatesAutoresizingMaskIntoConstraints = NO;
         self.captionField.placeholder = @"Mr.C | PHOTOGRAPHY 2026";
@@ -600,7 +600,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     self.textRowContainer = row;
     [stack addArrangedSubview:row];
 
-    UIView *subtitleRow = [self formRowWithTitle:@"Sub Text" content:^(UIStackView *container) {
+    UIView *subtitleRow = [self formRowWithTitle:@"副文字" content:^(UIStackView *container) {
         self.subtitleField = [[UITextField alloc] init];
         self.subtitleField.translatesAutoresizingMaskIntoConstraints = NO;
         self.subtitleField.placeholder = @"XCD 3,5 / 120 MACRO";
@@ -625,7 +625,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     [stack addArrangedSubview:subtitleRow];
 
     UILabel *presetHint = [[UILabel alloc] init];
-    presetHint.text = @"Preset | Custom | Fast Gr. | Garamond Premier Pro / Helvetica Neue";
+    presetHint.text = @"预设 | 自定义 | Fast Gr. | Garamond Premier Pro / Helvetica Neue";
     presetHint.textColor = [UIColor colorWithWhite:1.0 alpha:0.45];
     presetHint.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightRegular];
     self.textPresetHintLabel = presetHint;
@@ -641,10 +641,10 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 12.0;
 
-    UILabel *sectionLabel = [self sectionLabelWithText:@"Shooting Data"];
+    UILabel *sectionLabel = [self sectionLabelWithText:@"拍摄数据"];
     [stack addArrangedSubview:sectionLabel];
 
-    UIView *row = [self formRowWithTitle:@"Display Parameters" content:^(UIStackView *container) {
+    UIView *row = [self formRowWithTitle:@"显示参数" content:^(UIStackView *container) {
         self.displayParamsSwitch = [[UISwitch alloc] init];
         self.displayParamsSwitch.translatesAutoresizingMaskIntoConstraints = NO;
         self.displayParamsSwitch.onTintColor = [UIColor systemOrangeColor];
@@ -665,7 +665,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     self.detailSettingsButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.detailSettingsButton.layer.cornerRadius = 12.0;
     self.detailSettingsButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.09];
-    [self.detailSettingsButton setTitle:@"Frame & Watermark Library" forState:UIControlStateNormal];
+    [self.detailSettingsButton setTitle:@"相框与水印库" forState:UIControlStateNormal];
     [self.detailSettingsButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.detailSettingsButton.titleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
     [self.detailSettingsButton addTarget:self
@@ -693,7 +693,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     [stack addArrangedSubview:sectionLabel];
 
     UIView *row = [self formRowWithTitle:@"偏好" content:^(UIStackView *container) {
-        self.preferenceControl = [[UISegmentedControl alloc] initWithItems:@[@"OFF", @"参数", @"经纬度", @"日期"]];
+        self.preferenceControl = [[UISegmentedControl alloc] initWithItems:@[@"关", @"参数", @"经纬度", @"日期"]];
         self.preferenceControl.translatesAutoresizingMaskIntoConstraints = NO;
         self.preferenceControl.selectedSegmentIndex = CMWatermarkPreferenceExposure;
         self.preferenceControl.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
@@ -782,11 +782,13 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     [row addSubview:titleLabel];
     [row addSubview:container];
 
+    [titleLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [titleLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+
     [NSLayoutConstraint activateConstraints:@[
         [titleLabel.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
         [titleLabel.topAnchor constraintEqualToAnchor:row.topAnchor],
         [titleLabel.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
-        [titleLabel.widthAnchor constraintEqualToConstant:48.0],
 
         [container.leadingAnchor constraintEqualToAnchor:titleLabel.trailingAnchor constant:12.0],
         [container.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
@@ -832,14 +834,14 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
 
     UILabel *title = [[UILabel alloc] init];
     title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = @"FRAME & WATERMARK LIBRARY";
+    title.text = @"相框与水印库";
     title.textColor = [UIColor whiteColor];
     title.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
     [self.detailCardView addSubview:title];
 
     UIButton *backButton = [UIButton buttonWithType:UIButtonTypeSystem];
     backButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [backButton setTitle:@"Back" forState:UIControlStateNormal];
+    [backButton setTitle:@"返回" forState:UIControlStateNormal];
     [backButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     backButton.titleLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightMedium];
     [backButton addTarget:self
@@ -877,7 +879,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
         [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20.0]
     ]];
 
-    UILabel *frameLabel = [self sectionLabelWithText:@"1. FRAME LIBRARY"];
+    UILabel *frameLabel = [self sectionLabelWithText:@"1. 相框库"];
     [stack addArrangedSubview:frameLabel];
     self.detailFrameButtonsStack = [[UIStackView alloc] init];
     self.detailFrameButtonsStack.axis = UILayoutConstraintAxisHorizontal;
@@ -885,10 +887,10 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     self.detailFrameButtonsStack.distribution = UIStackViewDistributionFillEqually;
     [stack addArrangedSubview:self.detailFrameButtonsStack];
 
-    UILabel *anchorLabel = [self sectionLabelWithText:@"2. WATERMARK PLACEMENT"];
+    UILabel *anchorLabel = [self sectionLabelWithText:@"2. 水印位置"];
     self.detailAnchorSectionLabel = anchorLabel;
     [stack addArrangedSubview:anchorLabel];
-    self.detailAnchorControl = [[UISegmentedControl alloc] initWithItems:@[@"TL", @"TR", @"BL", @"BR", @"C", @"BC"]];
+    self.detailAnchorControl = [[UISegmentedControl alloc] initWithItems:@[@"左上", @"右上", @"左下", @"右下", @"居中", @"底部"]];
     self.detailAnchorControl.selectedSegmentTintColor = [UIColor systemOrangeColor];
     self.detailAnchorControl.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.1];
     [self.detailAnchorControl setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor whiteColor]} forState:UIControlStateNormal];
@@ -896,7 +898,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     [self.detailAnchorControl addTarget:self action:@selector(handleDetailAnchorChanged:) forControlEvents:UIControlEventValueChanged];
     [stack addArrangedSubview:self.detailAnchorControl];
 
-    UILabel *fontLabel = [self sectionLabelWithText:@"3. CUSTOM TEXT FONTS"];
+    UILabel *fontLabel = [self sectionLabelWithText:@"3. 自定义字体"];
     self.detailFontSectionLabel = fontLabel;
     [stack addArrangedSubview:fontLabel];
     UIView *fontRow = [[UIView alloc] init];
@@ -916,15 +918,15 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     self.detailFontRow = fontRow;
     [stack addArrangedSubview:fontRow];
 
-    UILabel *metaLabel = [self sectionLabelWithText:@"4. METADATA INTEGRATION"];
+    UILabel *metaLabel = [self sectionLabelWithText:@"4. 元数据集成"];
     self.detailMetadataSectionLabel = metaLabel;
     [stack addArrangedSubview:metaLabel];
-    UIView *apertureRow = [self detailToggleRowWithTitle:@"Aperture" switchOut:&_detailApertureSwitch action:@selector(handleDetailMetadataChanged:)];
-    UIView *shutterRow = [self detailToggleRowWithTitle:@"Shutter" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *apertureRow = [self detailToggleRowWithTitle:@"光圈" switchOut:&_detailApertureSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *shutterRow = [self detailToggleRowWithTitle:@"快门" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)];
     UIView *isoRow = [self detailToggleRowWithTitle:@"ISO" switchOut:&_detailISOSwitch action:@selector(handleDetailMetadataChanged:)];
-    UIView *lensRow = [self detailToggleRowWithTitle:@"Lens" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)];
-    UIView *dateRow = [self detailToggleRowWithTitle:@"Date" switchOut:&_detailDateSwitch action:@selector(handleDetailMetadataChanged:)];
-    UIView *locationRow = [self detailToggleRowWithTitle:@"Location" switchOut:&_detailLocationSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *lensRow = [self detailToggleRowWithTitle:@"镜头" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *dateRow = [self detailToggleRowWithTitle:@"日期" switchOut:&_detailDateSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *locationRow = [self detailToggleRowWithTitle:@"位置" switchOut:&_detailLocationSwitch action:@selector(handleDetailMetadataChanged:)];
     self.detailMetadataRows = @[apertureRow, shutterRow, isoRow, lensRow, dateRow, locationRow];
     [stack addArrangedSubview:apertureRow];
     [stack addArrangedSubview:shutterRow];

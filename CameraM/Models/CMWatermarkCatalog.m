@@ -106,7 +106,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         CMWatermarkFrameDescriptor *none = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierNone
-                                                                                      displayName:@"None"
+                                                                                      displayName:@"无"
                                                                                  overlayAssetName:nil
                                                                               backgroundAssetName:nil
                                                                               bottomExpansionRatio:0.0
@@ -118,7 +118,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                                          photoCornerRadiusRatio:0.0];
 
         CMWatermarkFrameDescriptor *studio = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierStudio
-                                                                                      displayName:@"Studio"
+                                                                                      displayName:@"影棚"
                                                                                  overlayAssetName:nil
                                                                               backgroundAssetName:@"sign_b"
                                                                               bottomExpansionRatio:0.35
@@ -137,7 +137,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
         studio.footerContentRect = CGRectMake(0.05, 0.90, 0.90, 0.08);
 
         CMWatermarkFrameDescriptor *polaroid = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierPolaroid
-                                                                                        displayName:@"Polaroid"
+                                                                                        displayName:@"宝丽来"
                                                                                    overlayAssetName:nil
                                                                                 backgroundAssetName:nil
                                                                                 bottomExpansionRatio:0.16
@@ -149,7 +149,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
                                                                          photoCornerRadiusRatio:0.008];
 
         CMWatermarkFrameDescriptor *info = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierInfo
-                                                                                      displayName:@"Bordered"
+                                                                                      displayName:@"边框"
                                                                                  overlayAssetName:nil
                                                                               backgroundAssetName:nil
                                                                               bottomExpansionRatio:0.16
@@ -167,7 +167,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
         info.footerContentRect = CGRectMake(0.02, 0.96, 0.96, 0.03);
 
         CMWatermarkFrameDescriptor *hasuBorder = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierHasuBorder
-                                                                                            displayName:@"HASU Border"
+                                                                                            displayName:@"HASU 边框"
                                                                                        overlayAssetName:nil
                                                                                     backgroundAssetName:nil
                                                                                     bottomExpansionRatio:0.077
@@ -196,7 +196,7 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
     dispatch_once(&onceToken, ^{
         logos = @[
             [CMWatermarkLogoDescriptor descriptorWithIdentifier:CMWatermarkLogoIdentifierNone
-                                                      displayName:@"None"
+                                                      displayName:@"无"
                                                          assetName:nil
                                              prefersTemplateRendering:NO],
             [CMWatermarkLogoDescriptor descriptorWithIdentifier:@"logo.apple.black"
