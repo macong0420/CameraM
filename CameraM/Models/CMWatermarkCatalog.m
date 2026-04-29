@@ -12,6 +12,7 @@ NSString * const CMWatermarkFrameIdentifierNone = @"frame.none";
 NSString * const CMWatermarkFrameIdentifierStudio = @"frame.studio";
 NSString * const CMWatermarkFrameIdentifierPolaroid = @"frame.polaroid";
 NSString * const CMWatermarkFrameIdentifierInfo = @"frame.info";
+NSString * const CMWatermarkFrameIdentifierHasuBorder = @"frame.hasu.border";
 
 NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
 
@@ -165,7 +166,26 @@ NSString * const CMWatermarkLogoIdentifierNone = @"logo.none";
         info.enforcedPreferenceRawValue = CMWatermarkPreferenceExposure;
         info.footerContentRect = CGRectMake(0.02, 0.96, 0.96, 0.03);
 
-        frames = @[none, info, studio, polaroid];
+        CMWatermarkFrameDescriptor *hasuBorder = [CMWatermarkFrameDescriptor descriptorWithIdentifier:CMWatermarkFrameIdentifierHasuBorder
+                                                                                            displayName:@"HASU Border"
+                                                                                       overlayAssetName:nil
+                                                                                    backgroundAssetName:nil
+                                                                                    bottomExpansionRatio:0.077
+                                                                                        previewAssetName:@"hasu_bg"
+                                                                                      overlayInsetsRatio:0.0
+                                                                                     contentInsetsRatio:UIEdgeInsetsMake(0.012, 0.012, 0.12, 0.012)
+                                                                                   photoContentScale:CGSizeMake(0.976, 0.868)
+                                                                                  photoContentOffset:CGPointMake(0.012, 0.006)
+                                                                               photoCornerRadiusRatio:0.0];
+        hasuBorder.overlayDrawsAbovePhoto = YES;
+        hasuBorder.allowsLogoEditing = YES;
+        hasuBorder.allowsParameterEditing = NO;
+        hasuBorder.allowsSignatureEditing = NO;
+        hasuBorder.enforcedPreferenceRawValue = NSNotFound;
+        // Keep footer height, but move the content area further upward.
+        hasuBorder.footerContentRect = CGRectMake(0.0, 0.914, 1.0, 0.042);
+
+        frames = @[none, hasuBorder, info, studio, polaroid];
     });
     return frames;
 }

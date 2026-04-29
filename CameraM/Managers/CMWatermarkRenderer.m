@@ -245,7 +245,9 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
           // 对于Studio模式、Polaroid模式和Info模式，使用白色背景，否则使用黑色
           if (CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) ||
               [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
-              [frameDescriptor.identifier isEqualToString:@"frame.info"]) {
+              [frameDescriptor.identifier isEqualToString:@"frame.info"] ||
+              [frameDescriptor.identifier
+                  isEqualToString:CMWatermarkFrameIdentifierHasuBorder]) {
             CGContextSetFillColorWithColor(ctx, [UIColor whiteColor].CGColor);
           } else {
             CGContextSetFillColorWithColor(ctx, [UIColor blackColor].CGColor);
@@ -434,6 +436,14 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                 CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
             [[UIColor whiteColor] setFill];
             UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
+          } else if (frameDescriptor &&
+                     [frameDescriptor.identifier
+                         isEqualToString:CMWatermarkFrameIdentifierHasuBorder] &&
+                     bottomPadding > 0.0) {
+            CGRect whiteBackgroundRect =
+                CGRectMake(0.0, baseHeight, canvasSize.width, bottomPadding);
+            [[UIColor whiteColor] setFill];
+            UIRectFillUsingBlendMode(whiteBackgroundRect, kCGBlendModeNormal);
 
           } else if (frameDescriptor.backgroundAssetName.length > 0 &&
                      bottomPadding > 0.0) {
@@ -517,6 +527,10 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   }
 
   const CGFloat horizontalPadding = MAX(24.0, canvasSize.width * 0.04);
+  BOOL isHasuBorderFrame =
+      (frameDescriptor &&
+       [frameDescriptor.identifier
+           isEqualToString:CMWatermarkFrameIdentifierHasuBorder]);
   const CGFloat footerHeight = bottomPadding > 0.0
                                    ? bottomPadding
                                    : MAX(120.0, canvasSize.height * 0.12);
@@ -556,7 +570,8 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
       !(frameDescriptor &&
         (CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) ||
          [frameDescriptor.identifier isEqualToString:@"frame.polaroid"] ||
-         [frameDescriptor.identifier isEqualToString:@"frame.info"]))) {
+         [frameDescriptor.identifier isEqualToString:@"frame.info"] ||
+         isHasuBorderFrame))) {
     UIImage *logoImage = [self cachedAssetImageNamed:logoDescriptor.assetName];
     if (logoImage) {
       CGFloat maxContentHeight = contentRect.size.height * 0.6f;
@@ -615,7 +630,8 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   CGRect captionRect = CGRectZero;
   if (frameDescriptor &&
       !CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier) &&
-      ![frameDescriptor.identifier isEqualToString:@"frame.polaroid"]) {
+      ![frameDescriptor.identifier isEqualToString:@"frame.polaroid"] &&
+      !isHasuBorderFrame) {
     captionText =
         (configuration.isCaptionEnabled && configuration.captionText.length)
             ? configuration.captionText
@@ -648,6 +664,12 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                     canvasSize:canvasSize
              horizontalPadding:horizontalPadding
                       metadata:metadata];
+  } else if (isHasuBorderFrame) {
+    [self drawHasuBorderLayoutInRect:contentRect
+                       configuration:configuration
+                      logoDescriptor:logoDescriptor
+                            metadata:metadata
+                          canvasSize:canvasSize];
   } else if ((frameDescriptor &&
               CMIsStudioLikeFrameIdentifier(frameDescriptor.identifier)) ||
              detailString.length > 0) {
@@ -710,6 +732,118 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   //     [configuration.signatureText drawInRect:signatureRect
   //     withAttributes:signatureAttributes];
   // }
+}
+
+- (void)drawHasuBorderLayoutInRect:(CGRect)contentRect
+                     configuration:(CMWatermarkConfiguration *)configuration
+                    logoDescriptor:
+                        (CMWatermarkLogoDescriptor *_Nullable)logoDescriptor
+                          metadata:(NSDictionary *_Nullable)metadata
+                        canvasSize:(CGSize)canvasSize {
+  (void)metadata;
+  UIImage *logoImage = nil;
+  if (configuration.logoEnabled && logoDescriptor.assetName.length > 0) {
+    logoImage = [self cachedRenderableLogoForDescriptor:logoDescriptor];
+    if (!logoImage) {
+      logoImage = [self cachedAssetImageNamed:logoDescriptor.assetName];
+    }
+  }
+
+  NSString *headline = configuration.captionText.length > 0
+                           ? configuration.captionText
+                           : @"Hasselblad CFV2";
+  NSString *subline = configuration.auxiliaryText.length > 0
+                          ? configuration.auxiliaryText
+                          : @"XCD 3,5 / 120 MACRO";
+
+  CGFloat footerHeight = contentRect.size.height;
+  // Match reference proportion: logo modest, headline clear, subline lighter.
+  CGFloat headlineSize = MIN(MAX(footerHeight * 0.138f, 20.0f), 44.0f) * 4.0f;
+  CGFloat sublineSize = MIN(MAX(footerHeight * 0.090f, 15.0f), 30.0f) * 4.0f;
+  UIFont *headlineFont = [UIFont systemFontOfSize:headlineSize
+                                           weight:UIFontWeightMedium];
+  UIFont *sublineFont = [UIFont systemFontOfSize:sublineSize
+                                          weight:UIFontWeightRegular];
+  UIColor *headlineColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+  UIColor *sublineColor = [UIColor colorWithWhite:0.63 alpha:1.0];
+
+  CGFloat availableWidth = contentRect.size.width * 0.9f;
+  CGFloat centerX = CGRectGetMidX(contentRect);
+  CGFloat currentY = contentRect.origin.y + footerHeight * 0.03f;
+  CGFloat logoToHeadlineSpacing = footerHeight * 0.05f;
+  CGFloat headlineToSublineSpacing = footerHeight * 0.028f;
+  CGFloat resolvedLogoHeight = 0.0f;
+
+  if (logoImage) {
+    CGFloat logoHeight = (headlineFont.lineHeight + 4.0f) * 2.0f;
+    CGFloat maxAllowedLogoHeight = MAX(0.0f, footerHeight * 0.55f);
+    if (maxAllowedLogoHeight > 0.0f) {
+      logoHeight = MIN(logoHeight, maxAllowedLogoHeight);
+    }
+    CGFloat logoAspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+    CGFloat logoWidth = logoHeight * logoAspect;
+    CGFloat maxLogoWidth = availableWidth * 0.34f;
+    if (logoWidth > maxLogoWidth) {
+      logoWidth = maxLogoWidth;
+      logoHeight = logoWidth / MAX(logoAspect, 0.1f);
+    }
+    resolvedLogoHeight = logoHeight;
+  }
+
+  CGFloat totalHeight = headlineFont.lineHeight + headlineToSublineSpacing +
+                        sublineFont.lineHeight;
+  if (resolvedLogoHeight > 0.0f) {
+    totalHeight += resolvedLogoHeight + logoToHeadlineSpacing;
+  }
+  CGFloat maxBottom = CGRectGetMaxY(contentRect) - footerHeight * 0.02f;
+  CGFloat expectedBottom = currentY + totalHeight;
+  if (expectedBottom > maxBottom) {
+    currentY -= (expectedBottom - maxBottom);
+  }
+  CGFloat minTop = contentRect.origin.y + footerHeight * 0.01f;
+  if (currentY < minTop) {
+    currentY = minTop;
+  }
+
+  if (logoImage && resolvedLogoHeight > 0.0f) {
+    CGFloat logoAspect = logoImage.size.width / MAX(logoImage.size.height, 1.0f);
+    CGFloat logoWidth = resolvedLogoHeight * logoAspect;
+    CGFloat maxLogoWidth = availableWidth * 0.34f;
+    if (logoWidth > maxLogoWidth) {
+      logoWidth = maxLogoWidth;
+      resolvedLogoHeight = logoWidth / MAX(logoAspect, 0.1f);
+    }
+    CGRect logoRect = CGRectMake(centerX - logoWidth * 0.5f, currentY, logoWidth, resolvedLogoHeight);
+    [logoImage drawInRect:logoRect blendMode:kCGBlendModeNormal alpha:1.0];
+    currentY = CGRectGetMaxY(logoRect) + logoToHeadlineSpacing;
+  }
+
+  NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
+  paragraph.alignment = NSTextAlignmentCenter;
+  paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
+  NSDictionary *headlineAttributes = @{
+    NSFontAttributeName : headlineFont,
+    NSForegroundColorAttributeName : headlineColor,
+    NSParagraphStyleAttributeName : paragraph
+  };
+  NSDictionary *sublineAttributes = @{
+    NSFontAttributeName : sublineFont,
+    NSForegroundColorAttributeName : sublineColor,
+    NSParagraphStyleAttributeName : paragraph
+  };
+
+  CGRect headlineRect = CGRectMake(centerX - availableWidth * 0.5f,
+                                   currentY,
+                                   availableWidth,
+                                   headlineFont.lineHeight);
+  [headline drawInRect:headlineRect withAttributes:headlineAttributes];
+
+  CGFloat sublineY = CGRectGetMaxY(headlineRect) + headlineToSublineSpacing;
+  CGRect sublineRect = CGRectMake(centerX - availableWidth * 0.5f,
+                                  sublineY,
+                                  availableWidth,
+                                  sublineFont.lineHeight);
+  [subline drawInRect:sublineRect withAttributes:sublineAttributes];
 }
 
 - (void)drawInlineWatermarkOnPhotoInContext:

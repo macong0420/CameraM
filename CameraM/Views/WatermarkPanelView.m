@@ -1263,6 +1263,14 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
         return availability;
     }
 
+    if ([identifier isEqualToString:CMWatermarkFrameIdentifierHasuBorder]) {
+        availability.supportsShootingDataMasterSwitch = NO;
+        availability.supportsAnchorPlacement = NO;
+        availability.supportsCustomFont = NO;
+        availability.supportsPlacement = NO;
+        return availability;
+    }
+
     return availability;
 }
 
@@ -1588,6 +1596,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     }
     CMWatermarkFrameDescriptor *descriptor = self.frameDescriptors[index];
     self.internalConfiguration.frameIdentifier = descriptor.identifier;
+    [self applyDefaultSettingsIfNeededForFrameIdentifier:descriptor.identifier];
     [self updateUIFromConfigurationAnimated:YES];
     [self notifyUpdate];
 }
@@ -1734,6 +1743,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     if (collectionView == self.frameCollectionView) {
         CMWatermarkFrameDescriptor *descriptor = self.frameDescriptors[indexPath.item];
         self.internalConfiguration.frameIdentifier = descriptor.identifier;
+        [self applyDefaultSettingsIfNeededForFrameIdentifier:descriptor.identifier];
         [self updateUIFromConfigurationAnimated:YES];
         [self notifyUpdate];
     } else {
@@ -1757,6 +1767,29 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
 }
 
 #pragma mark - Helpers
+
+- (void)applyDefaultSettingsIfNeededForFrameIdentifier:(NSString *)frameIdentifier {
+    if (![frameIdentifier isEqualToString:CMWatermarkFrameIdentifierHasuBorder]) {
+        return;
+    }
+    if (!self.internalConfiguration.logoEnabled ||
+        [self.internalConfiguration.logoIdentifier isEqualToString:CMWatermarkLogoIdentifierNone]) {
+        self.internalConfiguration.logoEnabled = YES;
+        self.internalConfiguration.logoIdentifier = @"logo.hasu.black";
+    }
+    if (self.internalConfiguration.captionText.length == 0 ||
+        [self.internalConfiguration.captionText isEqualToString:@"Mr.C | PHOTOGRAPHY 2025"] ||
+        [self.internalConfiguration.captionText isEqualToString:@"Mr.C | PHOTOGRAPHY 2026"]) {
+        self.internalConfiguration.captionText = @"Hasselblad CFV2";
+    }
+    if (self.internalConfiguration.auxiliaryText.length == 0) {
+        self.internalConfiguration.auxiliaryText = @"XCD 3,5 / 120 MACRO";
+    }
+    self.internalConfiguration.captionEnabled = YES;
+    self.internalConfiguration.metadataOptions = CMWatermarkMetadataOptionsNone;
+    self.internalConfiguration.preference = CMWatermarkPreferenceOff;
+    self.internalConfiguration.preferenceOptions = CMWatermarkPreferenceOptionsNone;
+}
 
 - (void)registerForKeyboardNotifications {
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
