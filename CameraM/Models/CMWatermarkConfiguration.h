@@ -36,7 +36,8 @@ typedef NS_OPTIONS(NSInteger, CMWatermarkMetadataOptions) {
     CMWatermarkMetadataOptionsShutter = 1 << 1,
     CMWatermarkMetadataOptionsAperture = 1 << 2,
     CMWatermarkMetadataOptionsDate = 1 << 3,
-    CMWatermarkMetadataOptionsLocation = 1 << 4
+    CMWatermarkMetadataOptionsLocation = 1 << 4,
+    CMWatermarkMetadataOptionsISO = 1 << 5
 };
 
 typedef NS_ENUM(NSInteger, CMWatermarkAnchor) {
@@ -62,6 +63,7 @@ typedef NS_ENUM(NSInteger, CMWatermarkAnchor) {
 @property (nonatomic, assign, getter=isSignatureEnabled) BOOL signatureEnabled;
 @property (nonatomic, copy) NSString *signatureText;
 @property (nonatomic, copy) NSString *auxiliaryText;
+@property (nonatomic, assign, getter=isAuxiliaryTextEnabled) BOOL auxiliaryTextEnabled;
 @property (nonatomic, assign) CMWatermarkMetadataOptions metadataOptions;
 @property (nonatomic, assign) CMWatermarkAnchor watermarkAnchor;
 @property (nonatomic, copy) NSString *textFontName;

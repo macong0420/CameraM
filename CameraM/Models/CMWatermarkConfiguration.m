@@ -18,9 +18,9 @@
     CMWatermarkMetadataOptions options = CMWatermarkMetadataOptionsNone;
     if (self.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
         if (self.preferenceOptions & CMWatermarkPreferenceOptionsExposure) {
-            options |= (CMWatermarkMetadataOptionsLens |
+            options |= (CMWatermarkMetadataOptionsAperture |
                         CMWatermarkMetadataOptionsShutter |
-                        CMWatermarkMetadataOptionsAperture);
+                        CMWatermarkMetadataOptionsISO);
         }
         if (self.preferenceOptions & CMWatermarkPreferenceOptionsCoordinates) {
             options |= CMWatermarkMetadataOptionsLocation;
@@ -33,9 +33,9 @@
 
     switch (self.preference) {
         case CMWatermarkPreferenceExposure:
-            return (CMWatermarkMetadataOptionsLens |
+            return (CMWatermarkMetadataOptionsAperture |
                     CMWatermarkMetadataOptionsShutter |
-                    CMWatermarkMetadataOptionsAperture);
+                    CMWatermarkMetadataOptionsISO);
         case CMWatermarkPreferenceCoordinates:
             return CMWatermarkMetadataOptionsLocation;
         case CMWatermarkPreferenceDate:
@@ -48,9 +48,9 @@
 
 - (void)syncLegacyPreferenceFromMetadataOptions {
     BOOL hasExposureGroup = ((self.metadataOptions &
-                             (CMWatermarkMetadataOptionsLens |
+                             (CMWatermarkMetadataOptionsAperture |
                               CMWatermarkMetadataOptionsShutter |
-                              CMWatermarkMetadataOptionsAperture)) != 0);
+                              CMWatermarkMetadataOptionsISO)) != 0);
     BOOL hasLocation = (self.metadataOptions & CMWatermarkMetadataOptionsLocation) != 0;
     BOOL hasDate = (self.metadataOptions & CMWatermarkMetadataOptionsDate) != 0;
 
@@ -92,9 +92,10 @@
         _signatureEnabled = NO;
         _signatureText = @"";
         _auxiliaryText = @"";
-        _metadataOptions = (CMWatermarkMetadataOptionsLens |
+        _auxiliaryTextEnabled = YES;
+        _metadataOptions = (CMWatermarkMetadataOptionsAperture |
                             CMWatermarkMetadataOptionsShutter |
-                            CMWatermarkMetadataOptionsAperture);
+                            CMWatermarkMetadataOptionsISO);
         _watermarkAnchor = CMWatermarkAnchorBottomLeft;
         _textFontName = @"Garamond Premier Pro";
         [self syncLegacyPreferenceFromMetadataOptions];
@@ -120,6 +121,7 @@
     copy.signatureEnabled = self.signatureEnabled;
     copy.signatureText = [self.signatureText copy];
     copy.auxiliaryText = [self.auxiliaryText copy];
+    copy.auxiliaryTextEnabled = self.auxiliaryTextEnabled;
     copy.metadataOptions = self.metadataOptions;
     copy.watermarkAnchor = self.watermarkAnchor;
     copy.textFontName = [self.textFontName copy];
@@ -141,6 +143,7 @@
     [coder encodeBool:self.signatureEnabled forKey:@"signatureEnabled"];
     [coder encodeObject:self.signatureText forKey:@"signatureText"];
     [coder encodeObject:self.auxiliaryText forKey:@"auxiliaryText"];
+    [coder encodeBool:self.auxiliaryTextEnabled forKey:@"auxiliaryTextEnabled"];
     [coder encodeInteger:self.metadataOptions forKey:@"metadataOptions"];
     [coder encodeInteger:self.watermarkAnchor forKey:@"watermarkAnchor"];
     [coder encodeObject:self.textFontName forKey:@"textFontName"];
@@ -172,6 +175,9 @@
         _signatureEnabled = [coder decodeBoolForKey:@"signatureEnabled"];
         _signatureText = decodedSignature.length ? [decodedSignature copy] : @"";
         _auxiliaryText = decodedAux.length ? [decodedAux copy] : @"";
+        _auxiliaryTextEnabled = [coder containsValueForKey:@"auxiliaryTextEnabled"]
+                                   ? [coder decodeBoolForKey:@"auxiliaryTextEnabled"]
+                                   : YES;
         _watermarkAnchor = [coder containsValueForKey:@"watermarkAnchor"]
                                ? (CMWatermarkAnchor)[coder decodeIntegerForKey:@"watermarkAnchor"]
                                : CMWatermarkAnchorBottomLeft;

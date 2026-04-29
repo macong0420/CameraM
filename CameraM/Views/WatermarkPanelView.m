@@ -146,6 +146,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
 @property (nonatomic, strong) UIView *textRowContainer;
 @property (nonatomic, strong) UIView *subtitleRowContainer;
 @property (nonatomic, strong) UITextField *subtitleField;
+@property (nonatomic, strong) UISwitch *subtitleSwitch;
 @property (nonatomic, strong) UILabel *textPresetHintLabel;
 
 @property (nonatomic, strong) UIView *detailBackdropView;
@@ -160,6 +161,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
 @property (nonatomic, strong) UISwitch *detailLensSwitch;
 @property (nonatomic, strong) UISwitch *detailShutterSwitch;
 @property (nonatomic, strong) UISwitch *detailApertureSwitch;
+@property (nonatomic, strong) UISwitch *detailISOSwitch;
 @property (nonatomic, strong) UISwitch *detailDateSwitch;
 @property (nonatomic, strong) UISwitch *detailLocationSwitch;
 @property (nonatomic, strong) UIStackView *detailFrameButtonsStack;
@@ -612,6 +614,12 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
         self.subtitleField.returnKeyType = UIReturnKeyDone;
         [self.subtitleField addTarget:self action:@selector(handleSubtitleEditingChanged:) forControlEvents:UIControlEventEditingChanged];
         [container addArrangedSubview:self.subtitleField];
+
+        self.subtitleSwitch = [[UISwitch alloc] init];
+        self.subtitleSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+        self.subtitleSwitch.onTintColor = [UIColor systemOrangeColor];
+        [self.subtitleSwitch addTarget:self action:@selector(handleSubtitleSwitch:) forControlEvents:UIControlEventValueChanged];
+        [container addArrangedSubview:self.subtitleSwitch];
     }];
     self.subtitleRowContainer = subtitleRow;
     [stack addArrangedSubview:subtitleRow];
@@ -911,15 +919,16 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     UILabel *metaLabel = [self sectionLabelWithText:@"4. METADATA INTEGRATION"];
     self.detailMetadataSectionLabel = metaLabel;
     [stack addArrangedSubview:metaLabel];
-    UIView *lensRow = [self detailToggleRowWithTitle:@"Lens" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)];
-    UIView *shutterRow = [self detailToggleRowWithTitle:@"Shutter" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)];
     UIView *apertureRow = [self detailToggleRowWithTitle:@"Aperture" switchOut:&_detailApertureSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *shutterRow = [self detailToggleRowWithTitle:@"Shutter" switchOut:&_detailShutterSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *isoRow = [self detailToggleRowWithTitle:@"ISO" switchOut:&_detailISOSwitch action:@selector(handleDetailMetadataChanged:)];
+    UIView *lensRow = [self detailToggleRowWithTitle:@"Lens" switchOut:&_detailLensSwitch action:@selector(handleDetailMetadataChanged:)];
     UIView *dateRow = [self detailToggleRowWithTitle:@"Date" switchOut:&_detailDateSwitch action:@selector(handleDetailMetadataChanged:)];
     UIView *locationRow = [self detailToggleRowWithTitle:@"Location" switchOut:&_detailLocationSwitch action:@selector(handleDetailMetadataChanged:)];
-    self.detailMetadataRows = @[lensRow, shutterRow, apertureRow, dateRow, locationRow];
-    [stack addArrangedSubview:lensRow];
-    [stack addArrangedSubview:shutterRow];
+    self.detailMetadataRows = @[apertureRow, shutterRow, isoRow, lensRow, dateRow, locationRow];
     [stack addArrangedSubview:apertureRow];
+    [stack addArrangedSubview:shutterRow];
+    [stack addArrangedSubview:isoRow];
     [stack addArrangedSubview:dateRow];
     [stack addArrangedSubview:locationRow];
 
@@ -1211,7 +1220,9 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     self.captionField.text = self.internalConfiguration.captionText;
     self.captionField.enabled = self.internalConfiguration.isCaptionEnabled && enabled;
 
+    self.subtitleSwitch.on = self.internalConfiguration.isAuxiliaryTextEnabled;
     self.subtitleField.text = self.internalConfiguration.auxiliaryText;
+    self.subtitleField.enabled = self.internalConfiguration.isAuxiliaryTextEnabled && enabled;
 
     // 署名功能已删除
     // self.signatureSwitch.on = self.internalConfiguration.isSignatureEnabled;
@@ -1337,9 +1348,10 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     }
 
     CMWatermarkMetadataOptions options = self.internalConfiguration.metadataOptions;
-    self.detailLensSwitch.on = (options & CMWatermarkMetadataOptionsLens) != 0;
-    self.detailShutterSwitch.on = (options & CMWatermarkMetadataOptionsShutter) != 0;
     self.detailApertureSwitch.on = (options & CMWatermarkMetadataOptionsAperture) != 0;
+    self.detailShutterSwitch.on = (options & CMWatermarkMetadataOptionsShutter) != 0;
+    self.detailISOSwitch.on = (options & CMWatermarkMetadataOptionsISO) != 0;
+    self.detailLensSwitch.on = (options & CMWatermarkMetadataOptionsLens) != 0;
     self.detailDateSwitch.on = (options & CMWatermarkMetadataOptionsDate) != 0;
     self.detailLocationSwitch.on = (options & CMWatermarkMetadataOptionsLocation) != 0;
 
@@ -1443,9 +1455,14 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
         self.captionField.enabled = textFieldEnabled;
         self.captionField.userInteractionEnabled = textFieldEnabled;
     }
+    if (self.subtitleSwitch) {
+        self.subtitleSwitch.enabled = allowsCustomText && panelEnabled;
+        self.subtitleSwitch.userInteractionEnabled = allowsCustomText && panelEnabled;
+    }
     if (self.subtitleField) {
-        self.subtitleField.enabled = allowsCustomText && panelEnabled;
-        self.subtitleField.userInteractionEnabled = allowsCustomText && panelEnabled;
+        BOOL subtitleFieldEnabled = allowsCustomText && panelEnabled && self.internalConfiguration.isAuxiliaryTextEnabled;
+        self.subtitleField.enabled = subtitleFieldEnabled;
+        self.subtitleField.userInteractionEnabled = subtitleFieldEnabled;
     }
 
     BOOL allowsDetailAnchor = availability.supportsAnchorPlacement;
@@ -1462,9 +1479,10 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     for (UIView *row in self.detailMetadataRows) {
         [self applyEnabledState:(allowsDetailMetadata && panelEnabled) toView:row];
     }
-    self.detailLensSwitch.enabled = allowsDetailMetadata && panelEnabled;
-    self.detailShutterSwitch.enabled = allowsDetailMetadata && panelEnabled;
     self.detailApertureSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailShutterSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailISOSwitch.enabled = allowsDetailMetadata && panelEnabled;
+    self.detailLensSwitch.enabled = allowsDetailMetadata && panelEnabled;
     self.detailDateSwitch.enabled = allowsDetailMetadata && panelEnabled;
     self.detailLocationSwitch.enabled = allowsDetailMetadata && panelEnabled;
 
@@ -1507,9 +1525,9 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     if (sender.isOn) {
         if (self.internalConfiguration.metadataOptions == CMWatermarkMetadataOptionsNone) {
             self.internalConfiguration.metadataOptions =
-                (CMWatermarkMetadataOptionsLens |
+                (CMWatermarkMetadataOptionsAperture |
                  CMWatermarkMetadataOptionsShutter |
-                 CMWatermarkMetadataOptionsAperture);
+                 CMWatermarkMetadataOptionsISO);
         }
     } else {
         self.internalConfiguration.metadataOptions = CMWatermarkMetadataOptionsNone;
@@ -1597,14 +1615,17 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     }
 
     CMWatermarkMetadataOptions options = CMWatermarkMetadataOptionsNone;
-    if (self.detailLensSwitch.isOn) {
-        options |= CMWatermarkMetadataOptionsLens;
+    if (self.detailApertureSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsAperture;
     }
     if (self.detailShutterSwitch.isOn) {
         options |= CMWatermarkMetadataOptionsShutter;
     }
-    if (self.detailApertureSwitch.isOn) {
-        options |= CMWatermarkMetadataOptionsAperture;
+    if (self.detailISOSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsISO;
+    }
+    if (self.detailLensSwitch.isOn) {
+        options |= CMWatermarkMetadataOptionsLens;
     }
     if (self.detailDateSwitch.isOn) {
         options |= CMWatermarkMetadataOptionsDate;
@@ -1701,6 +1722,20 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     }
 
     self.internalConfiguration.captionText = textField.text ?: @"";
+    [self notifyUpdate];
+}
+
+- (void)handleSubtitleSwitch:(UISwitch *)sender {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsCustomText)) {
+        sender.on = self.internalConfiguration.isAuxiliaryTextEnabled;
+        return;
+    }
+
+    self.internalConfiguration.auxiliaryTextEnabled = sender.isOn;
+    self.subtitleField.enabled = sender.isOn && self.internalConfiguration.isEnabled;
     [self notifyUpdate];
 }
 

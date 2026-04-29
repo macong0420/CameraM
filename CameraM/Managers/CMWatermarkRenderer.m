@@ -752,9 +752,12 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   NSString *headline = configuration.captionText.length > 0
                            ? configuration.captionText
                            : @"Hasselblad CFV2";
-  NSString *subline = configuration.auxiliaryText.length > 0
-                          ? configuration.auxiliaryText
-                          : @"XCD 3,5 / 120 MACRO";
+  NSString *subline = @"";
+  if (configuration.isAuxiliaryTextEnabled) {
+    subline = configuration.auxiliaryText.length > 0
+                  ? configuration.auxiliaryText
+                  : @"XCD 3,5 / 120 MACRO";
+  }
 
   CGFloat footerHeight = contentRect.size.height;
   // Match reference proportion: logo modest, headline clear, subline lighter.
@@ -790,8 +793,11 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     resolvedLogoHeight = logoHeight;
   }
 
-  CGFloat totalHeight = headlineFont.lineHeight + headlineToSublineSpacing +
-                        sublineFont.lineHeight;
+  BOOL hasSubline = subline.length > 0;
+  CGFloat totalHeight = headlineFont.lineHeight;
+  if (hasSubline) {
+    totalHeight += headlineToSublineSpacing + sublineFont.lineHeight;
+  }
   if (resolvedLogoHeight > 0.0f) {
     totalHeight += resolvedLogoHeight + logoToHeadlineSpacing;
   }
@@ -838,12 +844,14 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
                                    headlineFont.lineHeight);
   [headline drawInRect:headlineRect withAttributes:headlineAttributes];
 
-  CGFloat sublineY = CGRectGetMaxY(headlineRect) + headlineToSublineSpacing;
-  CGRect sublineRect = CGRectMake(centerX - availableWidth * 0.5f,
-                                  sublineY,
-                                  availableWidth,
-                                  sublineFont.lineHeight);
-  [subline drawInRect:sublineRect withAttributes:sublineAttributes];
+  if (hasSubline) {
+    CGFloat sublineY = CGRectGetMaxY(headlineRect) + headlineToSublineSpacing;
+    CGRect sublineRect = CGRectMake(centerX - availableWidth * 0.5f,
+                                    sublineY,
+                                    availableWidth,
+                                    sublineFont.lineHeight);
+    [subline drawInRect:sublineRect withAttributes:sublineAttributes];
+  }
 }
 
 - (void)drawInlineWatermarkOnPhotoInContext:
@@ -1158,9 +1166,9 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     if (configuration.preferenceOptions != CMWatermarkPreferenceOptionsNone) {
       if (configuration.preferenceOptions &
           CMWatermarkPreferenceOptionsExposure) {
-        options |= (CMWatermarkMetadataOptionsLens |
+        options |= (CMWatermarkMetadataOptionsAperture |
                     CMWatermarkMetadataOptionsShutter |
-                    CMWatermarkMetadataOptionsAperture);
+                    CMWatermarkMetadataOptionsISO);
       }
       if (configuration.preferenceOptions &
           CMWatermarkPreferenceOptionsCoordinates) {
@@ -1173,9 +1181,9 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     } else {
       switch (configuration.preference) {
       case CMWatermarkPreferenceExposure:
-        options |= (CMWatermarkMetadataOptionsLens |
+        options |= (CMWatermarkMetadataOptionsAperture |
                     CMWatermarkMetadataOptionsShutter |
-                    CMWatermarkMetadataOptionsAperture);
+                    CMWatermarkMetadataOptionsISO);
         break;
       case CMWatermarkPreferenceCoordinates:
         options |= CMWatermarkMetadataOptionsLocation;
@@ -1191,13 +1199,17 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   }
 
   if (options == CMWatermarkMetadataOptionsNone) {
-    return configuration.auxiliaryText ?: @"";
+    return configuration.isAuxiliaryTextEnabled
+               ? (configuration.auxiliaryText ?: @"")
+               : @"";
   }
 
-  if (options & CMWatermarkMetadataOptionsLens) {
-    NSString *lens = [self lensStringFromMetadata:metadata inline:inlineMode];
-    if (lens.length > 0) {
-      [components addObject:lens];
+  // Strict order: Aperture, Shutter, ISO, Lens, Date, Location
+  if (options & CMWatermarkMetadataOptionsAperture) {
+    NSString *aperture =
+        [self apertureStringFromMetadata:metadata inline:inlineMode];
+    if (aperture.length > 0) {
+      [components addObject:aperture];
     }
   }
   if (options & CMWatermarkMetadataOptionsShutter) {
@@ -1207,11 +1219,16 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
       [components addObject:shutter];
     }
   }
-  if (options & CMWatermarkMetadataOptionsAperture) {
-    NSString *aperture =
-        [self apertureStringFromMetadata:metadata inline:inlineMode];
-    if (aperture.length > 0) {
-      [components addObject:aperture];
+  if (options & CMWatermarkMetadataOptionsISO) {
+    NSString *iso = [self isoStringFromMetadata:metadata inline:inlineMode];
+    if (iso.length > 0) {
+      [components addObject:iso];
+    }
+  }
+  if (options & CMWatermarkMetadataOptionsLens) {
+    NSString *lens = [self lensStringFromMetadata:metadata inline:inlineMode];
+    if (lens.length > 0) {
+      [components addObject:lens];
     }
   }
   if (options & CMWatermarkMetadataOptionsDate) {
@@ -1233,7 +1250,9 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   }
 
   if (components.count == 0) {
-    return configuration.auxiliaryText ?: @"";
+    return configuration.isAuxiliaryTextEnabled
+               ? (configuration.auxiliaryText ?: @"")
+               : @"";
   }
   return [components componentsJoinedByString:@"    "];
 }
@@ -1300,6 +1319,26 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
   }
   return [formatted stringByReplacingOccurrencesOfString:@"s"
                                               withString:@" S"];
+}
+
+- (NSString *)isoStringFromMetadata:(NSDictionary *)metadata
+                              inline:(BOOL)inlineMode {
+  NSDictionary *exif = metadata[(NSString *)kCGImagePropertyExifDictionary];
+  NSInteger isoValue = 0;
+  if (exif) {
+    NSArray *isoArray = exif[(NSString *)kCGImagePropertyExifISOSpeedRatings];
+    isoValue = [[isoArray firstObject] integerValue];
+    if (isoValue <= 0) {
+      isoValue =
+          [exif[(NSString *)kCGImagePropertyExifExposureIndex] integerValue];
+    }
+  }
+  if (isoValue <= 0) {
+    return inlineMode ? @"ISO | --" : @"-- ISO";
+  }
+  return inlineMode
+      ? [NSString stringWithFormat:@"ISO | %ld", (long)isoValue]
+      : [NSString stringWithFormat:@"%ld ISO", (long)isoValue];
 }
 
 - (NSString *)exposureStringFromMetadata:(NSDictionary *)metadata {
