@@ -144,6 +144,8 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
 @property (nonatomic, strong) UIButton *detailSettingsButton;
 @property (nonatomic, strong) UIView *textSectionContainer;
 @property (nonatomic, strong) UIView *textRowContainer;
+@property (nonatomic, strong) UIView *subtitleRowContainer;
+@property (nonatomic, strong) UITextField *subtitleField;
 @property (nonatomic, strong) UILabel *textPresetHintLabel;
 
 @property (nonatomic, strong) UIView *detailBackdropView;
@@ -595,6 +597,24 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     }];
     self.textRowContainer = row;
     [stack addArrangedSubview:row];
+
+    UIView *subtitleRow = [self formRowWithTitle:@"Sub Text" content:^(UIStackView *container) {
+        self.subtitleField = [[UITextField alloc] init];
+        self.subtitleField.translatesAutoresizingMaskIntoConstraints = NO;
+        self.subtitleField.placeholder = @"XCD 3,5 / 120 MACRO";
+        self.subtitleField.textColor = [UIColor whiteColor];
+        self.subtitleField.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightMedium];
+        self.subtitleField.delegate = self;
+        self.subtitleField.borderStyle = UITextBorderStyleRoundedRect;
+        self.subtitleField.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+        self.subtitleField.layer.cornerRadius = 10.0;
+        self.subtitleField.layer.masksToBounds = YES;
+        self.subtitleField.returnKeyType = UIReturnKeyDone;
+        [self.subtitleField addTarget:self action:@selector(handleSubtitleEditingChanged:) forControlEvents:UIControlEventEditingChanged];
+        [container addArrangedSubview:self.subtitleField];
+    }];
+    self.subtitleRowContainer = subtitleRow;
+    [stack addArrangedSubview:subtitleRow];
 
     UILabel *presetHint = [[UILabel alloc] init];
     presetHint.text = @"Preset | Custom | Fast Gr. | Garamond Premier Pro / Helvetica Neue";
@@ -1191,6 +1211,8 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     self.captionField.text = self.internalConfiguration.captionText;
     self.captionField.enabled = self.internalConfiguration.isCaptionEnabled && enabled;
 
+    self.subtitleField.text = self.internalConfiguration.auxiliaryText;
+
     // 署名功能已删除
     // self.signatureSwitch.on = self.internalConfiguration.isSignatureEnabled;
     // self.signatureField.text = self.internalConfiguration.signatureText;
@@ -1410,6 +1432,7 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     BOOL allowsCustomText = availability.supportsCustomText;
     [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.textSectionContainer];
     [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.textRowContainer];
+    [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.subtitleRowContainer];
     [self applyEnabledState:(allowsCustomText && panelEnabled) toView:self.textPresetHintLabel];
     if (self.captionSwitch) {
         self.captionSwitch.enabled = allowsCustomText && panelEnabled;
@@ -1419,6 +1442,10 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
         BOOL textFieldEnabled = allowsCustomText && panelEnabled && self.internalConfiguration.isCaptionEnabled;
         self.captionField.enabled = textFieldEnabled;
         self.captionField.userInteractionEnabled = textFieldEnabled;
+    }
+    if (self.subtitleField) {
+        self.subtitleField.enabled = allowsCustomText && panelEnabled;
+        self.subtitleField.userInteractionEnabled = allowsCustomText && panelEnabled;
     }
 
     BOOL allowsDetailAnchor = availability.supportsAnchorPlacement;
@@ -1674,6 +1701,19 @@ static inline CMWatermarkUIAvailability CMWatermarkUIAvailabilityMake(BOOL enabl
     }
 
     self.internalConfiguration.captionText = textField.text ?: @"";
+    [self notifyUpdate];
+}
+
+- (void)handleSubtitleEditingChanged:(UITextField *)textField {
+    NSString *frameId = self.internalConfiguration.frameIdentifier ?: CMWatermarkFrameIdentifierNone;
+    CMWatermarkFrameDescriptor *descriptor = [CMWatermarkCatalog frameDescriptorForIdentifier:frameId];
+    CMWatermarkUIAvailability availability = [self availabilityForFrameDescriptor:descriptor];
+    if (!(self.internalConfiguration.isEnabled && availability.supportsCustomText)) {
+        textField.text = self.internalConfiguration.auxiliaryText ?: @"";
+        return;
+    }
+
+    self.internalConfiguration.auxiliaryText = textField.text ?: @"";
     [self notifyUpdate];
 }
 
