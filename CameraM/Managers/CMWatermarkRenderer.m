@@ -854,8 +854,10 @@ static inline BOOL CMIsStudioLikeFrameIdentifier(NSString * _Nullable identifier
     [subline drawInRect:sublineRect withAttributes:sublineAttributes];
   }
 
-  // Render parameters line (e.g., "F2.5  1/125  ISO 100  38mm")
-  if (detailString.length > 0) {
+  // Skip detailString when auxiliary text is already shown as subline —
+  // supplementaryStringForConfiguration falls back to auxiliaryText when no
+  // metadata options are selected, causing a duplicate 副文字 line.
+  if (detailString.length > 0 && !hasSubline) {
     CGFloat paramSize = sublineSize * 0.85f;
     UIFont *paramFont = [UIFont systemFontOfSize:paramSize
                                           weight:UIFontWeightRegular];
